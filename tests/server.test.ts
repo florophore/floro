@@ -46,4 +46,6 @@ describe('server', () => {
         expect(response.status).toEqual(200);
         expect(response.body.toString()).toEqual(MOCK_ICON);
     });
+    
+    //TODO: figure out how to test png 
 });

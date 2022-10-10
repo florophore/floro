@@ -4,6 +4,7 @@ import {
     buildFloroFilestructure,
     userHome,
     homePath,
+    vConfigPath,
     vCachePath,
     vUserPath,
     vProjectsPath
@@ -27,6 +28,7 @@ describe('buildFloroFilestructure', () => {
             userHome
         );
         expect(fs.existsSync(homePath)).toBe(false);
+        expect(fs.existsSync(vConfigPath)).toBe(false);
         expect(fs.existsSync(vCachePath)).toBe(false);
         expect(fs.existsSync(vUserPath)).toBe(false);
         expect(fs.existsSync(vProjectsPath)).toBe(false);
@@ -34,6 +36,7 @@ describe('buildFloroFilestructure', () => {
         await buildFloroFilestructure();
 
         expect(fs.existsSync(homePath)).toBe(true);
+        expect(fs.existsSync(vConfigPath)).toBe(true);
         expect(fs.existsSync(vCachePath)).toBe(true);
         expect(fs.existsSync(vUserPath)).toBe(true);
         expect(fs.existsSync(vProjectsPath)).toBe(true);

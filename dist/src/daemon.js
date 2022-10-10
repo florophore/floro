@@ -42,7 +42,7 @@ const killDaemon = async () => {
         }
         pm2_1.default.stop(DAEMON_PROCESS_NAME, (err) => {
             if (err) {
-                console.log("no floro server running...");
+                console.error("floro daemon error", err);
                 pm2_1.default.disconnect();
                 return;
             }

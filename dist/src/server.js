@@ -9,17 +9,23 @@ const fs_1 = __importDefault(require("fs"));
 const path_1 = __importDefault(require("path"));
 const http_1 = __importDefault(require("http"));
 const cors_1 = __importDefault(require("cors"));
-const util_1 = require("util");
 const filestructure_1 = require("./filestructure");
 const socket_io_1 = require("socket.io");
+const http_proxy_middleware_1 = require("http-proxy-middleware");
 const app = (0, express_1.default)();
 const server = http_1.default.createServer(app);
-const corsOptions = {
+const remoteHost = (0, filestructure_1.getRemoteHostSync)();
+const pluginsJSON = (0, filestructure_1.getPluginsJson)();
+console.log(pluginsJSON);
+const openCors = {
     origin: "*"
+};
+const remoteHostCors = {
+    origin: /(https?:\/\/(localhost|127\.0\.0\.1):\d{1,5})|(https:\/\/floro.io)/
 };
 const io = new socket_io_1.Server(server, {
     cors: {
-        origin: "*"
+        origin: /(https?:\/\/(localhost|127\.0\.0\.1):\d{1,5})|(https:\/\/floro.io)/
     }
 });
 const DEFAULT_PORT = 63403;
@@ -39,25 +45,39 @@ io.on("connection", (socket) => {
         // ...
     });
 });
-app.get("/ping", (0, cors_1.default)(corsOptions), (req, res) => {
-    res.send("pong");
+app.get("/ping", (0, cors_1.default)(openCors), async (req, res) => {
+    res.send("PONG");
 });
-app.get("/*.svg", async (req, res) => {
-    const imagePath = path_1.default.join(filestructure_1.vCDNPath, req.path);
-    if (await (0, util_1.promisify)(fs_1.default.exists)(imagePath)) {
-        const svg = await (0, util_1.promisify)(fs_1.default.readFile)(imagePath, { encoding: "utf8", flag: "r" });
+app.get("/login", (0, cors_1.default)(remoteHostCors), async (req, res) => {
+    res.send("CORS ONLY");
+});
+for (let plugin in pluginsJSON.plugins) {
+    let pluginInfo = pluginsJSON.plugins[plugin];
+    if (pluginInfo['proxy']) {
+        const proxy = (0, http_proxy_middleware_1.createProxyMiddleware)("/plugins/" + plugin, {
+            target: pluginInfo['host'],
+            ws: true,
+            changeOrigin: true
+        });
+        app.use(proxy);
+    }
+}
+app.get("/*.svg", (0, cors_1.default)(openCors), async (req, res) => {
+    const imagePath = path_1.default.join(filestructure_1.vCachePath, req.path);
+    if (await (0, filestructure_1.existsAsync)(imagePath)) {
+        const svg = await fs_1.default.promises.readFile(imagePath, { encoding: "utf8", flag: "r" });
         res.status(200).setHeader("Content-Type", "image/svg+xml").send(svg);
     }
     else {
         res.status(404).send("No Image Found");
     }
 });
-app.get("/*.png", async (req, res) => {
+app.get("/*.png", (0, cors_1.default)(openCors), async (req, res) => {
     const width = req.query["w"];
     const height = req.query["h"];
     const svgPath = req.path.substring(0, req.path.length - 3) + "svg";
-    const imagePath = path_1.default.join(filestructure_1.vCDNPath, svgPath);
-    if (await (0, util_1.promisify)(fs_1.default.exists)(imagePath)) {
+    const imagePath = path_1.default.join(filestructure_1.vCachePath, svgPath);
+    if (await (0, filestructure_1.existsAsync)(imagePath)) {
         if (width) {
             const buffer = await (0, sharp_1.default)(imagePath)
                 .resize({ width: parseInt(width) })
@@ -83,4 +103,5 @@ app.get("/*.png", async (req, res) => {
     }
 });
 server.listen(port, host, () => console.log("floro server started on " + host + ":" + port));
+exports.default = server;
 //# sourceMappingURL=server.js.map

@@ -4,18 +4,28 @@ import fs from "fs";
 import path from "path";
 import http from "http";
 import cors from "cors";
-import { vCachePath, existsAsync} from "./filestructure";
+import { vCachePath, existsAsync, getRemoteHostSync, getPluginsJson} from "./filestructure";
 import { Server } from 'socket.io';
+import { createProxyMiddleware } from "http-proxy-middleware";
 
 const app = express();
 const server = http.createServer(app);
-const corsOptions = {
+const remoteHost = getRemoteHostSync();
+
+const pluginsJSON = getPluginsJson();
+console.log(pluginsJSON);
+
+const openCors = {
   origin: "*"
+}
+
+const remoteHostCors = {
+  origin: /(https?:\/\/(localhost|127\.0\.0\.1):\d{1,5})|(https:\/\/floro.io)/
 }
 
 const io = new Server(server, {
   cors: {
-    origin: "*"
+    origin: /(https?:\/\/(localhost|127\.0\.0\.1):\d{1,5})|(https:\/\/floro.io)/
   }
 })
 
@@ -41,11 +51,27 @@ io.on("connection", (socket) => {
 });
   
 
-app.get("/ping", cors(corsOptions), (req, res): void => {
+app.get("/ping", cors(openCors), async (req, res): Promise<void> => {
   res.send("PONG");
 });
 
-app.get("/*.svg", async (req, res) => {
+app.get("/login", cors(remoteHostCors), async (req, res): Promise<void> => {
+  res.send("CORS ONLY");
+});
+
+for(let plugin in pluginsJSON.plugins) {
+  let pluginInfo = pluginsJSON.plugins[plugin];
+  if (pluginInfo['proxy']) {
+    const proxy = createProxyMiddleware("/plugins/" + plugin, {
+      target: pluginInfo['host'],
+      ws: true,
+      changeOrigin: true
+    });
+    app.use(proxy);
+  }
+}
+
+app.get("/*.svg", cors(openCors), async (req, res) => {
   const imagePath = path.join(vCachePath, req.path);
   if (await existsAsync(imagePath)) {
     const svg = await fs.promises.readFile(imagePath, { encoding: "utf8", flag: "r" });
@@ -55,7 +81,7 @@ app.get("/*.svg", async (req, res) => {
   }
 });
 
-app.get("/*.png", async (req, res) => {
+app.get("/*.png", cors(openCors), async (req, res) => {
   const width = req.query["w"];
   const height = req.query["h"];
   const svgPath = req.path.substring(0, req.path.length - 3) + "svg";
