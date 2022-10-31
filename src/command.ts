@@ -5,6 +5,7 @@ import { buildFloroFilestructure, reset, userHome, vConfigCORSPath, vConfigPlugi
 import commandLineArgs from "command-line-args";
 import { startDaemon, killDaemon } from "./daemon";
 import inquirer from 'inquirer';
+import { promptEmail } from './login';
 const { exec, spawn } = require('child_process');
 
 /* first - parse the main command */
@@ -88,7 +89,7 @@ buildFloroFilestructure();
   }
 
   if (mainOptions.command == "login") {
-    console.log("login");
+    await promptEmail();
     return;
   }
 

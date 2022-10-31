@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getRemoteHostAsync = exports.getRemoteHostSync = exports.getPluginsJson = exports.existsAsync = exports.reset = exports.clean = exports.buildFloroFilestructure = exports.vConfigPluginsPath = exports.vConfigRemotePath = exports.vConfigCORSPath = exports.vPluginsPath = exports.vProjectsPath = exports.vUserPath = exports.vCachePath = exports.vConfigPath = exports.homePath = exports.userHome = void 0;
+exports.getRemoteHostAsync = exports.getRemoteHostSync = exports.getPluginsJson = exports.existsAsync = exports.getUser = exports.writeUser = exports.getUserSession = exports.writeUserSession = exports.reset = exports.clean = exports.buildFloroFilestructure = exports.userPath = exports.userSessionPath = exports.vConfigPluginsPath = exports.vConfigRemotePath = exports.vConfigCORSPath = exports.vPluginsPath = exports.vProjectsPath = exports.vUserPath = exports.vCachePath = exports.vConfigPath = exports.homePath = exports.userHome = void 0;
 const path_1 = __importDefault(require("path"));
 const os_1 = __importDefault(require("os"));
 const fs_1 = __importDefault(require("fs"));
@@ -23,12 +23,18 @@ exports.vProjectsPath = path_1.default.join(exports.homePath, "projects");
 // ~/.floro/plugins
 exports.vPluginsPath = path_1.default.join(exports.homePath, "plugins");
 // FILES
+// CONFIG
 // ~/.floro/config/cors.txt
 exports.vConfigCORSPath = path_1.default.join(exports.vConfigPath, "cors.txt");
 // ~/.floro/config/remote.txt
 exports.vConfigRemotePath = path_1.default.join(exports.vConfigPath, "remote.txt");
 // ~/.floro/config/plugins.json
 exports.vConfigPluginsPath = path_1.default.join(exports.vConfigPath, "plugins.json");
+// USER
+// ~/.floro/user/session.json
+exports.userSessionPath = path_1.default.join(exports.vUserPath, "session.json");
+// ~/.floro/user/user.json
+exports.userPath = path_1.default.join(exports.vUserPath, "user.json");
 const writeDefaultFiles = (isReset = false) => {
     // ~/.floro/config/cors.txt
     if (isReset || !fs_1.default.existsSync(exports.vConfigCORSPath)) {
@@ -85,6 +91,34 @@ const reset = () => {
     writeDefaultFiles(true);
 };
 exports.reset = reset;
+const writeUserSession = (session) => {
+    return fs_1.default.promises.writeFile(exports.userSessionPath, JSON.stringify(session, null, 2));
+};
+exports.writeUserSession = writeUserSession;
+const getUserSession = () => {
+    try {
+        const userSessionJSON = fs_1.default.readFileSync(exports.userSessionPath, { encoding: 'utf-8' });
+        return JSON.parse(userSessionJSON);
+    }
+    catch (e) {
+        return null;
+    }
+};
+exports.getUserSession = getUserSession;
+const writeUser = (user) => {
+    return fs_1.default.promises.writeFile(exports.userPath, JSON.stringify(user, null, 2));
+};
+exports.writeUser = writeUser;
+const getUser = () => {
+    try {
+        const userJSON = fs_1.default.readFileSync(exports.userPath, { encoding: 'utf-8' });
+        return JSON.parse(userJSON);
+    }
+    catch (e) {
+        return null;
+    }
+};
+exports.getUser = getUser;
 const existsAsync = (file) => {
     return fs_1.default.promises
         .access(file, fs_1.default.constants.F_OK)

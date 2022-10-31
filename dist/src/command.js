@@ -9,6 +9,7 @@ const filestructure_1 = require("./filestructure");
 const command_line_args_1 = __importDefault(require("command-line-args"));
 const daemon_1 = require("./daemon");
 const inquirer_1 = __importDefault(require("inquirer"));
+const login_1 = require("./login");
 const { exec, spawn } = require('child_process');
 /* first - parse the main command */
 const mainDefinitions = [{ name: "command", defaultOption: true }];
@@ -80,7 +81,7 @@ const argv = mainOptions._unknown || [];
         }
     }
     if (mainOptions.command == "login") {
-        console.log("login");
+        await (0, login_1.promptEmail)();
         return;
     }
     if (mainOptions.command == "logout") {

@@ -19,12 +19,18 @@ export const vProjectsPath = path.join(homePath, "projects");
 export const vPluginsPath = path.join(homePath, "plugins");
 
 // FILES
+// CONFIG
 // ~/.floro/config/cors.txt
 export const vConfigCORSPath = path.join(vConfigPath, "cors.txt");
 // ~/.floro/config/remote.txt
 export const vConfigRemotePath = path.join(vConfigPath, "remote.txt");
 // ~/.floro/config/plugins.json
 export const vConfigPluginsPath = path.join(vConfigPath, "plugins.json");
+// USER
+// ~/.floro/user/session.json
+export const userSessionPath = path.join(vUserPath, "session.json");
+// ~/.floro/user/user.json
+export const userPath = path.join(vUserPath, "user.json");
 
 const writeDefaultFiles = (isReset = false) => {
   // ~/.floro/config/cors.txt
@@ -90,7 +96,33 @@ export const reset = (): void => {
   // FILES
   // ~/.floro/config/cors.txt
   writeDefaultFiles(true);
-} 
+}
+
+export const writeUserSession = (session) => {
+  return fs.promises.writeFile(userSessionPath, JSON.stringify(session, null, 2))
+}
+
+export const getUserSession = () => {
+  try {
+    const userSessionJSON = fs.readFileSync(userSessionPath, { encoding: 'utf-8' });
+    return JSON.parse(userSessionJSON);
+  } catch(e) {
+    return null;
+  }
+}
+
+export const writeUser = (user) => {
+  return fs.promises.writeFile(userPath, JSON.stringify(user, null, 2))
+}
+
+export const getUser = () => {
+  try {
+    const userJSON = fs.readFileSync(userPath, { encoding: 'utf-8' });
+    return JSON.parse(userJSON);
+  } catch(e) {
+    return null;
+  }
+}
 
 export const existsAsync = (file): Promise<boolean> => {
   return fs.promises

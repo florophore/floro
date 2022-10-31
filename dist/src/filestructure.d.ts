@@ -8,9 +8,15 @@ export declare const vPluginsPath: string;
 export declare const vConfigCORSPath: string;
 export declare const vConfigRemotePath: string;
 export declare const vConfigPluginsPath: string;
+export declare const userSessionPath: string;
+export declare const userPath: string;
 export declare const buildFloroFilestructure: () => void;
 export declare const clean: () => void;
 export declare const reset: () => void;
+export declare const writeUserSession: (session: any) => Promise<void>;
+export declare const getUserSession: () => any;
+export declare const writeUser: (user: any) => Promise<void>;
+export declare const getUser: () => any;
 export declare const existsAsync: (file: any) => Promise<boolean>;
 export declare const getPluginsJson: () => {
     plugins: {

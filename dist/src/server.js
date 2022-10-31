@@ -1,4 +1,27 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -12,11 +35,14 @@ const cors_1 = __importDefault(require("cors"));
 const filestructure_1 = require("./filestructure");
 const socket_io_1 = require("socket.io");
 const http_proxy_middleware_1 = require("http-proxy-middleware");
+const trpcExpress = __importStar(require("@trpc/server/adapters/express"));
+const multiplexer_1 = __importStar(require("./multiplexer"));
+const router_1 = __importDefault(require("./router"));
+const protectedrouter_1 = __importDefault(require("./protectedrouter"));
+const createContext = ({}) => ({});
 const app = (0, express_1.default)();
 const server = http_1.default.createServer(app);
-const remoteHost = (0, filestructure_1.getRemoteHostSync)();
 const pluginsJSON = (0, filestructure_1.getPluginsJson)();
-console.log(pluginsJSON);
 const openCors = {
     origin: "*"
 };
@@ -29,7 +55,7 @@ const io = new socket_io_1.Server(server, {
     }
 });
 const DEFAULT_PORT = 63403;
-const DEFAULT_HOST = "0.0.0.0";
+const DEFAULT_HOST = "127.0.0.1";
 const port = !!process.env.FLORO_VCDN_PORT
     ? parseInt(process.env.FLORO_VCDN_PORT)
     : DEFAULT_PORT;
@@ -37,20 +63,53 @@ const host = !!process.env.FLORO_VCDN_HOST
     ? process.env.FLORO_VCDN_HOST
     : DEFAULT_HOST;
 io.on("connection", (socket) => {
-    console.log("CONNECTED");
-    // send a message to the client
-    socket.emit("hello", { "boom": "boom" });
-    // receive a message from the client
-    socket.on("hello from client", (...args) => {
-        // ...
-    });
+    const client = socket?.handshake?.query?.['client'];
+    if (['web', 'desktop', 'cli'].includes(client)) {
+        multiplexer_1.default[client].push(socket);
+        socket.on("disconnect", () => {
+            multiplexer_1.default[client] = multiplexer_1.default[client].filter(s => s !== socket);
+        });
+    }
 });
-app.get("/ping", (0, cors_1.default)(openCors), async (req, res) => {
+app.use(express_1.default.json());
+app.use(function (req, res, next) {
+    res.header("Access-Control-Allow-Origin", "*");
+    res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
+    next();
+});
+app.get("/ping", (0, cors_1.default)(remoteHostCors), async (_req, res) => {
     res.send("PONG");
 });
-app.get("/login", (0, cors_1.default)(remoteHostCors), async (req, res) => {
-    res.send("CORS ONLY");
+app.post('/login', (0, cors_1.default)(remoteHostCors), async (req, res) => {
+    if (req?.body?.__typename == "PassedLoginAction" || req?.body?.__typename == "AccountCreationSuccessAction") {
+        await (0, filestructure_1.writeUserSession)(req.body.session);
+        await (0, filestructure_1.writeUser)(req.body.user);
+        (0, multiplexer_1.broadcastAllDevices)("login", req.body);
+        (0, multiplexer_1.broadcastToClient)('desktop', 'bring-to-front', null);
+        res.send({ message: "ok" });
+    }
+    else {
+        res.send({ message: "error" });
+    }
 });
+app.post('/complete_signup', (0, cors_1.default)(remoteHostCors), async (req, res) => {
+    if (req?.body?.__typename == "CompleteSignupAction") {
+        (0, multiplexer_1.broadcastAllDevices)("complete_signup", req.body);
+        (0, multiplexer_1.broadcastToClient)('desktop', 'bring-to-front', null);
+        res.send({ message: "ok" });
+    }
+    else {
+        res.send({ message: "error" });
+    }
+});
+app.use('/protectedtrpc', (0, cors_1.default)(remoteHostCors), trpcExpress.createExpressMiddleware({
+    router: protectedrouter_1.default,
+    createContext,
+}));
+app.use('/trpc', (0, cors_1.default)(remoteHostCors), trpcExpress.createExpressMiddleware({
+    router: router_1.default,
+    createContext,
+}));
 for (let plugin in pluginsJSON.plugins) {
     let pluginInfo = pluginsJSON.plugins[plugin];
     if (pluginInfo['proxy']) {

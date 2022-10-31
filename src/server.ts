@@ -4,16 +4,20 @@ import fs from "fs";
 import path from "path";
 import http from "http";
 import cors from "cors";
-import { vCachePath, existsAsync, getRemoteHostSync, getPluginsJson} from "./filestructure";
+import { vCachePath, existsAsync, getRemoteHostSync, getPluginsJson, writeUserSession, writeUser} from "./filestructure";
 import { Server } from 'socket.io';
 import { createProxyMiddleware } from "http-proxy-middleware";
+import * as trpcExpress from '@trpc/server/adapters/express';
+import multiplexer, { broadcastAllDevices, broadcastToClient } from "./multiplexer";
+import trpcRouter from "./router";
+import protectedRouter from "./protectedrouter";
+
+const createContext = ({}: trpcExpress.CreateExpressContextOptions) => ({})
 
 const app = express();
 const server = http.createServer(app);
-const remoteHost = getRemoteHostSync();
 
 const pluginsJSON = getPluginsJson();
-console.log(pluginsJSON);
 
 const openCors = {
   origin: "*"
@@ -30,7 +34,7 @@ const io = new Server(server, {
 })
 
 const DEFAULT_PORT = 63403;
-const DEFAULT_HOST = "0.0.0.0";
+const DEFAULT_HOST = "127.0.0.1";
 const port = !!process.env.FLORO_VCDN_PORT
   ? parseInt(process.env.FLORO_VCDN_PORT)
   : DEFAULT_PORT;
@@ -38,26 +42,67 @@ const host = !!process.env.FLORO_VCDN_HOST
   ? process.env.FLORO_VCDN_HOST
   : DEFAULT_HOST;
 
-
 io.on("connection", (socket) => {
-  console.log("CONNECTED");
-  // send a message to the client
-  socket.emit("hello", {"boom": "boom"});
-
-  // receive a message from the client
-  socket.on("hello from client", (...args) => {
-    // ...
-  });
+  const client = socket?.handshake?.query?.['client'] as undefined|('web'|'desktop'|'cli');
+  if (['web', 'desktop', 'cli'].includes(client)) {
+    multiplexer[client].push(socket);
+    socket.on("disconnect", () => {
+      multiplexer[client] = multiplexer[client].filter(s => s !== socket);
+    });
+  }
 });
-  
 
-app.get("/ping", cors(openCors), async (req, res): Promise<void> => {
+app.use(express.json());
+
+app.use(function(req, res, next) {
+  res.header("Access-Control-Allow-Origin", "*");
+  res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
+  next();
+});
+
+app.get("/ping", cors(remoteHostCors), async (_req, res): Promise<void> => {
   res.send("PONG");
 });
 
-app.get("/login", cors(remoteHostCors), async (req, res): Promise<void> => {
-  res.send("CORS ONLY");
+app.post('/login', cors(remoteHostCors), async (req, res) => {
+  if (req?.body?.__typename == "PassedLoginAction" || req?.body?.__typename == "AccountCreationSuccessAction") {
+    await writeUserSession(req.body.session);
+    await writeUser(req.body.user);
+    broadcastAllDevices("login", req.body);
+    broadcastToClient('desktop', 'bring-to-front', null);
+    res.send({message: "ok"});
+  } else {
+    res.send({message: "error"});
+  }
 });
+
+app.post('/complete_signup', cors(remoteHostCors), async (req, res) => {
+  if (req?.body?.__typename == "CompleteSignupAction") {
+    broadcastAllDevices("complete_signup", req.body);
+    broadcastToClient('desktop', 'bring-to-front', null);
+    res.send({message: "ok"});
+  } else {
+    res.send({message: "error"});
+  }
+});
+
+app.use(
+  '/protectedtrpc',
+  cors(remoteHostCors),
+  trpcExpress.createExpressMiddleware({
+      router: protectedRouter,
+      createContext,
+  }),
+);
+
+app.use(
+  '/trpc',
+  cors(remoteHostCors),
+  trpcExpress.createExpressMiddleware({
+      router: trpcRouter,
+      createContext,
+  }),
+);
 
 for(let plugin in pluginsJSON.plugins) {
   let pluginInfo = pluginsJSON.plugins[plugin];
