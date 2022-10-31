@@ -4,13 +4,14 @@ import fs from "fs";
 import path from "path";
 import http from "http";
 import cors from "cors";
-import { vCachePath, existsAsync, getRemoteHostSync, getPluginsJson, writeUserSession, writeUser} from "./filestructure";
+import { vCachePath, existsAsync, getRemoteHostSync, getPluginsJson, writeUserSession, writeUser, removeUserSession, removeUser} from "./filestructure";
 import { Server } from 'socket.io';
 import { createProxyMiddleware } from "http-proxy-middleware";
 import * as trpcExpress from '@trpc/server/adapters/express';
 import multiplexer, { broadcastAllDevices, broadcastToClient } from "./multiplexer";
 import trpcRouter from "./router";
 import protectedRouter from "./protectedrouter";
+import { startSessionJob } from "./cron";
 
 const createContext = ({}: trpcExpress.CreateExpressContextOptions) => ({})
 
@@ -74,6 +75,17 @@ app.post('/login', cors(remoteHostCors), async (req, res) => {
   } else {
     res.send({message: "error"});
   }
+});
+
+app.post('/logout', cors(remoteHostCors), async (req, res) => {
+  try {
+    await removeUserSession();
+    await removeUser();
+    broadcastAllDevices("logout", null);
+  } catch (e) {
+    // dont log
+  }
+  res.send({message: "ok"});
 });
 
 app.post('/complete_signup', cors(remoteHostCors), async (req, res) => {
@@ -157,5 +169,6 @@ app.get("/*.png", cors(openCors), async (req, res) => {
 });
 
 server.listen(port, host, () => console.log("floro server started on " + host + ":" + port));
+startSessionJob();
 
 export default server;

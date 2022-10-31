@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getRemoteHostAsync = exports.getRemoteHostSync = exports.getPluginsJson = exports.existsAsync = exports.getUser = exports.writeUser = exports.getUserSession = exports.writeUserSession = exports.reset = exports.clean = exports.buildFloroFilestructure = exports.userPath = exports.userSessionPath = exports.vConfigPluginsPath = exports.vConfigRemotePath = exports.vConfigCORSPath = exports.vPluginsPath = exports.vProjectsPath = exports.vUserPath = exports.vCachePath = exports.vConfigPath = exports.homePath = exports.userHome = void 0;
+exports.getRemoteHostAsync = exports.getRemoteHostSync = exports.getPluginsJson = exports.existsAsync = exports.getUserAsync = exports.getUser = exports.removeUser = exports.writeUser = exports.getUserSessionAsync = exports.getUserSession = exports.removeUserSession = exports.writeUserSession = exports.reset = exports.clean = exports.buildFloroFilestructure = exports.userPath = exports.userSessionPath = exports.vConfigPluginsPath = exports.vConfigRemotePath = exports.vConfigCORSPath = exports.vPluginsPath = exports.vProjectsPath = exports.vUserPath = exports.vCachePath = exports.vConfigPath = exports.homePath = exports.userHome = void 0;
 const path_1 = __importDefault(require("path"));
 const os_1 = __importDefault(require("os"));
 const fs_1 = __importDefault(require("fs"));
@@ -95,6 +95,10 @@ const writeUserSession = (session) => {
     return fs_1.default.promises.writeFile(exports.userSessionPath, JSON.stringify(session, null, 2));
 };
 exports.writeUserSession = writeUserSession;
+const removeUserSession = () => {
+    return fs_1.default.promises.rm(exports.userSessionPath);
+};
+exports.removeUserSession = removeUserSession;
 const getUserSession = () => {
     try {
         const userSessionJSON = fs_1.default.readFileSync(exports.userSessionPath, { encoding: 'utf-8' });
@@ -105,10 +109,24 @@ const getUserSession = () => {
     }
 };
 exports.getUserSession = getUserSession;
+const getUserSessionAsync = async () => {
+    try {
+        const userSessionJSON = await fs_1.default.promises.readFile(exports.userSessionPath, { encoding: 'utf-8' });
+        return JSON.parse(userSessionJSON);
+    }
+    catch (e) {
+        return null;
+    }
+};
+exports.getUserSessionAsync = getUserSessionAsync;
 const writeUser = (user) => {
     return fs_1.default.promises.writeFile(exports.userPath, JSON.stringify(user, null, 2));
 };
 exports.writeUser = writeUser;
+const removeUser = () => {
+    return fs_1.default.promises.rm(exports.userPath);
+};
+exports.removeUser = removeUser;
 const getUser = () => {
     try {
         const userJSON = fs_1.default.readFileSync(exports.userPath, { encoding: 'utf-8' });
@@ -119,6 +137,16 @@ const getUser = () => {
     }
 };
 exports.getUser = getUser;
+const getUserAsync = async () => {
+    try {
+        const userJSON = await fs_1.default.promises.readFile(exports.userPath, { encoding: 'utf-8' });
+        return JSON.parse(userJSON);
+    }
+    catch (e) {
+        return null;
+    }
+};
+exports.getUserAsync = getUserAsync;
 const existsAsync = (file) => {
     return fs_1.default.promises
         .access(file, fs_1.default.constants.F_OK)
@@ -156,7 +184,7 @@ const getRemoteHostSync = () => {
 exports.getRemoteHostSync = getRemoteHostSync;
 const getRemoteHostAsync = async () => {
     try {
-        const remoteHostTxt = await fs_1.default.promises.readFile(exports.vConfigRemotePath);
+        const remoteHostTxt = await fs_1.default.promises.readFile(exports.vConfigRemotePath, { encoding: 'utf-8' });
         return remoteHostTxt.toString().split(os_1.default.EOL).find(s => {
             if (s.trimStart()[0] == '#') {
                 return false;

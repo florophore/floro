@@ -14,9 +14,13 @@ export declare const buildFloroFilestructure: () => void;
 export declare const clean: () => void;
 export declare const reset: () => void;
 export declare const writeUserSession: (session: any) => Promise<void>;
+export declare const removeUserSession: () => Promise<void>;
 export declare const getUserSession: () => any;
+export declare const getUserSessionAsync: () => Promise<any>;
 export declare const writeUser: (user: any) => Promise<void>;
+export declare const removeUser: () => Promise<void>;
 export declare const getUser: () => any;
+export declare const getUserAsync: () => Promise<any>;
 export declare const existsAsync: (file: any) => Promise<boolean>;
 export declare const getPluginsJson: () => {
     plugins: {

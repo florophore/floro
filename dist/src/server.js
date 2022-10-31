@@ -39,6 +39,7 @@ const trpcExpress = __importStar(require("@trpc/server/adapters/express"));
 const multiplexer_1 = __importStar(require("./multiplexer"));
 const router_1 = __importDefault(require("./router"));
 const protectedrouter_1 = __importDefault(require("./protectedrouter"));
+const cron_1 = require("./cron");
 const createContext = ({}) => ({});
 const app = (0, express_1.default)();
 const server = http_1.default.createServer(app);
@@ -91,6 +92,17 @@ app.post('/login', (0, cors_1.default)(remoteHostCors), async (req, res) => {
     else {
         res.send({ message: "error" });
     }
+});
+app.post('/logout', (0, cors_1.default)(remoteHostCors), async (req, res) => {
+    try {
+        await (0, filestructure_1.removeUserSession)();
+        await (0, filestructure_1.removeUser)();
+        (0, multiplexer_1.broadcastAllDevices)("logout", null);
+    }
+    catch (e) {
+        // dont log
+    }
+    res.send({ message: "ok" });
 });
 app.post('/complete_signup', (0, cors_1.default)(remoteHostCors), async (req, res) => {
     if (req?.body?.__typename == "CompleteSignupAction") {
@@ -162,5 +174,6 @@ app.get("/*.png", (0, cors_1.default)(openCors), async (req, res) => {
     }
 });
 server.listen(port, host, () => console.log("floro server started on " + host + ":" + port));
+(0, cron_1.startSessionJob)();
 exports.default = server;
 //# sourceMappingURL=server.js.map

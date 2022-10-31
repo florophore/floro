@@ -102,9 +102,22 @@ export const writeUserSession = (session) => {
   return fs.promises.writeFile(userSessionPath, JSON.stringify(session, null, 2))
 }
 
+export const removeUserSession = () => {
+  return fs.promises.rm(userSessionPath);
+}
+
 export const getUserSession = () => {
   try {
     const userSessionJSON = fs.readFileSync(userSessionPath, { encoding: 'utf-8' });
+    return JSON.parse(userSessionJSON);
+  } catch(e) {
+    return null;
+  }
+}
+
+export const getUserSessionAsync = async () => {
+  try {
+    const userSessionJSON = await fs.promises.readFile(userSessionPath, { encoding: 'utf-8' });
     return JSON.parse(userSessionJSON);
   } catch(e) {
     return null;
@@ -115,9 +128,22 @@ export const writeUser = (user) => {
   return fs.promises.writeFile(userPath, JSON.stringify(user, null, 2))
 }
 
+export const removeUser = () => {
+  return fs.promises.rm(userPath);
+}
+
 export const getUser = () => {
   try {
     const userJSON = fs.readFileSync(userPath, { encoding: 'utf-8' });
+    return JSON.parse(userJSON);
+  } catch(e) {
+    return null;
+  }
+}
+
+export const getUserAsync = async () => {
+  try {
+    const userJSON = await fs.promises.readFile(userPath, { encoding: 'utf-8' });
     return JSON.parse(userJSON);
   } catch(e) {
     return null;
@@ -160,7 +186,7 @@ export const getRemoteHostSync = (): string => {
 
 export const getRemoteHostAsync = async (): Promise<string> => {
   try {
-    const remoteHostTxt = await fs.promises.readFile(vConfigRemotePath);
+    const remoteHostTxt = await fs.promises.readFile(vConfigRemotePath, { encoding: 'utf-8'});
     return remoteHostTxt.toString().split(os.EOL).find(s => {
       if (s.trimStart()[0] == '#') {
         return false
