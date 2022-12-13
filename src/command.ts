@@ -5,7 +5,7 @@ import { buildFloroFilestructure, reset, userHome, vConfigCORSPath, vConfigPlugi
 import commandLineArgs from "command-line-args";
 import { startDaemon, killDaemon } from "./daemon";
 import inquirer from 'inquirer';
-import { promptEmail } from './login';
+import { logout, promptEmail } from './login';
 const { exec, spawn } = require('child_process');
 
 /* first - parse the main command */
@@ -26,7 +26,6 @@ buildFloroFilestructure();
     return;
   }
 
-
   if (mainOptions.command == "kill") {
     await killDaemon();
     return;
@@ -35,19 +34,6 @@ buildFloroFilestructure();
   if (mainOptions.command == "restart") {
     await killDaemon();
     await startDaemon();
-    return;
-  }
-
-  if (mainOptions.command == "plugin") {
-    const subCommand = mainOptions[0];
-    if (subCommand == 'install') {
-        const pluginName = mainOptions[1];
-        console.log("download", pluginName);
-    }
-    if (subCommand == 'uninstall') {
-
-    }
-
     return;
   }
 
@@ -92,11 +78,11 @@ buildFloroFilestructure();
     await promptEmail();
     return;
   }
-
   if (mainOptions.command == "logout") {
-    console.log("login");
+    await logout();
     return;
   }
+
 
   console.log(
     !arg

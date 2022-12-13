@@ -4,8 +4,6 @@ import axios from 'axios';
 import { broadcastAllDevices } from './multiplexer';
 
 const ONE_WEEK = 1000 * 60 * 60 * 24 * 7;
-// use for debugging
-const MINUTE_CRON = "* * * * *"; 
 const HOUR_CRON = "0 * * * *"; 
 
 export const startSessionJob = () => {
@@ -19,7 +17,7 @@ export const startSessionJob = () => {
             const expiresAtMS = expiresAt.getTime();
             const nowMS = (new Date()).getTime();
             const delta = (expiresAtMS - nowMS);
-            if (delta > ONE_WEEK || true) {
+            if (delta > ONE_WEEK) {
                 const remote = await getRemoteHostAsync();
                 const response = await axios.post(`${remote}/api/session/exchange`, {}, {
                     headers: {

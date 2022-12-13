@@ -1,4 +1,3 @@
-import { resolve } from "path";
 import { Manager, Socket } from "socket.io-client";
 export const createSocket = (client: 'web'|'desktop'|'cli') => {
     const manager = new Manager('ws://localhost:63403', {
@@ -7,7 +6,7 @@ export const createSocket = (client: 'web'|'desktop'|'cli') => {
         client
       }
     });
-    return manager.socket("/"); // main namespace
+    return manager.socket("/");
 };
 
 

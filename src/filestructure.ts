@@ -13,8 +13,8 @@ export const vConfigPath = path.join(homePath, "config");
 export const vCachePath = path.join(homePath, "cache");
 // ~/.floro/user
 export const vUserPath = path.join(homePath, "user");
-// ~/.floro/projects
-export const vProjectsPath = path.join(homePath, "projects");
+// ~/.floro/repos
+export const vReposPath = path.join(homePath, "repos");
 // ~/.floro/plugins
 export const vPluginsPath = path.join(homePath, "plugins");
 
@@ -76,8 +76,8 @@ export const buildFloroFilestructure = (): void => {
     fs.mkdirSync(vUserPath, 744);
   }
 
-  if (!fs.existsSync(vProjectsPath)) {
-    fs.mkdirSync(vProjectsPath, 744);
+  if (!fs.existsSync(vReposPath)) {
+    fs.mkdirSync(vReposPath, 744);
   }
 
   if (!fs.existsSync(vPluginsPath)) {

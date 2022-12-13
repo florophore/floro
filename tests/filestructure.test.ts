@@ -7,7 +7,7 @@ import {
     vConfigPath,
     vCachePath,
     vUserPath,
-    vProjectsPath
+    vReposPath
 } from '../src/filestructure';
 
 jest.mock('fs');
@@ -31,7 +31,7 @@ describe('buildFloroFilestructure', () => {
         expect(fs.existsSync(vConfigPath)).toBe(false);
         expect(fs.existsSync(vCachePath)).toBe(false);
         expect(fs.existsSync(vUserPath)).toBe(false);
-        expect(fs.existsSync(vProjectsPath)).toBe(false);
+        expect(fs.existsSync(vReposPath)).toBe(false);
 
         await buildFloroFilestructure();
 
@@ -39,6 +39,6 @@ describe('buildFloroFilestructure', () => {
         expect(fs.existsSync(vConfigPath)).toBe(true);
         expect(fs.existsSync(vCachePath)).toBe(true);
         expect(fs.existsSync(vUserPath)).toBe(true);
-        expect(fs.existsSync(vProjectsPath)).toBe(true);
+        expect(fs.existsSync(vReposPath)).toBe(true);
     });
 })

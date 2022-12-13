@@ -9,7 +9,7 @@ const createSocket = (client) => {
             client
         }
     });
-    return manager.socket("/"); // main namespace
+    return manager.socket("/");
 };
 exports.createSocket = createSocket;
 const waitForEvent = (socket, event) => {

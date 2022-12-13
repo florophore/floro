@@ -9,8 +9,6 @@ const filestructure_1 = require("./filestructure");
 const axios_1 = __importDefault(require("axios"));
 const multiplexer_1 = require("./multiplexer");
 const ONE_WEEK = 1000 * 60 * 60 * 24 * 7;
-// use for debugging
-const MINUTE_CRON = "* * * * *";
 const HOUR_CRON = "0 * * * *";
 const startSessionJob = () => {
     node_cron_1.default.schedule(HOUR_CRON, async () => {
@@ -23,7 +21,7 @@ const startSessionJob = () => {
             const expiresAtMS = expiresAt.getTime();
             const nowMS = (new Date()).getTime();
             const delta = (expiresAtMS - nowMS);
-            if (delta > ONE_WEEK || true) {
+            if (delta > ONE_WEEK) {
                 const remote = await (0, filestructure_1.getRemoteHostAsync)();
                 const response = await axios_1.default.post(`${remote}/api/session/exchange`, {}, {
                     headers: {

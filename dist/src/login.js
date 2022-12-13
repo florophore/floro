@@ -26,13 +26,28 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.login = exports.promptEmail = void 0;
+exports.logout = exports.login = exports.promptEmail = void 0;
 const axios_1 = __importDefault(require("axios"));
 const inquirer_1 = __importDefault(require("inquirer"));
 const EmailValidator = __importStar(require("email-validator"));
 const filestructure_1 = require("./filestructure");
 const socket_1 = require("./socket");
+const ONE_WEEK = 1000 * 60 * 60 * 24 * 7;
 const promptEmail = async () => {
+    const loggedInUser = (0, filestructure_1.getUser)();
+    const session = (0, filestructure_1.getUserSession)();
+    if (loggedInUser && session) {
+        const expiresAt = new Date(session.expiresAt);
+        const expiresAtMS = expiresAt.getTime();
+        const nowMS = new Date().getTime();
+        const delta = expiresAtMS - nowMS;
+        if (delta > ONE_WEEK) {
+            console.log("Signed in to floro as: " + loggedInUser.username);
+            console.log("Please logout first. You can logout via the cli by running \"floro logout\"");
+            process.exit();
+            return;
+        }
+    }
     const { email: untrimmedEmail } = await inquirer_1.default.prompt({
         name: "email",
         type: "input",
@@ -70,4 +85,15 @@ const login = async (email) => {
     }
 };
 exports.login = login;
+const logout = async () => {
+    try {
+        await axios_1.default.post("http://localhost:63403/logout");
+        console.log("logged out");
+    }
+    catch (e) {
+        console.log("please make sure the floro server is running");
+    }
+    process.exit();
+};
+exports.logout = logout;
 //# sourceMappingURL=login.js.map

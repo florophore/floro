@@ -34,16 +34,6 @@ const argv = mainOptions._unknown || [];
         await (0, daemon_1.startDaemon)();
         return;
     }
-    if (mainOptions.command == "plugin") {
-        const subCommand = mainOptions[0];
-        if (subCommand == 'install') {
-            const pluginName = mainOptions[1];
-            console.log("download", pluginName);
-        }
-        if (subCommand == 'uninstall') {
-        }
-        return;
-    }
     if (mainOptions.command == "config") {
         const response = await inquirer_1.default.prompt([
             {
@@ -85,7 +75,7 @@ const argv = mainOptions._unknown || [];
         return;
     }
     if (mainOptions.command == "logout") {
-        console.log("login");
+        await (0, login_1.logout)();
         return;
     }
     console.log(!arg

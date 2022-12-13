@@ -16,13 +16,13 @@ describe('buildFloroFilestructure', () => {
         expect(memfs_1.fs.existsSync(filestructure_1.vConfigPath)).toBe(false);
         expect(memfs_1.fs.existsSync(filestructure_1.vCachePath)).toBe(false);
         expect(memfs_1.fs.existsSync(filestructure_1.vUserPath)).toBe(false);
-        expect(memfs_1.fs.existsSync(filestructure_1.vProjectsPath)).toBe(false);
+        expect(memfs_1.fs.existsSync(filestructure_1.vReposPath)).toBe(false);
         await (0, filestructure_1.buildFloroFilestructure)();
         expect(memfs_1.fs.existsSync(filestructure_1.homePath)).toBe(true);
         expect(memfs_1.fs.existsSync(filestructure_1.vConfigPath)).toBe(true);
         expect(memfs_1.fs.existsSync(filestructure_1.vCachePath)).toBe(true);
         expect(memfs_1.fs.existsSync(filestructure_1.vUserPath)).toBe(true);
-        expect(memfs_1.fs.existsSync(filestructure_1.vProjectsPath)).toBe(true);
+        expect(memfs_1.fs.existsSync(filestructure_1.vReposPath)).toBe(true);
     });
 });
 //# sourceMappingURL=filestructure.test.js.map

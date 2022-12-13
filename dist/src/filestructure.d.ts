@@ -3,7 +3,7 @@ export declare const homePath: string;
 export declare const vConfigPath: string;
 export declare const vCachePath: string;
 export declare const vUserPath: string;
-export declare const vProjectsPath: string;
+export declare const vReposPath: string;
 export declare const vPluginsPath: string;
 export declare const vConfigCORSPath: string;
 export declare const vConfigRemotePath: string;

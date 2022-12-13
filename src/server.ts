@@ -4,16 +4,16 @@ import fs from "fs";
 import path from "path";
 import http from "http";
 import cors from "cors";
-import { vCachePath, existsAsync, getRemoteHostSync, getPluginsJson, writeUserSession, writeUser, removeUserSession, removeUser} from "./filestructure";
+import { vCachePath, existsAsync, getRemoteHostSync, getPluginsJson, writeUserSession, writeUser, removeUserSession, removeUser, vPluginsPath, vReposPath} from "./filestructure";
 import { Server } from 'socket.io';
 import { createProxyMiddleware } from "http-proxy-middleware";
-import * as trpcExpress from '@trpc/server/adapters/express';
 import multiplexer, { broadcastAllDevices, broadcastToClient } from "./multiplexer";
-import trpcRouter from "./router";
-import protectedRouter from "./protectedrouter";
 import { startSessionJob } from "./cron";
+import macaddres from 'macaddress';
+import sha256 from 'crypto-js/sha256';
+import HexEncode from 'crypto-js/enc-hex';
 
-const createContext = ({}: trpcExpress.CreateExpressContextOptions) => ({})
+const remoteHost = getRemoteHostSync();
 
 const app = express();
 const server = http.createServer(app);
@@ -24,13 +24,27 @@ const openCors = {
   origin: "*"
 }
 
+const pluginGuardedSafeOrginRegex = /([A-Z])\w+^(https?:\/\/(localhost|127\.0\.0\.1):\d{1,5})|(https:\/\/floro.io)(\/(((?!plugins).)*))$/;
+const safeOriginRegex = /(https?:\/\/(localhost|127\.0\.0\.1):\d{1,5})|(https:\/\/floro.io)/
+const corsOptionsDelegate = (req, callback) => {
+  if (pluginGuardedSafeOrginRegex.test(req.connection.remoteAddress) || req.connection.remoteAddress == '127.0.0.1') {
+    callback(null, {
+      origin: true
+    });
+  } else {
+    callback("sorry", {
+      origin: false
+    });
+  }
+}
+
 const remoteHostCors = {
-  origin: /(https?:\/\/(localhost|127\.0\.0\.1):\d{1,5})|(https:\/\/floro.io)/
+  origin: pluginGuardedSafeOrginRegex
 }
 
 const io = new Server(server, {
   cors: {
-    origin: /(https?:\/\/(localhost|127\.0\.0\.1):\d{1,5})|(https:\/\/floro.io)/
+    origin: safeOriginRegex
   }
 })
 
@@ -44,6 +58,10 @@ const host = !!process.env.FLORO_VCDN_HOST
   : DEFAULT_HOST;
 
 io.on("connection", (socket) => {
+  if (socket?.handshake?.headers?.referer && !safeOriginRegex.test(socket?.handshake?.headers?.referer)) {
+    socket.disconnect();
+    return;
+  }
   const client = socket?.handshake?.query?.['client'] as undefined|('web'|'desktop'|'cli');
   if (['web', 'desktop', 'cli'].includes(client)) {
     multiplexer[client].push(socket);
@@ -56,13 +74,33 @@ io.on("connection", (socket) => {
 app.use(express.json());
 
 app.use(function(req, res, next) {
-  res.header("Access-Control-Allow-Origin", "*");
+  res.header("Access-Control-Allow-Origin", remoteHost);
   res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
   next();
 });
 
-app.get("/ping", cors(remoteHostCors), async (_req, res): Promise<void> => {
+app.get("/ping", cors(corsOptionsDelegate), async (_req, res): Promise<void> => {
   res.send("PONG");
+});
+
+app.get("/repo/exists/:repoId", cors(corsOptionsDelegate), async (req, res): Promise<void> => {
+  const repoId = req.params['repoId'];
+  if (!repoId) {
+    res.send({exists: false})
+  }
+  const exists = await existsAsync(path.join(vReposPath, repoId))
+  res.send({exists})
+});
+
+app.post("/repo/clone/:repoId", cors(corsOptionsDelegate), async (req, res): Promise<void> => {
+  console.log("GO IT");
+  res.send({test: "ok"});
+  //const repoId = req.params['repoId'];
+  //if (!repoId) {
+  //  res.send({exists: false})
+  //}
+  //const exists = await existsAsync(path.join(vReposPath, repoId))
+  //res.send({exists})
 });
 
 app.post('/login', cors(remoteHostCors), async (req, res) => {
@@ -81,11 +119,18 @@ app.post('/logout', cors(remoteHostCors), async (req, res) => {
   try {
     await removeUserSession();
     await removeUser();
-    broadcastAllDevices("logout", null);
   } catch (e) {
-    // dont log
+    // dont log this
   }
+  broadcastAllDevices("logout", {});
   res.send({message: "ok"});
+});
+
+app.get('/device', cors(remoteHostCors), async (req, res) => {
+  const mac = await macaddres.one();
+  const hash = sha256(mac);
+  const id = HexEncode.stringify(hash);
+  res.send({id});
 });
 
 app.post('/complete_signup', cors(remoteHostCors), async (req, res) => {
@@ -98,75 +143,18 @@ app.post('/complete_signup', cors(remoteHostCors), async (req, res) => {
   }
 });
 
-app.use(
-  '/protectedtrpc',
-  cors(remoteHostCors),
-  trpcExpress.createExpressMiddleware({
-      router: protectedRouter,
-      createContext,
-  }),
-);
-
-app.use(
-  '/trpc',
-  cors(remoteHostCors),
-  trpcExpress.createExpressMiddleware({
-      router: trpcRouter,
-      createContext,
-  }),
-);
-
 for(let plugin in pluginsJSON.plugins) {
   let pluginInfo = pluginsJSON.plugins[plugin];
   if (pluginInfo['proxy']) {
     const proxy = createProxyMiddleware("/plugins/" + plugin, {
       target: pluginInfo['host'],
-      ws: true,
-      changeOrigin: true
+      secure: true,
+      ws: false,
+      changeOrigin: false
     });
     app.use(proxy);
   }
 }
-
-app.get("/*.svg", cors(openCors), async (req, res) => {
-  const imagePath = path.join(vCachePath, req.path);
-  if (await existsAsync(imagePath)) {
-    const svg = await fs.promises.readFile(imagePath, { encoding: "utf8", flag: "r" });
-    res.status(200).setHeader("Content-Type", "image/svg+xml").send(svg);
-  } else {
-    res.status(404).send("No Image Found");
-  }
-});
-
-app.get("/*.png", cors(openCors), async (req, res) => {
-  const width = req.query["w"];
-  const height = req.query["h"];
-  const svgPath = req.path.substring(0, req.path.length - 3) + "svg";
-  const imagePath = path.join(vCachePath, svgPath);
-  if (await existsAsync(imagePath)) {
-    if (width) {
-      const buffer = await sharp(imagePath)
-        .resize({ width: parseInt(width) })
-        .png()
-        .toBuffer();
-      res.status(200).setHeader("Content-Type", "image/png").send(buffer);
-      return;
-    }
-    if (height) {
-      const buffer = await sharp(imagePath)
-        .resize({ height: parseInt(height) })
-        .png()
-        .toBuffer();
-      res.status(200).setHeader("Content-Type", "image/png").send(buffer);
-      return;
-    }
-    const buffer = await sharp(imagePath).png().toBuffer();
-    res.status(200).setHeader("Content-Type", "image/png").send(buffer);
-    return;
-  } else {
-    res.status(404).send("No Image Found");
-  }
-});
 
 server.listen(port, host, () => console.log("floro server started on " + host + ":" + port));
 startSessionJob();
