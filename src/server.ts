@@ -12,6 +12,7 @@ import { startSessionJob } from "./cron";
 import macaddres from 'macaddress';
 import sha256 from 'crypto-js/sha256';
 import HexEncode from 'crypto-js/enc-hex';
+import { cloneRepo } from "./repo";
 
 const remoteHost = getRemoteHostSync();
 
@@ -32,6 +33,7 @@ const corsOptionsDelegate = (req, callback) => {
       origin: true
     });
   } else {
+    // TODO: fix this
     callback("sorry", {
       origin: false
     });
@@ -73,7 +75,7 @@ io.on("connection", (socket) => {
 
 app.use(express.json());
 
-app.use(function(req, res, next) {
+app.use(function(_req, res, next) {
   res.header("Access-Control-Allow-Origin", remoteHost);
   res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
   next();
@@ -83,7 +85,7 @@ app.get("/ping", cors(corsOptionsDelegate), async (_req, res): Promise<void> => 
   res.send("PONG");
 });
 
-app.get("/repo/exists/:repoId", cors(corsOptionsDelegate), async (req, res): Promise<void> => {
+app.get("/repo/:repoId/exists", cors(corsOptionsDelegate), async (req, res): Promise<void> => {
   const repoId = req.params['repoId'];
   if (!repoId) {
     res.send({exists: false})
@@ -92,16 +94,27 @@ app.get("/repo/exists/:repoId", cors(corsOptionsDelegate), async (req, res): Pro
   res.send({exists})
 });
 
-app.post("/repo/clone/:repoId", cors(corsOptionsDelegate), async (req, res): Promise<void> => {
-  console.log("GO IT");
-  res.send({test: "ok"});
-  //const repoId = req.params['repoId'];
-  //if (!repoId) {
-  //  res.send({exists: false})
-  //}
-  //const exists = await existsAsync(path.join(vReposPath, repoId))
-  //res.send({exists})
-});
+app.get(
+  "/repo/:repoId/clone",
+  cors(corsOptionsDelegate),
+  async (req, res): Promise<void> => {
+    const repoId = req.params["repoId"];
+    if (!repoId) {
+      res.send({ status: "failed" });
+    }
+    const exists = await existsAsync(path.join(vReposPath, repoId));
+    if (exists) {
+      res.send({ status: "already_exists" });
+      return;
+    }
+    const didSucceed = await cloneRepo(repoId);
+    if (didSucceed) {
+      res.send({ status: "success" });
+    } else {
+      res.send({ status: "failed" });
+    }
+  }
+);
 
 app.post('/login', cors(remoteHostCors), async (req, res) => {
   if (req?.body?.__typename == "PassedLoginAction" || req?.body?.__typename == "AccountCreationSuccessAction") {

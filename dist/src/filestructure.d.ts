@@ -5,6 +5,7 @@ export declare const vCachePath: string;
 export declare const vUserPath: string;
 export declare const vReposPath: string;
 export declare const vPluginsPath: string;
+export declare const vTMPPath: string;
 export declare const vConfigCORSPath: string;
 export declare const vConfigRemotePath: string;
 export declare const vConfigPluginsPath: string;

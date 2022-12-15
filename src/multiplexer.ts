@@ -11,7 +11,6 @@ export const broadcastAllDevices = (event, payload) => {
   clients.forEach((socket: Socket) => {
     socket.emit(event, payload);
   });
-
 }
 
 export const broadcastToClient = (client: 'cli'|'desktop'|'web', event, payload) => {
@@ -19,7 +18,6 @@ export const broadcastToClient = (client: 'cli'|'desktop'|'web', event, payload)
   clients.forEach((socket: Socket) => {
     socket.emit(event, payload);
   });
-
 }
 
 export default multiplexer;

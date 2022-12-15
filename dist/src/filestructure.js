@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getRemoteHostAsync = exports.getRemoteHostSync = exports.getPluginsJson = exports.existsAsync = exports.getUserAsync = exports.getUser = exports.removeUser = exports.writeUser = exports.getUserSessionAsync = exports.getUserSession = exports.removeUserSession = exports.writeUserSession = exports.reset = exports.clean = exports.buildFloroFilestructure = exports.userPath = exports.userSessionPath = exports.vConfigPluginsPath = exports.vConfigRemotePath = exports.vConfigCORSPath = exports.vPluginsPath = exports.vReposPath = exports.vUserPath = exports.vCachePath = exports.vConfigPath = exports.homePath = exports.userHome = void 0;
+exports.getRemoteHostAsync = exports.getRemoteHostSync = exports.getPluginsJson = exports.existsAsync = exports.getUserAsync = exports.getUser = exports.removeUser = exports.writeUser = exports.getUserSessionAsync = exports.getUserSession = exports.removeUserSession = exports.writeUserSession = exports.reset = exports.clean = exports.buildFloroFilestructure = exports.userPath = exports.userSessionPath = exports.vConfigPluginsPath = exports.vConfigRemotePath = exports.vConfigCORSPath = exports.vTMPPath = exports.vPluginsPath = exports.vReposPath = exports.vUserPath = exports.vCachePath = exports.vConfigPath = exports.homePath = exports.userHome = void 0;
 const path_1 = __importDefault(require("path"));
 const os_1 = __importDefault(require("os"));
 const fs_1 = __importDefault(require("fs"));
@@ -22,6 +22,8 @@ exports.vUserPath = path_1.default.join(exports.homePath, "user");
 exports.vReposPath = path_1.default.join(exports.homePath, "repos");
 // ~/.floro/plugins
 exports.vPluginsPath = path_1.default.join(exports.homePath, "plugins");
+// ~/.floro/tmp
+exports.vTMPPath = path_1.default.join(exports.homePath, "tmp");
 // FILES
 // CONFIG
 // ~/.floro/config/cors.txt
@@ -62,22 +64,32 @@ const writeDefaultFiles = (isReset = false) => {
 };
 const buildFloroFilestructure = () => {
     if (!fs_1.default.existsSync(exports.homePath)) {
-        fs_1.default.mkdirSync(exports.homePath, 744);
+        fs_1.default.mkdirSync(exports.homePath);
+        fs_1.default.chmodSync(exports.homePath, 0o755);
     }
     if (!fs_1.default.existsSync(exports.vConfigPath)) {
-        fs_1.default.mkdirSync(exports.vConfigPath, 744);
+        fs_1.default.mkdirSync(exports.vConfigPath);
+        fs_1.default.chmodSync(exports.vConfigPath, 0o755);
     }
     if (!fs_1.default.existsSync(exports.vCachePath)) {
-        fs_1.default.mkdirSync(exports.vCachePath, 744);
+        fs_1.default.mkdirSync(exports.vCachePath);
+        fs_1.default.chmodSync(exports.vCachePath, 0o755);
     }
     if (!fs_1.default.existsSync(exports.vUserPath)) {
-        fs_1.default.mkdirSync(exports.vUserPath, 744);
+        fs_1.default.mkdirSync(exports.vUserPath);
+        fs_1.default.chmodSync(exports.vUserPath, 0o755);
     }
     if (!fs_1.default.existsSync(exports.vReposPath)) {
-        fs_1.default.mkdirSync(exports.vReposPath, 744);
+        fs_1.default.mkdirSync(exports.vReposPath);
+        fs_1.default.chmodSync(exports.vReposPath, 0o755);
     }
     if (!fs_1.default.existsSync(exports.vPluginsPath)) {
-        fs_1.default.mkdirSync(exports.vPluginsPath, 744);
+        fs_1.default.mkdirSync(exports.vPluginsPath);
+        fs_1.default.chmodSync(exports.vPluginsPath, 0o755);
+    }
+    if (!fs_1.default.existsSync(exports.vTMPPath)) {
+        fs_1.default.mkdirSync(exports.vTMPPath);
+        fs_1.default.chmodSync(exports.vTMPPath, 0o755);
     }
     writeDefaultFiles();
 };

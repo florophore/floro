@@ -17,6 +17,8 @@ export const vUserPath = path.join(homePath, "user");
 export const vReposPath = path.join(homePath, "repos");
 // ~/.floro/plugins
 export const vPluginsPath = path.join(homePath, "plugins");
+// ~/.floro/tmp
+export const vTMPPath = path.join(homePath, "tmp");
 
 // FILES
 // CONFIG
@@ -62,26 +64,38 @@ const writeDefaultFiles = (isReset = false) => {
 
 export const buildFloroFilestructure = (): void => {
   if (!fs.existsSync(homePath)) {
-    fs.mkdirSync(homePath, 744);
+    fs.mkdirSync(homePath);
+    fs.chmodSync(homePath, 0o755);
   }
+
   if (!fs.existsSync(vConfigPath)) {
-    fs.mkdirSync(vConfigPath, 744);
+    fs.mkdirSync(vConfigPath);
+    fs.chmodSync(vConfigPath, 0o755);
   }
 
   if (!fs.existsSync(vCachePath)) {
-    fs.mkdirSync(vCachePath, 744);
+    fs.mkdirSync(vCachePath);
+    fs.chmodSync(vCachePath, 0o755);
   }
 
   if (!fs.existsSync(vUserPath)) {
-    fs.mkdirSync(vUserPath, 744);
+    fs.mkdirSync(vUserPath);
+    fs.chmodSync(vUserPath, 0o755);
   }
 
   if (!fs.existsSync(vReposPath)) {
-    fs.mkdirSync(vReposPath, 744);
+    fs.mkdirSync(vReposPath);
+    fs.chmodSync(vReposPath, 0o755);
   }
 
   if (!fs.existsSync(vPluginsPath)) {
-    fs.mkdirSync(vPluginsPath, 744);
+    fs.mkdirSync(vPluginsPath);
+    fs.chmodSync(vPluginsPath, 0o755);
+  }
+
+  if (!fs.existsSync(vTMPPath)) {
+    fs.mkdirSync(vTMPPath);
+    fs.chmodSync(vTMPPath, 0o755);
   }
 
   writeDefaultFiles();

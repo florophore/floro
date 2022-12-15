@@ -38,6 +38,7 @@ const cron_1 = require("./cron");
 const macaddress_1 = __importDefault(require("macaddress"));
 const sha256_1 = __importDefault(require("crypto-js/sha256"));
 const enc_hex_1 = __importDefault(require("crypto-js/enc-hex"));
+const repo_1 = require("./repo");
 const remoteHost = (0, filestructure_1.getRemoteHostSync)();
 const app = (0, express_1.default)();
 const server = http_1.default.createServer(app);
@@ -97,7 +98,7 @@ app.use(function (req, res, next) {
 app.get("/ping", (0, cors_1.default)(corsOptionsDelegate), async (_req, res) => {
     res.send("PONG");
 });
-app.get("/repo/exists/:repoId", (0, cors_1.default)(corsOptionsDelegate), async (req, res) => {
+app.get("/repo/:repoId/exists", (0, cors_1.default)(corsOptionsDelegate), async (req, res) => {
     const repoId = req.params['repoId'];
     if (!repoId) {
         res.send({ exists: false });
@@ -105,15 +106,23 @@ app.get("/repo/exists/:repoId", (0, cors_1.default)(corsOptionsDelegate), async 
     const exists = await (0, filestructure_1.existsAsync)(path_1.default.join(filestructure_1.vReposPath, repoId));
     res.send({ exists });
 });
-app.post("/repo/clone/:repoId", (0, cors_1.default)(corsOptionsDelegate), async (req, res) => {
-    console.log("GO IT");
-    res.send({ test: "ok" });
-    //const repoId = req.params['repoId'];
-    //if (!repoId) {
-    //  res.send({exists: false})
-    //}
-    //const exists = await existsAsync(path.join(vReposPath, repoId))
-    //res.send({exists})
+app.get("/repo/:repoId/clone", (0, cors_1.default)(corsOptionsDelegate), async (req, res) => {
+    const repoId = req.params["repoId"];
+    if (!repoId) {
+        res.send({ status: "failed" });
+    }
+    const exists = await (0, filestructure_1.existsAsync)(path_1.default.join(filestructure_1.vReposPath, repoId));
+    if (exists) {
+        res.send({ status: "already_exists" });
+        return;
+    }
+    const didSucceed = await (0, repo_1.cloneRepo)(repoId);
+    if (didSucceed) {
+        res.send({ status: "success" });
+    }
+    else {
+        res.send({ status: "failed" });
+    }
 });
 app.post('/login', (0, cors_1.default)(remoteHostCors), async (req, res) => {
     if (req?.body?.__typename == "PassedLoginAction" || req?.body?.__typename == "AccountCreationSuccessAction") {
