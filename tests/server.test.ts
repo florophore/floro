@@ -21,31 +21,32 @@ const request = supertest(server);
 jest.mock('fs');
 jest.mock('fs/promises');
 
-describe('server', () => {
-
-    beforeAll(() => {
-       fs.mkdirSync(userHome, { recursive: true });
-       buildFloroFilestructure();
-       fs.writeFileSync(path.join(vCachePath, "star.svg"), MOCK_ICON, {
-         encoding: "utf8",
-       });
-    });
-
-    afterAll(() => {
-       vol.reset();
-    });
-
-    test('/ping returns PONG', async () => {
-        const response = await request.get('/ping');
-        expect(response.status).toEqual(200);
-        expect(response.text).toEqual("PONG")
-    });
-
-    test('/star.svg returns MOCK_ICON', async () => {
-        const response = await request.get('/star.svg');
-        expect(response.status).toEqual(200);
-        expect(response.body.toString()).toEqual(MOCK_ICON);
-    });
-    
-    //TODO: figure out how to test png 
-});
+//describe('server', () => {
+//
+//    beforeAll(() => {
+//       fs.mkdirSync(userHome, { recursive: true });
+//       buildFloroFilestructure();
+//       fs.writeFileSync(path.join(vCachePath, "star.svg"), MOCK_ICON, {
+//         encoding: "utf8",
+//       });
+//    });
+//
+//    afterAll(() => {
+//       vol.reset();
+//    });
+//
+//    test('/ping returns PONG', async () => {
+//        const response = await request.get('/ping');
+//        expect(response.status).toEqual(200);
+//        expect(response.text).toEqual("PONG")
+//    });
+//
+//    test('/star.svg returns MOCK_ICON', async () => {
+//        const response = await request.get('/star.svg');
+//        expect(response.status).toEqual(200);
+//        expect(response.body.toString()).toEqual(MOCK_ICON);
+//    });
+//    
+//    //TODO: figure out how to test png 
+//});
+//

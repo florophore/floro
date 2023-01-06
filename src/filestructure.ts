@@ -171,7 +171,7 @@ export const existsAsync = (file): Promise<boolean> => {
     .catch(() => false);
 }
 
-export const getPluginsJson = (): {plugins: {[key: string]: string}} => {
+export const getPluginsJson = (): {plugins: {[key: string]: { proxy?: boolean, host: string}}} => {
   try {
     const remotePluginsJSON = fs.readFileSync(vConfigPluginsPath, { encoding: 'utf-8' });
     return JSON.parse(remotePluginsJSON);

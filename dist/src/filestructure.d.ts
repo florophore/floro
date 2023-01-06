@@ -25,7 +25,10 @@ export declare const getUserAsync: () => Promise<any>;
 export declare const existsAsync: (file: any) => Promise<boolean>;
 export declare const getPluginsJson: () => {
     plugins: {
-        [key: string]: string;
+        [key: string]: {
+            proxy?: boolean;
+            host: string;
+        };
     };
 };
 export declare const getRemoteHostSync: () => string;
