@@ -23,11 +23,8 @@ const getRowHash = (obj) => {
     return cryptojs_1.Crypto.SHA1(keyHash + valueHash);
 };
 exports.getRowHash = getRowHash;
-const getDiffHash = (diff, parentHash) => {
-    if (parentHash == null) {
-        return cryptojs_1.Crypto.SHA1(JSON.stringify(diff));
-    }
-    return cryptojs_1.Crypto.SHA1(JSON.stringify(diff) + parentHash);
+const getDiffHash = (commitData) => {
+    return cryptojs_1.Crypto.SHA1(JSON.stringify(commitData));
 };
 exports.getDiffHash = getDiffHash;
 const getMyersSequence = (left, right) => {
@@ -139,17 +136,26 @@ const getTextDiff = (before, after) => {
 };
 exports.getTextDiff = getTextDiff;
 const applyDiff = (diffset, state) => {
-    const assets = [...(state ?? [])];
-    for (let stringIndex in diffset.remove) {
-        const index = parseInt(stringIndex);
-        assets[index] = null;
+    let assets = [...(state ?? [])];
+    const addIndices = Object.keys(diffset.add)
+        .map((v) => parseInt(v))
+        .sort((a, b) => a - b);
+    const removeIndices = Object.keys(diffset.remove)
+        .map((v) => parseInt(v))
+        .sort((a, b) => a - b);
+    let offset = 0;
+    for (let removeIndex of removeIndices) {
+        const index = removeIndex - offset;
+        assets = [...assets.slice(0, index), ...assets.slice(index + 1, assets.length)];
+        offset++;
     }
-    for (let stringIndex in diffset.add) {
-        const index = parseInt(stringIndex);
-        assets[index] = diffset.add[stringIndex];
-    }
-    for (let j = assets.length - 1; j >= 0 && assets[j] === null; --j) {
-        assets.pop();
+    for (let addIndex of addIndices) {
+        const index = addIndex;
+        assets = [
+            ...assets.slice(0, index),
+            diffset.add[addIndex],
+            ...assets.slice(index),
+        ];
     }
     return assets;
 };

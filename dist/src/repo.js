@@ -26,7 +26,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.buildStateStore = exports.saveDiffListToCurrent = exports.getRepoState = exports.getUnstagedCommitState = exports.getCurrentBranch = exports.getCommitState = exports.getLocalBranch = exports.getLocalBranches = exports.getCurrentState = exports.getRepoSettings = exports.cloneRepo = exports.getLocalRepos = void 0;
+exports.buildStateStore = exports.updateCurrentBranch = exports.updateCurrentWithNewBranch = exports.updateCurrentWithSHA = exports.updateCurrentCommitSHA = exports.saveDiffListToCurrent = exports.getRepoState = exports.getUnstagedCommitState = exports.getCurrentBranch = exports.getCommitState = exports.updateLocalBranch = exports.deleteLocalBranch = exports.getLocalBranch = exports.getHistory = exports.writeCommit = exports.readCommit = exports.getCommitDirPath = exports.getLocalBranches = exports.getCurrentCommitSha = exports.getCurrentState = exports.getRepoSettings = exports.cloneRepo = exports.getLocalRepos = void 0;
 const axios_1 = __importDefault(require("axios"));
 const fs_1 = __importStar(require("fs"));
 const path_1 = __importDefault(require("path"));
@@ -35,17 +35,19 @@ const filestructure_1 = require("./filestructure");
 const multiplexer_1 = require("./multiplexer");
 const plugins_1 = require("./plugins");
 const versioncontrol_1 = require("./versioncontrol");
-;
-;
-;
-;
-;
 const EMPTY_COMMIT_STATE = {
     description: [],
     licenses: [],
     plugins: [],
     store: {},
     binaries: [],
+};
+const EMPTY_COMMIT_DIFF = {
+    description: { add: {}, remove: {} },
+    licenses: { add: {}, remove: {} },
+    plugins: { add: {}, remove: {} },
+    store: {},
+    binaries: { add: {}, remove: {} },
 };
 const getLocalRepos = async () => {
     const repoDir = await fs_1.default.promises.readdir(filestructure_1.vReposPath);
@@ -135,6 +137,23 @@ const getCurrentState = async (repoId) => {
     }
 };
 exports.getCurrentState = getCurrentState;
+const getCurrentCommitSha = async (repoId) => {
+    try {
+        const current = await (0, exports.getCurrentState)(repoId);
+        if (current.commit) {
+            return current.commit;
+        }
+        if (current.branch) {
+            const branch = await (0, exports.getLocalBranch)(repoId, current.branch);
+            return branch?.lastCommit ?? null;
+        }
+        return null;
+    }
+    catch (e) {
+        return null;
+    }
+};
+exports.getCurrentCommitSha = getCurrentCommitSha;
 const getLocalBranches = async (repoId) => {
     const branchesPath = path_1.default.join(filestructure_1.vReposPath, repoId, "branches");
     const branchesDir = await fs_1.default.promises.readdir(branchesPath);
@@ -149,6 +168,53 @@ const getLocalBranches = async (repoId) => {
     return branches.filter((branch) => branch != null);
 };
 exports.getLocalBranches = getLocalBranches;
+const getCommitDirPath = (repoId, commitSha) => {
+    return path_1.default.join(filestructure_1.vReposPath, repoId, "commits", commitSha.substring(0, 2));
+};
+exports.getCommitDirPath = getCommitDirPath;
+const readCommit = async (repoId, commitSha) => {
+    try {
+        const commitDir = (0, exports.getCommitDirPath)(repoId, commitSha);
+        const commitPath = path_1.default.join(commitDir, `${commitSha}.json`);
+        const commitDataString = await fs_1.default.promises.readFile(commitPath);
+        return JSON.parse(commitDataString.toString());
+    }
+    catch (e) {
+        return null;
+    }
+};
+exports.readCommit = readCommit;
+const writeCommit = async (repoId, commitSha, commitData) => {
+    try {
+        const commitDir = (0, exports.getCommitDirPath)(repoId, commitSha);
+        const commitDirExists = await (0, filestructure_1.existsAsync)(commitDir);
+        if (!commitDirExists) {
+            await fs_1.default.promises.mkdir(commitDir, 0o755);
+        }
+        const commitPath = path_1.default.join(commitDir, `${commitSha}.json`);
+        await fs_1.default.promises.writeFile(commitPath, Buffer.from(JSON.stringify(commitData, null, 2)));
+        return commitData;
+    }
+    catch (e) {
+        return null;
+    }
+};
+exports.writeCommit = writeCommit;
+const getHistory = async (repoId, sha) => {
+    if (sha == null) {
+        return [];
+    }
+    const commit = await (0, exports.readCommit)(repoId, sha);
+    if (commit == null) {
+        return null;
+    }
+    const history = await (0, exports.getHistory)(repoId, commit.parent);
+    return [{
+            sha,
+            message: commit.message
+        }, ...history];
+};
+exports.getHistory = getHistory;
 const getLocalBranch = async (repoId, branchName) => {
     try {
         const repoPath = path_1.default.join(filestructure_1.vReposPath, repoId);
@@ -165,11 +231,57 @@ const getLocalBranch = async (repoId, branchName) => {
     }
 };
 exports.getLocalBranch = getLocalBranch;
+const deleteLocalBranch = async (repoId, branchName) => {
+    try {
+        const repoPath = path_1.default.join(filestructure_1.vReposPath, repoId);
+        const branchPath = path_1.default.join(repoPath, "branches", `${branchName}.json`);
+        await fs_1.default.promises.rm(branchPath);
+        return true;
+    }
+    catch (e) {
+        return false;
+    }
+};
+exports.deleteLocalBranch = deleteLocalBranch;
+const updateLocalBranch = async (repoId, branchName, branchData) => {
+    try {
+        const repoPath = path_1.default.join(filestructure_1.vReposPath, repoId);
+        const branchPath = path_1.default.join(repoPath, "branches", `${branchName}.json`);
+        await fs_1.default.promises.writeFile(branchPath, Buffer.from(JSON.stringify(branchData, null, 2)));
+        return branchData;
+    }
+    catch (e) {
+        return null;
+    }
+};
+exports.updateLocalBranch = updateLocalBranch;
 const getCommitState = async (repoId, sha) => {
     if (!sha) {
         return EMPTY_COMMIT_STATE;
     }
-    // replay here
+    const commitData = await (0, exports.readCommit)(repoId, sha);
+    if (commitData == null) {
+        return null;
+    }
+    const state = await (0, exports.getCommitState)(repoId, commitData.parent);
+    return Object.keys(commitData.diff).reduce((acc, namespace) => {
+        if (namespace == "store") {
+            const store = Object.keys(commitData?.diff?.store ?? {}).reduce((storeAcc, pluginName) => {
+                return {
+                    ...storeAcc,
+                    [pluginName]: (0, versioncontrol_1.applyDiff)(commitData.diff?.store?.[pluginName] ?? { add: {}, remove: {} }, storeAcc?.[pluginName] ?? []),
+                };
+            }, state?.store ?? {});
+            return {
+                ...acc,
+                store,
+            };
+        }
+        return {
+            ...acc,
+            [namespace]: (0, versioncontrol_1.applyDiff)(commitData.diff[namespace], state[namespace]),
+        };
+    }, {});
 };
 exports.getCommitState = getCommitState;
 const getCurrentBranch = async (repoId) => {
@@ -197,12 +309,12 @@ const getRepoState = async (repoId) => {
     const state = await (0, exports.getUnstagedCommitState)(repoId);
     return Object.keys(current.diff).reduce((acc, namespace) => {
         if (namespace == "store") {
-            const store = Object.keys(current?.diff?.store ?? {}).reduce((storeAcc, pluginName) => {
+            const store = Object.keys(acc?.store ?? {}).reduce((storeAcc, pluginName) => {
                 return {
                     ...storeAcc,
-                    [pluginName]: (0, versioncontrol_1.applyDiff)(current.diff?.store?.[pluginName] ?? { add: {}, remove: {} }, state?.[pluginName] ?? []),
+                    [pluginName]: (0, versioncontrol_1.applyDiff)(current.diff?.store?.[pluginName] ?? { add: {}, remove: {} }, storeAcc?.[pluginName] ?? []),
                 };
-            }, state?.store ?? {});
+            }, acc?.store ?? {});
             return {
                 ...acc,
                 store,
@@ -212,7 +324,7 @@ const getRepoState = async (repoId) => {
             ...acc,
             [namespace]: (0, versioncontrol_1.applyDiff)(current.diff[namespace], state[namespace]),
         };
-    }, {});
+    }, state);
 };
 exports.getRepoState = getRepoState;
 const saveDiffListToCurrent = async (repoId, diffList) => {
@@ -258,13 +370,98 @@ const saveDiffListToCurrent = async (repoId, diffList) => {
     }
 };
 exports.saveDiffListToCurrent = saveDiffListToCurrent;
+/**
+ *
+ * use when committing gainst branch or sha
+ */
+const updateCurrentCommitSHA = async (repoId, sha) => {
+    try {
+        const repoPath = path_1.default.join(filestructure_1.vReposPath, repoId);
+        const currentPath = path_1.default.join(repoPath, `current.json`);
+        const current = await (0, exports.getCurrentState)(repoId);
+        const updated = {
+            ...current,
+            commit: sha,
+            diff: EMPTY_COMMIT_DIFF,
+        };
+        await fs_1.default.promises.writeFile(currentPath, Buffer.from(JSON.stringify(updated, null, 2)));
+        return updated;
+    }
+    catch (e) {
+        return null;
+    }
+};
+exports.updateCurrentCommitSHA = updateCurrentCommitSHA;
+/**
+ *
+ * use when HEAD is detached
+ */
+const updateCurrentWithSHA = async (repoId, sha) => {
+    try {
+        const repoPath = path_1.default.join(filestructure_1.vReposPath, repoId);
+        const currentPath = path_1.default.join(repoPath, `current.json`);
+        const current = await (0, exports.getCurrentState)(repoId);
+        const updated = {
+            ...current,
+            commit: sha,
+            branch: null,
+            diff: EMPTY_COMMIT_DIFF,
+        };
+        await fs_1.default.promises.writeFile(currentPath, Buffer.from(JSON.stringify(updated, null, 2)));
+        return updated;
+    }
+    catch (e) {
+        return null;
+    }
+};
+exports.updateCurrentWithSHA = updateCurrentWithSHA;
+const updateCurrentWithNewBranch = async (repoId, branchName) => {
+    try {
+        const repoPath = path_1.default.join(filestructure_1.vReposPath, repoId);
+        const currentPath = path_1.default.join(repoPath, `current.json`);
+        const current = await (0, exports.getCurrentState)(repoId);
+        const updated = {
+            ...current,
+            commit: null,
+            branch: branchName
+        };
+        await fs_1.default.promises.writeFile(currentPath, Buffer.from(JSON.stringify(updated, null, 2)));
+        return updated;
+    }
+    catch (e) {
+        return null;
+    }
+};
+exports.updateCurrentWithNewBranch = updateCurrentWithNewBranch;
+const updateCurrentBranch = async (repoId, branchName) => {
+    try {
+        const repoPath = path_1.default.join(filestructure_1.vReposPath, repoId);
+        const currentPath = path_1.default.join(repoPath, `current.json`);
+        const current = await (0, exports.getCurrentState)(repoId);
+        const updated = {
+            ...current,
+            commit: null,
+            branch: branchName,
+            diff: EMPTY_COMMIT_DIFF,
+        };
+        await fs_1.default.promises.writeFile(currentPath, Buffer.from(JSON.stringify(updated, null, 2)));
+        return updated;
+    }
+    catch (e) {
+        return null;
+    }
+};
+exports.updateCurrentBranch = updateCurrentBranch;
 const buildStateStore = async (state) => {
     let out = {};
+    const plugins = new Set(state.plugins.map(v => v.key));
     for (let pluginName in state.store) {
-        const kv = state.store[pluginName] ?? [];
-        const manifest = await (0, plugins_1.getPluginManifest)(pluginName, state?.plugins ?? []);
-        const pluginState = (0, plugins_1.generateStateFromKV)(manifest, kv, pluginName);
-        out[pluginName] = pluginState;
+        if (plugins.has(pluginName)) {
+            const kv = state?.store?.[pluginName] ?? [];
+            const manifest = await (0, plugins_1.getPluginManifest)(pluginName, state?.plugins ?? []);
+            const pluginState = (0, plugins_1.generateStateFromKV)(manifest, kv, pluginName);
+            out[pluginName] = pluginState;
+        }
     }
     return out;
 };

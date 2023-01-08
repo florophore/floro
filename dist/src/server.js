@@ -128,6 +128,47 @@ app.get("/repo/:repoId/branch", (0, cors_1.default)(corsOptionsDelegate), async 
     const branch = await (0, repo_1.getCurrentBranch)(repoId);
     res.send({ branch });
 });
+app.post("/repo/:repoId/branch/:branch", (0, cors_1.default)(corsOptionsDelegate), async (req, res) => {
+    const repoId = req.params["repoId"];
+    const branchName = req.params["branch"];
+    if (!repoId) {
+        res.sendStatus(404);
+    }
+    const exists = await (0, filestructure_1.existsAsync)(path_1.default.join(filestructure_1.vReposPath, repoId));
+    if (!exists) {
+        res.sendStatus(404);
+        return;
+    }
+    const currentBranches = await (0, repo_1.getLocalBranches)(repoId);
+    if (currentBranches.map(v => v.name.toLowerCase()).includes(branchName.toLowerCase())) {
+        res.sendStatus(400);
+        return;
+    }
+    const sha = await (0, repo_1.getCurrentCommitSha)(repoId);
+    if (!sha) {
+        res.sendStatus(404);
+        return;
+    }
+    const user = await (0, filestructure_1.getUserAsync)();
+    if (!user) {
+        res.sendStatus(400);
+        return;
+    }
+    const branch = {
+        firstCommit: sha,
+        lastCommit: sha,
+        createdBy: user.id,
+        createdAt: (new Date()).toString(),
+        name: branchName
+    };
+    const branchData = await (0, repo_1.updateLocalBranch)(repoId, branchName, branch);
+    if (!branchData) {
+        res.sendStatus(400);
+        return;
+    }
+    const current = await (0, repo_1.updateCurrentWithNewBranch)(repoId, branchName);
+    res.send(current);
+});
 app.get("/repo/:repoId/settings", (0, cors_1.default)(corsOptionsDelegate), async (req, res) => {
     const repoId = req.params["repoId"];
     if (!repoId) {
@@ -141,6 +182,59 @@ app.get("/repo/:repoId/settings", (0, cors_1.default)(corsOptionsDelegate), asyn
     const settings = await (0, repo_1.getRepoSettings)(repoId);
     res.send({ settings });
 });
+app.post("/repo/:repoId/checkout/branch/:branch", (0, cors_1.default)(corsOptionsDelegate), async (req, res) => {
+    const repoId = req.params["repoId"];
+    const branchName = req.params["branch"];
+    if (!repoId) {
+        res.sendStatus(404);
+    }
+    const exists = await (0, filestructure_1.existsAsync)(path_1.default.join(filestructure_1.vReposPath, repoId));
+    if (!exists) {
+        res.sendStatus(404);
+        return;
+    }
+    const currentBranches = await (0, repo_1.getLocalBranches)(repoId);
+    if (!currentBranches.map(v => v.name.toLowerCase()).includes(branchName.toLowerCase())) {
+        res.sendStatus(400);
+        return;
+    }
+    const branchData = await (0, repo_1.getLocalBranch)(repoId, branchName);
+    if (!branchData) {
+        res.sendStatus(400);
+        return;
+    }
+    const current = await (0, repo_1.updateCurrentWithNewBranch)(repoId, branchName);
+    res.send(current);
+});
+app.post("/repo/:repoId/checkout/commit/:sha", (0, cors_1.default)(corsOptionsDelegate), async (req, res) => {
+    const repoId = req.params["repoId"];
+    const sha = req.params["sha"];
+    if (!repoId) {
+        res.sendStatus(404);
+    }
+    const exists = await (0, filestructure_1.existsAsync)(path_1.default.join(filestructure_1.vReposPath, repoId));
+    if (!exists) {
+        res.sendStatus(404);
+        return;
+    }
+    try {
+        const commit = await (0, repo_1.readCommit)(repoId, sha);
+        if (!commit) {
+            res.sendStatus(400);
+            return;
+        }
+        const current = await (0, repo_1.updateCurrentWithSHA)(repoId, sha);
+        if (!current) {
+            res.sendStatus(400);
+            return;
+        }
+        res.send(current);
+    }
+    catch (e) {
+        res.sendStatus(400);
+        return;
+    }
+});
 app.get("/repo/:repoId/branches", (0, cors_1.default)(corsOptionsDelegate), async (req, res) => {
     const repoId = req.params["repoId"];
     if (!repoId) {
@@ -153,6 +247,29 @@ app.get("/repo/:repoId/branches", (0, cors_1.default)(corsOptionsDelegate), asyn
     }
     const branches = await (0, repo_1.getLocalBranches)(repoId);
     res.send({ branches });
+});
+app.post("/repo/:repoId/delete/branch/:branch", (0, cors_1.default)(corsOptionsDelegate), async (req, res) => {
+    const repoId = req.params["repoId"];
+    const branchName = req.params["branch"];
+    if (!repoId) {
+        res.sendStatus(404);
+    }
+    const exists = await (0, filestructure_1.existsAsync)(path_1.default.join(filestructure_1.vReposPath, repoId));
+    if (!exists) {
+        res.sendStatus(404);
+        return;
+    }
+    const currentBranches = await (0, repo_1.getLocalBranches)(repoId);
+    if (!currentBranches.map(v => v.name.toLowerCase()).includes(branchName.toLowerCase())) {
+        res.sendStatus(400);
+        return;
+    }
+    const current = await (0, repo_1.getCurrentState)(repoId);
+    if (current.branch && current.branch.toLowerCase() == branchName.toLocaleLowerCase()) {
+        await (0, repo_1.deleteLocalBranch)(repoId, branchName);
+    }
+    const branches = await (0, repo_1.getLocalBranches)(repoId);
+    res.send(branches);
 });
 app.post("/repo/:repoId/description", (0, cors_1.default)(corsOptionsDelegate), async (req, res) => {
     const repoId = req.params["repoId"];
@@ -241,6 +358,22 @@ app.get("/repo/:repoId/licenses", (0, cors_1.default)(corsOptionsDelegate), asyn
     const state = await (0, repo_1.getRepoState)(repoId);
     res.send({ licenses: state.licenses });
 });
+app.get("/repo/:repoId/current", (0, cors_1.default)(corsOptionsDelegate), async (req, res) => {
+    const repoId = req.params["repoId"];
+    if (!repoId) {
+        res.sendStatus(404);
+    }
+    const exists = await (0, filestructure_1.existsAsync)(path_1.default.join(filestructure_1.vReposPath, repoId));
+    if (!exists) {
+        res.sendStatus(404);
+        return;
+    }
+    const current = await (0, repo_1.getCurrentState)(repoId);
+    res.send(current);
+});
+/**
+ * STATE
+ */
 app.get("/repo/:repoId/state", (0, cors_1.default)(corsOptionsDelegate), async (req, res) => {
     const repoId = req.params["repoId"];
     if (!repoId) {
@@ -254,6 +387,246 @@ app.get("/repo/:repoId/state", (0, cors_1.default)(corsOptionsDelegate), async (
     const state = await (0, repo_1.getRepoState)(repoId);
     const store = await (0, repo_1.buildStateStore)(state);
     res.send({ state: { ...state, store } });
+});
+app.get("/repo/:repoId/commit/:sha/state", (0, cors_1.default)(corsOptionsDelegate), async (req, res) => {
+    const repoId = req.params["repoId"];
+    const sha = req.params["sha"];
+    if (!repoId) {
+        res.sendStatus(404);
+    }
+    const exists = await (0, filestructure_1.existsAsync)(path_1.default.join(filestructure_1.vReposPath, repoId));
+    if (!exists) {
+        res.sendStatus(404);
+        return;
+    }
+    try {
+        const commit = await (0, repo_1.readCommit)(repoId, sha);
+        if (!commit) {
+            res.sendStatus(400);
+            return;
+        }
+        const state = await (0, repo_1.getCommitState)(repoId, sha);
+        if (!state) {
+            res.sendStatus(400);
+            return;
+        }
+        const store = await (0, repo_1.buildStateStore)(state);
+        res.send({ state: { ...state, store } });
+    }
+    catch (e) {
+        res.sendStatus(400);
+        return;
+    }
+});
+app.get("/repo/:repoId/branch/:branch/state", (0, cors_1.default)(corsOptionsDelegate), async (req, res) => {
+    const repoId = req.params["repoId"];
+    const branchName = req.params["branch"];
+    if (!repoId) {
+        res.sendStatus(404);
+    }
+    const exists = await (0, filestructure_1.existsAsync)(path_1.default.join(filestructure_1.vReposPath, repoId));
+    if (!exists) {
+        res.sendStatus(404);
+        return;
+    }
+    try {
+        const branch = await (0, repo_1.getLocalBranch)(repoId, branchName);
+        if (!branch) {
+            res.sendStatus(400);
+            return;
+        }
+        const state = await (0, repo_1.getCommitState)(repoId, branch.lastCommit);
+        if (!state) {
+            res.sendStatus(400);
+            return;
+        }
+        const store = await (0, repo_1.buildStateStore)(state);
+        res.send({ state: { ...state, store } });
+    }
+    catch (e) {
+        res.sendStatus(400);
+        return;
+    }
+});
+/**
+ * HISTORY
+ */
+app.get("/repo/:repoId/history", (0, cors_1.default)(corsOptionsDelegate), async (req, res) => {
+    const repoId = req.params["repoId"];
+    if (!repoId) {
+        res.sendStatus(404);
+    }
+    const exists = await (0, filestructure_1.existsAsync)(path_1.default.join(filestructure_1.vReposPath, repoId));
+    if (!exists) {
+        res.sendStatus(404);
+        return;
+    }
+    try {
+        const sha = await (0, repo_1.getCurrentCommitSha)(repoId);
+        if (!sha) {
+            res.sendStatus(400);
+            return;
+        }
+        const history = await (0, repo_1.getHistory)(repoId, sha);
+        if (!history) {
+            res.sendStatus(400);
+            return;
+        }
+        res.send({ history });
+    }
+    catch (e) {
+        res.sendStatus(400);
+        return;
+    }
+});
+app.get("/repo/:repoId/branch/:branch/history", (0, cors_1.default)(corsOptionsDelegate), async (req, res) => {
+    const repoId = req.params["repoId"];
+    const branchName = req.params["branch"];
+    if (!repoId) {
+        res.sendStatus(404);
+    }
+    const exists = await (0, filestructure_1.existsAsync)(path_1.default.join(filestructure_1.vReposPath, repoId));
+    if (!exists) {
+        res.sendStatus(404);
+        return;
+    }
+    try {
+        const branch = await (0, repo_1.getLocalBranch)(repoId, branchName);
+        if (!branch) {
+            res.sendStatus(400);
+            return;
+        }
+        const history = await (0, repo_1.getHistory)(repoId, branch.lastCommit);
+        if (!history) {
+            res.sendStatus(400);
+            return;
+        }
+        res.send({ history });
+    }
+    catch (e) {
+        res.sendStatus(400);
+        return;
+    }
+});
+app.get("/repo/:repoId/commit/:sha/history", (0, cors_1.default)(corsOptionsDelegate), async (req, res) => {
+    const repoId = req.params["repoId"];
+    const sha = req.params["sha"];
+    if (!repoId) {
+        res.sendStatus(404);
+    }
+    const exists = await (0, filestructure_1.existsAsync)(path_1.default.join(filestructure_1.vReposPath, repoId));
+    if (!exists) {
+        res.sendStatus(404);
+        return;
+    }
+    try {
+        const commit = await (0, repo_1.readCommit)(repoId, sha);
+        if (!commit) {
+            res.sendStatus(400);
+            return;
+        }
+        const history = await (0, repo_1.getHistory)(repoId, sha);
+        if (!history) {
+            res.sendStatus(400);
+            return;
+        }
+        res.send({ history });
+    }
+    catch (e) {
+        res.sendStatus(400);
+        return;
+    }
+});
+/**
+ * GRAPH
+ * draw commit history against branches
+ * /branches - total history
+ * /branch - branch history
+ * / - current branch history (if on branch)
+*/
+/**
+ * CHANGES
+ */
+app.get("/repo/:repoId/changes", (0, cors_1.default)(corsOptionsDelegate), async (req, res) => {
+    const repoId = req.params["repoId"];
+    if (!repoId) {
+        res.sendStatus(404);
+    }
+    const exists = await (0, filestructure_1.existsAsync)(path_1.default.join(filestructure_1.vReposPath, repoId));
+    if (!exists) {
+        res.sendStatus(404);
+        return;
+    }
+    try {
+        const sha = await (0, repo_1.getCurrentCommitSha)(repoId);
+        if (!sha) {
+            res.sendStatus(400);
+            return;
+        }
+        const commit = await (0, repo_1.readCommit)(repoId, sha);
+        if (!commit) {
+            res.sendStatus(400);
+            return;
+        }
+        res.send(commit);
+    }
+    catch (e) {
+        res.sendStatus(400);
+        return;
+    }
+});
+app.get("/repo/:repoId/branch/:branch/changes", (0, cors_1.default)(corsOptionsDelegate), async (req, res) => {
+    const repoId = req.params["repoId"];
+    const branchName = req.params["branch"];
+    if (!repoId) {
+        res.sendStatus(404);
+    }
+    const exists = await (0, filestructure_1.existsAsync)(path_1.default.join(filestructure_1.vReposPath, repoId));
+    if (!exists) {
+        res.sendStatus(404);
+        return;
+    }
+    try {
+        const branch = await (0, repo_1.getLocalBranch)(repoId, branchName);
+        if (!branch) {
+            res.sendStatus(400);
+            return;
+        }
+        const commit = await (0, repo_1.readCommit)(repoId, branch.lastCommit);
+        if (!commit) {
+            res.sendStatus(400);
+            return;
+        }
+        res.send(commit);
+    }
+    catch (e) {
+        res.sendStatus(400);
+        return;
+    }
+});
+app.get("/repo/:repoId/commit/:sha/changes", (0, cors_1.default)(corsOptionsDelegate), async (req, res) => {
+    const repoId = req.params["repoId"];
+    const sha = req.params["sha"];
+    if (!repoId) {
+        res.sendStatus(404);
+    }
+    const exists = await (0, filestructure_1.existsAsync)(path_1.default.join(filestructure_1.vReposPath, repoId));
+    if (!exists) {
+        res.sendStatus(404);
+        return;
+    }
+    try {
+        const commit = await (0, repo_1.readCommit)(repoId, sha);
+        if (!commit) {
+            res.sendStatus(400);
+            return;
+        }
+        res.send(commit);
+    }
+    catch (e) {
+        res.sendStatus(400);
+        return;
+    }
 });
 app.post("/repo/:repoId/plugins", (0, cors_1.default)(corsOptionsDelegate), async (req, res) => {
     const repoId = req.params["repoId"];
@@ -343,25 +716,55 @@ app.post("/repo/:repoId/plugins/:plugin/state", (0, cors_1.default)(corsOptionsD
     // return constructed kv state of plugin and upstreams
     res.send({ [pluginName]: state });
 });
-app.get("/repo/:repoId/plugins/:plugin/state", (0, cors_1.default)(corsOptionsDelegate), async (req, res) => {
+app.post("/repo/:repoId/commit", (0, cors_1.default)(corsOptionsDelegate), async (req, res) => {
     const repoId = req.params["repoId"];
-    const pluginName = req.params["plugin"];
-    if (!repoId) {
-        res.sendStatus(404);
-    }
+    const message = req.body?.["message"];
     const exists = await (0, filestructure_1.existsAsync)(path_1.default.join(filestructure_1.vReposPath, repoId));
     if (!exists) {
         res.sendStatus(404);
         return;
     }
-    const current = await (0, repo_1.getRepoState)(repoId);
-    const manifest = await (0, plugins_1.getPluginManifest)(pluginName, current?.plugins ?? []);
-    if (manifest == null) {
-        res.sendStatus(404);
+    if (!message) {
+        res.sendStatus(400);
         return;
     }
-    const state = (0, plugins_1.generateStateFromKV)(manifest, current?.store?.[pluginName] ?? [], pluginName);
-    res.send({ [pluginName]: state });
+    const user = await (0, filestructure_1.getUser)();
+    if (!user.id) {
+        res.sendStatus(400);
+        return;
+    }
+    const currentState = await (0, repo_1.getCurrentState)(repoId);
+    const currentSha = await (0, repo_1.getCurrentCommitSha)(repoId);
+    const timestamp = (new Date()).toString();
+    const commitData = {
+        parent: currentSha,
+        diff: currentState.diff,
+        timestamp,
+        userId: user.id,
+        message
+    };
+    const sha = (0, versioncontrol_1.getDiffHash)(commitData);
+    const commit = await (0, repo_1.writeCommit)(repoId, sha, { sha, ...commitData });
+    if (!commit) {
+        res.sendStatus(400);
+        return;
+    }
+    if (currentState.branch) {
+        const branchState = await (0, repo_1.getLocalBranch)(repoId, currentState.branch);
+        if (!branchState) {
+            res.sendStatus(400);
+            return;
+        }
+        await (0, repo_1.updateLocalBranch)(repoId, currentState.branch, {
+            ...branchState,
+            lastCommit: sha
+        });
+        await (0, repo_1.updateCurrentCommitSHA)(repoId, null);
+    }
+    else {
+        await (0, repo_1.updateCurrentCommitSHA)(repoId, sha);
+    }
+    res.send(commit);
 });
 app.post("/repo/:repoId/stash", (0, cors_1.default)(corsOptionsDelegate), async (req, res) => {
     const repoId = req.params["repoId"];
@@ -387,10 +790,6 @@ app.post("/repo/:repoId/stash/pop", (0, cors_1.default)(corsOptionsDelegate), as
 app.get("/repo/:repoId/plugins/:plugin/validate", (0, cors_1.default)(corsOptionsDelegate), async (req, res) => { });
 app.get("/repo/:repoId/current/diff", (0, cors_1.default)(corsOptionsDelegate), async (req, res) => {
     const repoId = req.params["repoId"];
-});
-app.post("/repo/:repoId/checkout", (0, cors_1.default)(corsOptionsDelegate), async (req, res) => {
-    const repoId = req.params["repoId"];
-    const branch = req.params["branch"];
 });
 app.get("/repo/:repoId/clone", (0, cors_1.default)(corsOptionsDelegate), async (req, res) => {
     const repoId = req.params["repoId"];

@@ -4,6 +4,15 @@ const versioncontrol_1 = require("../src/versioncontrol");
 describe('versioncontrol', () => {
     describe('getDiff', () => {
         test("can perform myers diff", () => {
+            const beforeString = "ABC";
+            const afterString = "XAYBCZC";
+            const before = beforeString.split("").map(key => ({ key, value: {} }));
+            const after = afterString.split("").map(key => ({ key, value: {} }));
+            const diff = (0, versioncontrol_1.getDiff)(before, after);
+            const appliedDiff = (0, versioncontrol_1.applyDiff)(diff, before).map(({ key }) => key).join("");
+            expect(appliedDiff).toEqual(afterString);
+        });
+        test("can perform myers diff", () => {
             const before = "ABCDE".split("").map(key => ({ key, value: {} }));
             const after = "XAEBCDFABD".split("").map(key => ({ key, value: {} }));
             const diff = (0, versioncontrol_1.getDiff)(before, after);
@@ -15,6 +24,9 @@ describe('versioncontrol', () => {
             expect(diff.add[7].key).toBe("A");
             expect(diff.add[8].key).toBe("B");
             expect(diff.add[9].key).toBe("D");
+            expect(diff.remove[4].key).toBe("E");
+            const appliedDiff = (0, versioncontrol_1.applyDiff)(diff, before).map(({ key }) => key).join("");
+            expect(appliedDiff).toEqual("XAEBCDFABD");
         });
         test("can perform myers diff on empty values", () => {
             const before = "".split("").map(key => ({ key, value: {} }));
@@ -42,7 +54,6 @@ describe('versioncontrol', () => {
             const pA = (0, versioncontrol_1.applyDiff)(diff0, []);
             const pB = (0, versioncontrol_1.applyDiff)(diff1, pA);
             const pC = (0, versioncontrol_1.applyDiff)(diff2, pB);
-            console.log("D2", diff2);
             expect(pA.join("")).toEqual(paragraphA);
             expect(pB.join("")).toEqual(paragraphB);
             expect(pC.join("")).toEqual(paragraphC);

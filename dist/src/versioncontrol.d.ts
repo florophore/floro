@@ -19,6 +19,14 @@ export declare type TextDiff = {
         [key: number]: string;
     };
 };
+export interface CommitData {
+    sha?: string;
+    diff: StateDiff;
+    userId: string;
+    timestamp: string;
+    parent: string | null;
+    message: string;
+}
 export declare const getKVHashes: (obj: {
     key: string;
     value: {
@@ -34,7 +42,7 @@ export declare const getRowHash: (obj: {
         [key: string]: string | number | boolean;
     };
 }) => string;
-export declare const getDiffHash: (diff: StateDiff, parentHash: string) => string;
+export declare const getDiffHash: (commitData: CommitData) => string;
 export declare const getDiff: (before: Array<DiffElement>, after: Array<DiffElement>) => Diff;
 export declare const splitTextForDiff: (str: string) => Array<string>;
 export declare const getTextDiff: (before: string, after: string) => TextDiff;

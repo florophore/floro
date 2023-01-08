@@ -11,44 +11,50 @@ import {
 } from "./filestructure";
 import { broadcastAllDevices } from "./multiplexer";
 import { generateStateFromKV, getPluginManifest } from "./plugins";
-import { applyDiff, Diff, TextDiff } from "./versioncontrol";
+import { applyDiff, CommitData, Diff, TextDiff } from "./versioncontrol";
 
 export interface RawStore {
-    [name: string]: Array<{key: string, value: string}>
-};
+  [name: string]: Array<{ key: string; value: string }>;
+}
 
 export interface CommitState {
-  description: Array<string>,
-  licenses: Array<{key: string, value: string}>,
-  plugins: Array<{key: string, value: string}>,
-  store: RawStore,
-  binaries: Array<{key: string, value: string}>,
-};
+  description: Array<string>;
+  licenses: Array<{ key: string; value: string }>;
+  plugins: Array<{ key: string; value: string }>;
+  store: RawStore;
+  binaries: Array<{ key: string; value: string }>;
+}
 
 export interface StoreStateDiff {
-    [pluginName: string]: Diff
-};
+  [pluginName: string]: Diff;
+}
 
 export interface StateDiff {
-  plugins: Diff, 
-  binaries: Diff, 
-  store: StoreStateDiff, 
-  licenses: Diff,
-  description: TextDiff
-};
+  plugins: Diff;
+  binaries: Diff;
+  store: StoreStateDiff;
+  licenses: Diff;
+  description: TextDiff;
+}
 
 export interface State {
-  diff: StateDiff,
-  branch: string|null,
-  commit: string|null,
-};
+  diff: StateDiff;
+  branch: string | null;
+  commit: string | null;
+}
 
 export interface Branch {
-  firstCommit: null|string,
-  lastCommit: null|string,
-  createdBy: string,
-  createdAt: string,
+  name: string,
+  firstCommit: null | string;
+  lastCommit: null | string;
+  createdBy: string;
+  createdAt: string;
 }
+
+export interface CommitHistory {
+  sha: null|string;
+  message: string;
+} 
 
 const EMPTY_COMMIT_STATE: CommitState = {
   description: [],
@@ -56,6 +62,14 @@ const EMPTY_COMMIT_STATE: CommitState = {
   plugins: [],
   store: {},
   binaries: [],
+};
+
+const EMPTY_COMMIT_DIFF: StateDiff = {
+  description: { add: {}, remove: {} },
+  licenses: { add: {}, remove: {} },
+  plugins: { add: {}, remove: {} },
+  store: {},
+  binaries: { add: {}, remove: {} },
 };
 
 export const getLocalRepos = async (): Promise<string[]> => {
@@ -133,6 +147,7 @@ export const getRepoSettings = async (repoId: string) => {
     return null;
   }
 };
+
 export const getCurrentState = async (repoId: string): Promise<State> => {
   try {
     const repoPath = path.join(vReposPath, repoId);
@@ -144,8 +159,25 @@ export const getCurrentState = async (repoId: string): Promise<State> => {
   }
 };
 
+export const getCurrentCommitSha = async (repoId: string): Promise<string|null> => {
+  try {
+    const current = await getCurrentState(repoId);
+    if (current.commit) {
+      return current.commit;
+    }
+    if (current.branch) {
+      const branch = await getLocalBranch(repoId, current.branch);
+      return branch?.lastCommit ?? null;
+    }
+    return null;
+  } catch (e) {
+    return null;
+  }
+};
 
-export const getLocalBranches = async (repoId: string): Promise<Array<Branch>> => {
+export const getLocalBranches = async (
+  repoId: string
+): Promise<Array<Branch>> => {
   const branchesPath = path.join(vReposPath, repoId, "branches");
   const branchesDir = await fs.promises.readdir(branchesPath);
   const branches = await Promise.all(
@@ -164,7 +196,68 @@ export const getLocalBranches = async (repoId: string): Promise<Array<Branch>> =
   return branches.filter((branch) => branch != null);
 };
 
-export const getLocalBranch = async (repoId: string, branchName: string): Promise<Branch> => {
+export const getCommitDirPath = (repoId: string, commitSha: string): string => {
+  return path.join(vReposPath, repoId, "commits", commitSha.substring(0, 2));
+};
+
+export const readCommit = async (
+  repoId: string,
+  commitSha: string
+): Promise<CommitData | null> => {
+  try {
+    const commitDir = getCommitDirPath(repoId, commitSha);
+    const commitPath = path.join(commitDir, `${commitSha.substring(2)}.json`);
+    const commitDataString = await fs.promises.readFile(commitPath);
+    return JSON.parse(commitDataString.toString());
+  } catch (e) {
+    return null;
+  }
+};
+
+export const writeCommit = async (
+  repoId: string,
+  commitSha: string,
+  commitData: CommitData
+) => {
+  try {
+    const commitDir = getCommitDirPath(repoId, commitSha);
+    const commitDirExists = await existsAsync(commitDir);
+    if (!commitDirExists) {
+      await fs.promises.mkdir(commitDir, 0o755);
+    }
+    const commitPath = path.join(commitDir, `${commitSha.substring(2)}.json`);
+    await fs.promises.writeFile(
+      commitPath,
+      Buffer.from(JSON.stringify(commitData, null, 2))
+    );
+    return commitData;
+  } catch (e) {
+    return null;
+  }
+};
+
+export const getHistory = async (
+  repoId: string,
+  sha: string|null
+): Promise<Array<CommitHistory>|null> => {
+  if (sha == null) {
+    return [];
+  }
+  const commit = await readCommit(repoId, sha);
+  if (commit == null) {
+    return null;
+  }
+  const history = await getHistory(repoId, commit.parent);
+  return [{
+    sha,
+    message: commit.message
+  }, ...history];
+}
+
+export const getLocalBranch = async (
+  repoId: string,
+  branchName: string
+): Promise<Branch> => {
   try {
     const repoPath = path.join(vReposPath, repoId);
     const branchPath = path.join(repoPath, "branches", `${branchName}.json`);
@@ -178,14 +271,74 @@ export const getLocalBranch = async (repoId: string, branchName: string): Promis
     return null;
   }
 };
+export const deleteLocalBranch = async (
+  repoId: string,
+  branchName: string
+): Promise<boolean> => {
+  try {
+    const repoPath = path.join(vReposPath, repoId);
+    const branchPath = path.join(repoPath, "branches", `${branchName}.json`);
+    await fs.promises.rm(branchPath);
+    return true;
+  } catch (e) {
+    return false;
+  }
+};
+
+export const updateLocalBranch = async (
+  repoId: string,
+  branchName: string,
+  branchData: Branch
+): Promise<Branch|null> => {
+  try {
+    const repoPath = path.join(vReposPath, repoId);
+    const branchPath = path.join(repoPath, "branches", `${branchName}.json`);
+    await fs.promises.writeFile(
+      branchPath,
+      Buffer.from(JSON.stringify(branchData, null, 2))
+    );
+    return branchData;
+  } catch (e) {
+    return null;
+  }
+};
+
 export const getCommitState = async (
   repoId: string,
   sha?: string
-): Promise<CommitState> => {
+): Promise<CommitState | null> => {
   if (!sha) {
     return EMPTY_COMMIT_STATE;
   }
-  // replay here
+  const commitData = await readCommit(repoId, sha);
+  if (commitData == null) {
+    return null;
+  }
+  const state = await getCommitState(repoId, commitData.parent);
+  return Object.keys(commitData.diff).reduce((acc, namespace): CommitState => {
+    if (namespace == "store") {
+      const store: RawStore = Object.keys(commitData?.diff?.store ?? {}).reduce(
+        (storeAcc, pluginName) => {
+          return {
+            ...storeAcc,
+            [pluginName]: applyDiff(
+              commitData.diff?.store?.[pluginName] ?? { add: {}, remove: {} },
+              storeAcc?.[pluginName] ?? []
+            ),
+          };
+        },
+        state?.store ?? ({} as RawStore)
+      );
+      return {
+        ...acc,
+        store,
+      };
+    }
+    return {
+      ...acc,
+      [namespace]: applyDiff(commitData.diff[namespace], state[namespace]),
+    };
+  }, {} as CommitState);
 };
 
 export const getCurrentBranch = async (repoId: string) => {
@@ -197,7 +350,9 @@ export const getCurrentBranch = async (repoId: string) => {
   return null;
 };
 
-export const getUnstagedCommitState = async (repoId: string): Promise<CommitState> => {
+export const getUnstagedCommitState = async (
+  repoId: string
+): Promise<CommitState> => {
   const current = await getCurrentState(repoId);
   if (current.branch) {
     const branch = await getLocalBranch(repoId, current.branch);
@@ -208,24 +363,23 @@ export const getUnstagedCommitState = async (repoId: string): Promise<CommitStat
   return commitState;
 };
 
-export const getRepoState = async (
-  repoId: string
-): Promise<CommitState> => {
+export const getRepoState = async (repoId: string): Promise<CommitState> => {
   const current = await getCurrentState(repoId);
   const state = await getUnstagedCommitState(repoId);
   return Object.keys(current.diff).reduce((acc, namespace): CommitState => {
     if (namespace == "store") {
-      const store: RawStore = Object.keys(current?.diff?.store ?? {}).reduce(
+
+      const store: RawStore = Object.keys(acc?.store ?? {}).reduce(
         (storeAcc, pluginName) => {
           return {
             ...storeAcc,
             [pluginName]: applyDiff(
               current.diff?.store?.[pluginName] ?? { add: {}, remove: {} },
-              state?.[pluginName] ?? []
+              storeAcc?.[pluginName] ?? []
             ),
           };
         },
-        state?.store ?? {} as RawStore
+       acc?.store ?? ({} as RawStore)
       );
 
       return {
@@ -237,15 +391,19 @@ export const getRepoState = async (
       ...acc,
       [namespace]: applyDiff(current.diff[namespace], state[namespace]),
     };
-  }, {} as CommitState);
+  }, state as CommitState);
 };
 
 export const saveDiffListToCurrent = async (
   repoId: string,
-  diffList: Array<{ diff: Diff|TextDiff; namespace: string; pluginName?: string }>
+  diffList: Array<{
+    diff: Diff | TextDiff;
+    namespace: string;
+    pluginName?: string;
+  }>
 ): Promise<State> => {
   const current = await getCurrentState(repoId);
-  const commitState = await getCommitState(repoId)
+  const commitState = await getCommitState(repoId);
   try {
     const repoPath = path.join(vReposPath, repoId);
     const currentPath = path.join(repoPath, `current.json`);
@@ -288,16 +446,110 @@ export const saveDiffListToCurrent = async (
   }
 };
 
-export const buildStateStore = async (state: CommitState): Promise<{[key: string]: unknown}> => {
-  let out = {};
-  for (let pluginName in state.store) {
-    const kv = state.store[pluginName] ?? [];
-    const manifest = await getPluginManifest(
-      pluginName,
-      state?.plugins ?? []
+/**
+ * 
+ * use when committing gainst branch or sha
+ */
+export const updateCurrentCommitSHA = async (repoId: string, sha: string): Promise<State|null> => {
+  try {
+    const repoPath = path.join(vReposPath, repoId);
+    const currentPath = path.join(repoPath, `current.json`);
+    const current = await getCurrentState(repoId);
+    const updated = {
+      ...current,
+      commit: sha,
+      diff: EMPTY_COMMIT_DIFF,
+    };
+    await fs.promises.writeFile(
+      currentPath,
+      Buffer.from(JSON.stringify(updated, null, 2))
     );
-    const pluginState = generateStateFromKV(manifest, kv, pluginName);
-    out[pluginName] = pluginState;
-  } 
+    return updated as State;
+  } catch (e) {
+    return null;
+  }
+};
+
+
+/**
+ * 
+ * use when HEAD is detached
+ */
+
+export const updateCurrentWithSHA = async (repoId: string, sha: string): Promise<State|null> => {
+  try {
+    const repoPath = path.join(vReposPath, repoId);
+    const currentPath = path.join(repoPath, `current.json`);
+    const current = await getCurrentState(repoId);
+    const updated = {
+      ...current,
+      commit: sha,
+      branch: null,
+      diff: EMPTY_COMMIT_DIFF,
+    };
+    await fs.promises.writeFile(
+      currentPath,
+      Buffer.from(JSON.stringify(updated, null, 2))
+    );
+    return updated as State;
+  } catch (e) {
+    return null;
+  }
+};
+
+export const updateCurrentWithNewBranch = async (repoId: string, branchName: string): Promise<State|null> => {
+  try {
+    const repoPath = path.join(vReposPath, repoId);
+    const currentPath = path.join(repoPath, `current.json`);
+    const current = await getCurrentState(repoId);
+    const updated = {
+      ...current,
+      commit: null,
+      branch: branchName
+    };
+    await fs.promises.writeFile(
+      currentPath,
+      Buffer.from(JSON.stringify(updated, null, 2))
+    );
+    return updated as State;
+  } catch (e) {
+    return null;
+  }
+};
+
+export const updateCurrentBranch = async (repoId: string, branchName: string): Promise<State|null> => {
+  try {
+    const repoPath = path.join(vReposPath, repoId);
+    const currentPath = path.join(repoPath, `current.json`);
+    const current = await getCurrentState(repoId);
+    const updated = {
+      ...current,
+      commit: null,
+      branch: branchName,
+      diff: EMPTY_COMMIT_DIFF,
+    };
+    await fs.promises.writeFile(
+      currentPath,
+      Buffer.from(JSON.stringify(updated, null, 2))
+    );
+    return updated as State;
+  } catch (e) {
+    return null;
+  }
+};
+
+export const buildStateStore = async (
+  state: CommitState
+): Promise<{ [key: string]: unknown }> => {
+  let out = {};
+  const plugins = new Set(state.plugins.map(v => v.key));
+  for (let pluginName in state.store) {
+    if (plugins.has(pluginName)) {
+      const kv = state?.store?.[pluginName] ?? [];
+      const manifest = await getPluginManifest(pluginName, state?.plugins ?? []);
+      const pluginState = generateStateFromKV(manifest, kv, pluginName);
+      out[pluginName] = pluginState;
+    }
+  }
   return out;
-}
+};
