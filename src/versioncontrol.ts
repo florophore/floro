@@ -48,8 +48,8 @@ export const getKVHashes = (obj: {
   key: string;
   value: { [key: string]: number | string | boolean };
 }): { keyHash: string; valueHash: string } => {
-  const keyHash = Crypto.SHA1(obj.key);
-  const valueHash = Crypto.SHA1(getObjectStringValue(obj.value));
+  const keyHash = Crypto.sha256(obj.key);
+  const valueHash = Crypto.sha256(getObjectStringValue(obj.value));
   return {
     keyHash,
     valueHash,
@@ -61,12 +61,31 @@ export const getRowHash = (obj: {
   value: { [key: string]: number | string | boolean };
 }): string => {
   const { keyHash, valueHash } = getKVHashes(obj);
-  return Crypto.SHA1(keyHash + valueHash);
+  return Crypto.sha256(keyHash + valueHash);
 };
 
 export const getDiffHash = (commitData: CommitData): string => {
   // need to update
-  return Crypto.SHA1(JSON.stringify(commitData));
+  const diffString = commitData.diff;
+  if (!commitData.userId) {
+    return null;
+  }
+  if (!commitData.timestamp) {
+    return null;
+  }
+  if (!commitData.message) {
+    return null;
+  }
+  // WE AVOID JSON.stringify due to consistency problems (you cannot rely upon key order).
+  if (!commitData.parent) {
+    const str = `userId:${commitData.userId}/timestamp:${commitData.timestamp}/message:${commitData.timestamp}/diff:${diffString}`;
+    return Crypto.sha256(str);
+  }
+  if (!commitData.historicalParent) {
+    return null;
+  }
+  const str = `userId:${commitData.userId}/timestamp:${commitData.timestamp}/message:${commitData.timestamp}/parent:${commitData.parent}/historicalParent:${commitData.historicalParent}/diff:${diffString}`;
+  return Crypto.sha256(str);
 };
 
 export const getLCS = (
@@ -287,7 +306,7 @@ const getMergeSubSequence = (from: Array<string>, into: Array<string>) => {
   }
   const lcs = getLCS(from, into);
   if (lcs.length == 0) {
-    // conflict case
+    // conflict case, just concat
     return [...from, ...into];
   }
 
@@ -359,9 +378,9 @@ const sequencesAreEqual = (a: Array<string>, b: Array<string>) => {
 };
 
 /**
- *  This is a kind of unintuitive function since it assumes
- * the inputs that were derived in a certain way
- * consider following
+ * This is a kind of unintuitive function since it assumes
+ * the inputs were derived in a certain way
+ * Consider the following
  *
  * EXAMPLE 1 (NO CONFLICT)
  *
@@ -385,11 +404,11 @@ const sequencesAreEqual = (a: Array<string>, b: Array<string>) => {
  * C IS reconciled to the following: {[], [], []}
  *
  * SINCE [E, N] are present in commit B but not commit C, we know C had to have deleted E and N,
- * therefore we can safely splice out [E, N] from [T, E, N, P] in the merge by taking the lcs
+ * therefore we can safely splice out [E, N] from [T, E, N, P] in the merge by taking the LCS
  * of the origin against the respective sequence and finding the offsets. we then ignore the offsets
  * which effectively removes the values deleted by the merge-INTO (C) commit.
  *
- * To further clarify consider the counter
+ * To further clarify consider a case with merge conflicts
  * ______________________________________________________________________________________________________
  *
  *  EXAMPLE 2 (CONFLICT)
@@ -412,7 +431,6 @@ const sequencesAreEqual = (a: Array<string>, b: Array<string>) => {
  *
  * Because B and C both have uncommon values at IDX (1), this results in merge coflict where both values are concatenated
  * to [T, P, X]
- *
  */
 
 const getReconciledSequence = (
@@ -485,6 +503,7 @@ const getReconciledSequence = (
  * Which corresponds with                 [A, C, Z, Z]
  *
  * DP BFS here is way faster and more intuitive than recursive approach
+ * O(M*N*min(M, N))
  */
 const getLCSBoundaryOffsets = (
   sequence: Array<string>,

@@ -146,7 +146,11 @@ export const removeUser = () => {
   return fs.promises.rm(userPath);
 }
 
-export const getUser = () => {
+export interface User {
+  id: string;
+}
+
+export const getUser = (): User|null => {
   try {
     const userJSON = fs.readFileSync(userPath, { encoding: 'utf-8' });
     return JSON.parse(userJSON);
@@ -155,7 +159,7 @@ export const getUser = () => {
   }
 }
 
-export const getUserAsync = async () => {
+export const getUserAsync = async (): Promise<User|null> => {
   try {
     const userJSON = await fs.promises.readFile(userPath, { encoding: 'utf-8' });
     return JSON.parse(userJSON);

@@ -6,6 +6,7 @@ import {
   existsAsync,
   getRemoteHostAsync,
   getUserSession,
+  User,
   vReposPath,
   vTMPPath,
 } from "./filestructure";
@@ -71,6 +72,8 @@ const EMPTY_COMMIT_DIFF: StateDiff = {
   store: {},
   binaries: { add: {}, remove: {} },
 };
+
+const EMPTY_COMMIT_DIFF_STRING = JSON.stringify(EMPTY_COMMIT_DIFF);
 
 export const getLocalRepos = async (): Promise<string[]> => {
   const repoDir = await fs.promises.readdir(vReposPath);
@@ -200,6 +203,36 @@ export const getCommitDirPath = (repoId: string, commitSha: string): string => {
   return path.join(vReposPath, repoId, "commits", commitSha.substring(0, 2));
 };
 
+export const diffIsEmpty = (stateDiff: StateDiff) => {
+  return JSON.stringify(stateDiff) == EMPTY_COMMIT_DIFF_STRING;
+}
+
+export const canCommit = async (
+  repoId: string,
+  user: User,
+  message: string,
+): Promise<boolean> => {
+  if (!user || !user.id) {
+    return false;
+  }
+  if ((message ?? "").length == 0) {
+    return false;
+  }
+  const currentSha = await getCurrentCommitSha(repoId);
+  const commit = await readCommit(repoId, currentSha);
+  if (!commit) {
+    return false;
+  }
+  const currentState = await getCurrentState(repoId);
+  if (!currentState) {
+    return false;
+  }
+  if (diffIsEmpty(currentState.diff)) {
+    return false;
+  }
+  return true;
+}
+
 export const readCommit = async (
   repoId: string,
   commitSha: string
@@ -247,7 +280,7 @@ export const getHistory = async (
   if (commit == null) {
     return null;
   }
-  const history = await getHistory(repoId, commit.parent);
+  const history = await getHistory(repoId, commit.historicalParent);
   return [{
     sha,
     message: commit.message
@@ -341,7 +374,7 @@ export const getCommitState = async (
   }, {} as CommitState);
 };
 
-export const getCurrentBranch = async (repoId: string) => {
+export const getCurrentBranch = async (repoId: string): Promise<Branch|null> => {
   const current = await getCurrentState(repoId);
   if (current.branch) {
     const branch = await getLocalBranch(repoId, current.branch);
@@ -469,7 +502,6 @@ export const updateCurrentCommitSHA = async (repoId: string, sha: string): Promi
     return null;
   }
 };
-
 
 /**
  * 

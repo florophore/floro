@@ -33,7 +33,7 @@ describe('buildFloroFilestructure', () => {
         expect(fs.existsSync(vUserPath)).toBe(false);
         expect(fs.existsSync(vReposPath)).toBe(false);
 
-        await buildFloroFilestructure();
+        buildFloroFilestructure();
 
         expect(fs.existsSync(homePath)).toBe(true);
         expect(fs.existsSync(vConfigPath)).toBe(true);
