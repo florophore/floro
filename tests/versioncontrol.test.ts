@@ -1,4 +1,4 @@
-import { applyDiff, getDiff, getTextDiff, getMergeSequence, canAutoMerge } from '../src/versioncontrol';
+import { applyDiff, getDiff, getTextDiff, getMergeSequence, canAutoMerge  } from '../src/versioncontrol';
 
 describe("versioncontrol", () => { 
     describe('getDiff', () => {
@@ -73,18 +73,64 @@ describe("versioncontrol", () => {
 
     describe('getMergeSequence', () => {
 
-        test('creates merge without conflict', () => {
-            const A = "FACXBRR".split("");
-            const B = "FADACB".split("");
-            expect(canAutoMerge(A, B)).toBe(true);
-            expect(getMergeSequence(A, B).join("")).toEqual("FADACXBRR");
+        test('creates merge with conflicts without a common origin when no subsequence overlap', () => {
+            const A = "".split("");
+            const B = "DA".split("");
+            const C = "BC".split("");
+            const merge = getMergeSequence(A, B, C).join("");
+            expect(merge).toEqual("DABC");
+            const canMerge = canAutoMerge(A, B, C)
+            expect(canMerge).toBe(false);
         });
 
-        test('creates merge with conflict', () => {
-            const A = "FACXBRR".split("");
-            const B = "XFNCB".split("");
-            expect(canAutoMerge(A, B)).toBe(false);
-            expect(getMergeSequence(A, B).join("")).toEqual("XFANCXBRR");
+        test('creates merge without conflicts without a common origin when subsequences overlap', () => {
+            const A = "".split("");
+            const B = "DA".split("");
+            const C = "ABC".split("");
+            const merge = getMergeSequence(A, B, C).join("");
+            expect(merge).toEqual("DABC");
+            const canMerge = canAutoMerge(A, B, C)
+            expect(canMerge).toBe(true);
+        });
+
+        test('creates merge without conflict when all subsquences are consistent', () => {
+            const A = "ABCDEF".split("");
+            const B = "RXALDEFSKZ".split("");
+            const C = "ABCDFSJK".split("");
+            const merge = getMergeSequence(A, B, C).join("");
+            expect(merge).toEqual("RXALDFSJKZ");
+            const canMerge = canAutoMerge(A, B, C)
+            expect(canMerge).toBe(true);
+        });
+
+        test('creates merge without conflict when a subsequence cannot be reconciled', () => {
+            const A = "ABCDEF".split("");
+            const B = "RXALDEFSKZ".split("");
+            const C = "ABCDFSJKL".split("");
+            const merge = getMergeSequence(A, B, C).join("");
+            expect(merge).toEqual("RXALDFSJKZL");
+            const canMerge = canAutoMerge(A, B, C)
+            expect(canMerge).toBe(false);
+        });
+
+        test('creates merge without conflict if subsequences with deletions can be reconciled', () => {
+            const A = "DENF".split("");
+            const B = "DTENPF".split("");
+            const C = "DF".split("");
+            const merge = getMergeSequence(A, B, C).join("");
+            expect(merge).toEqual("DTPF");
+            const canMerge = canAutoMerge(A, B, C)
+            expect(canMerge).toBe(true);
+        });
+
+        test('creates merge with conflict if subsequences with deletions cannot be reconciled', () => {
+            const A = "DENF".split("");
+            const B = "DTENPF".split("");
+            const C = "DXF".split("");
+            const merge = getMergeSequence(A, B, C).join("");
+            expect(merge).toEqual("DTPXF");
+            const canMerge = canAutoMerge(A, B, C)
+            expect(canMerge).toBe(false);
         });
     });
 });

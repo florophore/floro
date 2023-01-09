@@ -1,7 +1,6 @@
-import console from "console";
 import { Crypto } from "cryptojs";
 import { StateDiff } from "./repo";
-import mdiff from 'mdiff';
+import mdiff from "mdiff";
 
 export interface DiffElement {
   key: string;
@@ -31,12 +30,14 @@ export interface CommitData {
   diff: StateDiff;
   userId: string;
   timestamp: string;
-  parent: string|null;
-  historicalParent: string|null;
+  parent: string | null;
+  historicalParent: string | null;
   message: string;
 }
 
-const getObjectStringValue = (obj: {[key: string]: number|string|boolean}): string => {
+const getObjectStringValue = (obj: {
+  [key: string]: number | string | boolean;
+}): string => {
   if (typeof obj == "string") return obj;
   return Object.keys(obj).reduce((s, key) => {
     return `${s}/${key}:${obj[key]}`;
@@ -46,7 +47,7 @@ const getObjectStringValue = (obj: {[key: string]: number|string|boolean}): stri
 export const getKVHashes = (obj: {
   key: string;
   value: { [key: string]: number | string | boolean };
-}): { keyHash: string, valueHash: string } => {
+}): { keyHash: string; valueHash: string } => {
   const keyHash = Crypto.SHA1(obj.key);
   const valueHash = Crypto.SHA1(getObjectStringValue(obj.value));
   return {
@@ -64,46 +65,16 @@ export const getRowHash = (obj: {
 };
 
 export const getDiffHash = (commitData: CommitData): string => {
+  // need to update
   return Crypto.SHA1(JSON.stringify(commitData));
 };
 
-export const getMyersSequence = (
+export const getLCS = (
   left: Array<string>,
   right: Array<string>
 ): Array<string> => {
   const diff = mdiff(left, right);
   return diff.getLcs();
-};
-
-export const getStringDiff = (
-  before: Array<string>,
-  after: Array<string>
-): Diff => {
-  const past = before;
-  const present = after;
-  const longestSequence = getMyersSequence(past, present);
-  let removeIndex = 0;
-  let diff = {
-    add: {},
-    remove: {},
-  };
-  for (let i = 0; i < past.length; ++i) {
-    if (longestSequence[removeIndex] == past[i]) {
-      removeIndex++;
-    } else {
-      diff.remove[i] = before[i];
-    }
-  }
-
-  let addIndex = 0;
-  for (let i = 0; i < present.length; ++i) {
-    if (longestSequence[addIndex] == present[i]) {
-      addIndex++;
-    } else {
-      diff.add[i] = after[i];
-    }
-  }
-  return diff;
 };
 
 export const getDiff = (
@@ -112,7 +83,7 @@ export const getDiff = (
 ): Diff => {
   const past = before.map(getRowHash);
   const present = after.map(getRowHash);
-  const longestSequence = getMyersSequence(past, present);
+  const longestSequence = getLCS(past, present);
   let removeIndex = 0;
   let diff = {
     add: {},
@@ -139,24 +110,25 @@ export const getDiff = (
 
 export const splitTextForDiff = (str: string): Array<string> => {
   let chars = str;
-  const sentences = str.split(/[\.!\?。]/g).filter(v => v != ""); 
+  const sentences = str.split(/[\.!\?。]/g).filter((v) => v != "");
   for (let i = 0; i < sentences.length; ++i) {
-    sentences[i] = sentences[i] + (chars.substring?.(sentences[i].length)?.[0] ?? "");
+    sentences[i] =
+      sentences[i] + (chars.substring?.(sentences[i].length)?.[0] ?? "");
     chars = chars.substring(sentences[i].length);
   }
   return sentences;
-}
+};
 
 export const getTextDiff = (before: string, after: string): TextDiff => {
   const past = splitTextForDiff(before);
   const present = splitTextForDiff(after);
-  const longestSequence = getMyersSequence(past, present);
+  const longestSequence = getLCS(past, present);
 
   let diff = {
     add: {},
     remove: {},
   };
-  
+
   for (let i = 0, removeIndex = 0; i < past.length; ++i) {
     if (longestSequence[removeIndex] == past[i]) {
       removeIndex++;
@@ -173,8 +145,7 @@ export const getTextDiff = (before: string, after: string): TextDiff => {
     }
   }
   return diff;
-} 
-
+};
 
 export const applyDiff = <T extends DiffElement | string>(
   diffset: Diff | TextDiff,
@@ -191,7 +162,10 @@ export const applyDiff = <T extends DiffElement | string>(
   let offset = 0;
   for (let removeIndex of removeIndices) {
     const index = removeIndex - offset;
-    assets = [...assets.slice(0, index), ...assets.slice(index + 1, assets.length)];
+    assets = [
+      ...assets.slice(0, index),
+      ...assets.slice(index + 1, assets.length),
+    ];
     offset++;
   }
   for (let addIndex of addIndices) {
@@ -204,32 +178,124 @@ export const applyDiff = <T extends DiffElement | string>(
   }
   return assets;
 };
- 
+
 export const getMergeSequence = (
+  origin: Array<string>,
   from: Array<string>,
   into: Array<string>
 ): Array<string> => {
   if (from.length == 0 && into.length == 0) {
     return [];
   }
-  const lcs = getMyersSequence(from, into);
+  const lcs = getGreatestCommonLCS(origin, from, into);
   if (lcs.length == 0) {
-    return into;
+    return getMergeSubSequence(from, into);
   }
+  const originOffsets = getLCSBoundaryOffsets(origin, lcs);
+  const originSequences = getLCSOffsetMergeSeqments(origin, originOffsets);
   const fromOffsets = getLCSBoundaryOffsets(from, lcs);
   const fromSequences = getLCSOffsetMergeSeqments(from, fromOffsets);
+  const fromReconciledSequences = getReconciledSequence(
+    originSequences,
+    fromSequences
+  );
   const intoOffsets = getLCSBoundaryOffsets(into, lcs);
   const intoSequences = getLCSOffsetMergeSeqments(into, intoOffsets);
-  let keepSequences = [];
-  let keepIndex = 0;
-  while (keepIndex <= lcs.length) {
-    keepSequences.push(fromSequences[keepIndex]);
-    if (keepIndex != lcs.length) {
-      keepSequences.push([lcs[keepIndex]]);
+  const intoReconciledSequences = getReconciledSequence(
+    originSequences,
+    intoSequences
+  );
+
+  let mergeSequences = [];
+  let mergeIndex = 0;
+  while (mergeIndex <= lcs.length) {
+    if (
+      sequencesAreEqual(
+        fromReconciledSequences[mergeIndex],
+        intoReconciledSequences[mergeIndex]
+      )
+    ) {
+      mergeSequences.push(fromReconciledSequences[mergeIndex]);
+    } else {
+        mergeSequences.push(
+          getMergeSubSequence(
+            fromReconciledSequences[mergeIndex],
+            intoReconciledSequences[mergeIndex]
+          )
+        );
     }
-    keepIndex++;
+    if (mergeIndex != lcs.length) {
+      mergeSequences.push([lcs[mergeIndex]]);
+    }
+    mergeIndex++;
   }
-  const keep = keepSequences.flatMap((v) => v);
+  const merge = mergeSequences.flatMap((v) => v);
+  return merge;
+};
+
+export const canAutoMerge = (
+  origin: Array<string>,
+  from: Array<string>,
+  into: Array<string>
+): boolean => {
+  if (from.length == 0 && into.length == 0) {
+    return true;
+  }
+  const lcs = getGreatestCommonLCS(origin, from, into);
+  if (lcs.length == 0) {
+    return canAutoMergeSubSequence(from, into);
+  }
+
+  const originOffsets = getLCSBoundaryOffsets(origin, lcs);
+  const originSequences = getLCSOffsetMergeSeqments(origin, originOffsets);
+  const fromOffsets = getLCSBoundaryOffsets(from, lcs);
+  const fromSequences = getLCSOffsetMergeSeqments(from, fromOffsets);
+  const fromReconciledSequences = getReconciledSequence(
+    originSequences,
+    fromSequences
+  );
+  const intoOffsets = getLCSBoundaryOffsets(into, lcs);
+  const intoSequences = getLCSOffsetMergeSeqments(into, intoOffsets);
+  const intoReconciledSequences = getReconciledSequence(
+    originSequences,
+    intoSequences
+  );
+  let index = 0;
+  if (lcs.length == 0) return false;
+  while (index <= lcs.length) {
+    if (
+      fromReconciledSequences[index].length > 0 &&
+      intoReconciledSequences[index].length > 0
+    ) {
+      if (
+        !canAutoMergeSubSequence(
+          fromReconciledSequences[index],
+          intoReconciledSequences[index]
+        )
+      ) {
+        return false;
+      }
+    }
+    index++;
+  }
+  return true;
+};
+
+const getMergeSubSequence = (from: Array<string>, into: Array<string>) => {
+  if (from.length == 0 && into.length == 0) {
+    return [];
+  }
+  const lcs = getLCS(from, into);
+  if (lcs.length == 0) {
+    // conflict case
+    return [...from, ...into];
+  }
+
+  const fromOffsets = getLCSBoundaryOffsets(from, lcs);
+  const fromSequences = getLCSOffsetMergeSeqments(from, fromOffsets);
+
+  const intoOffsets = getLCSBoundaryOffsets(into, lcs);
+  const intoSequences = getLCSOffsetMergeSeqments(into, intoOffsets);
 
   let mergeSequences = [];
   let mergeIndex = 0;
@@ -245,17 +311,18 @@ export const getMergeSequence = (
   return merge;
 };
 
-export const canAutoMerge = (
+const canAutoMergeSubSequence = (
   from: Array<string>,
   into: Array<string>
 ): boolean => {
   if (from.length == 0 && into.length == 0) {
     return true;
   }
-  const lcs = getMyersSequence(from, into);
+  const lcs = getLCS(from, into);
   if (lcs.length == 0) {
-    return false
+    return false;
   }
+
   const fromOffsets = getLCSBoundaryOffsets(from, lcs);
   const fromSequences = getLCSOffsetMergeSeqments(from, fromOffsets);
   const intoOffsets = getLCSBoundaryOffsets(into, lcs);
@@ -269,28 +336,177 @@ export const canAutoMerge = (
     index++;
   }
   return true;
-}
+};
 
+const getGreatestCommonLCS = (
+  origin: Array<string>,
+  from: Array<string>,
+  into: Array<string>
+) => {
+  const fromLCS = getLCS(origin, from);
+  const intoLCS = getLCS(origin, into);
+  return getLCS(fromLCS, intoLCS);
+};
+
+const sequencesAreEqual = (a: Array<string>, b: Array<string>) => {
+  if (a.length != b.length) {
+    return false;
+  }
+  for (let i = 0; i < a.length; ++i) {
+    if (a[i] != b[i]) return false;
+  }
+  return true;
+};
+
+/**
+ *  This is a kind of unintuitive function since it assumes
+ * the inputs that were derived in a certain way
+ * consider following
+ *
+ * EXAMPLE 1 (NO CONFLICT)
+ *
+ * MAIN BRANCH:    (commit: A, value: [D, E, N, F]) ---> (commit: B, value: [D, T, E, N, P, F])
+ *                                                 \
+ * FEATURE BRANCH:                                   ---> (commit: X, value: [DF])
+ *
+ * TO MERGE B into X, we have to find the greatest longest common subsequence (GLCS) amonst all 3 commits
+ * which is
+ * GLCS: [D,F]
+ *
+ * SINCE the GLCS is [D, F], we know the merge segments for each commit are
+ * A: {[], [E, N], []}
+ * B: {[], [T, E, N, P], []}
+ * C: {[], [], []}
+ *
+ * Any sequences that are the same between the origin and sequence, must have been removed by the counter
+ * commit of the merge. Therefore we erase the sequence if the sequences are equal.
+ *
+ * B IS reconciled to the following: {[], [T, P], []}
+ * C IS reconciled to the following: {[], [], []}
+ *
+ * SINCE [E, N] are present in commit B but not commit C, we know C had to have deleted E and N,
+ * therefore we can safely splice out [E, N] from [T, E, N, P] in the merge by taking the lcs
+ * of the origin against the respective sequence and finding the offsets. we then ignore the offsets
+ * which effectively removes the values deleted by the merge-INTO (C) commit.
+ *
+ * To further clarify consider the counter
+ * ______________________________________________________________________________________________________
+ *
+ *  EXAMPLE 2 (CONFLICT)
+ *
+ * MAIN BRANCH:    (commit: A, value: [D, E, N, F]) ---> (commit: B, value: [D, T, E, N, P, F])
+ *                                                 \
+ * FEATURE BRANCH:                                   ---> (commit: X, value: [DXF])
+ *
+ * TO MERGE B into X, we have to find the greatest longest common subsequence (GLCS) amonst all 3 commits
+ * which is
+ * GLCS: [D,F]
+ *
+ * SINCE the GLCS is [D, F], we know the merge segments for each commit are
+ * A: {[], [E, N], []}
+ * B: {[], [T, E, N, P], []}
+ * C: {[], [X], []}
+ *
+ * B IS reconciled to the following: {[], [T, P], []}
+ * C IS reconciled to the following: {[], [X], []}
+ *
+ * Because B and C both have uncommon values at IDX (1), this results in merge coflict where both values are concatenated
+ * to [T, P, X]
+ *
+ */
+
+const getReconciledSequence = (
+  originSequences: Array<Array<string>>,
+  sequences: Array<Array<string>>
+): Array<Array<string>> => {
+  let out = [];
+  for (let i = 0; i < sequences.length; ++i) {
+    if (sequencesAreEqual(originSequences[i], sequences[i])) {
+      out.push([]);
+    } else {
+      const subLCS = getLCS(originSequences[i], sequences[i]);
+      const offsets = getLCSBoundaryOffsets(sequences[i], subLCS);
+      let offsetIndex = 0;
+      const next = [];
+      for (let j = 0; j < sequences[i].length; ++j) {
+        if (j != offsets[offsetIndex]) {
+          next.push(sequences[i][j]);
+        } else {
+          offsetIndex++;
+        }
+      }
+      out.push(next);
+    }
+  }
+  return out;
+};
+
+/***
+ * Considering following:
+ * idx        0 1 2 3 4 5 6 7
+ * sequence = A F C Z Z C Z Z
+ * lcs =      A C Z Z
+ *
+ * we get the matching graph
+ * where 1 denotes a match and 0 is a mismatch
+ *
+ *       0 1 2 3 4 5 6 7
+ *       | | | | | | | |
+ *       A F C Z Z C Z Z
+ *  0-A  1 0 0 0 0 0 0 0
+ *  1-C  0 0 1 0 0 1 0 0
+ *  2-Z  0 0 0 1 1 0 1 1
+ *  3-Z  0 0 0 1 1 0 1 1
+ *
+ * by tracing the longest diagonal sequence of 1's
+ * from the lower right to upper left, we can get
+ * the max consecutive subsequences length for each sequence character
+ *
+ *       0 1 2 3 4 5 6 7
+ *       | | | | | | | |
+ *       A F C Z Z C Z Z
+ *  0-A  1 0 0 0 0 0 0 0
+ *  1-C  0 0 3 0 0 3 0 0
+ *  2-Z  0 0 0 2 1 0 2 1
+ *  3-Z  0 0 0 1 1 0 1 1
+ *
+ * finally we get the LCS boundary index by looking first for the
+ * maximum value on each row, then selecting the rightmost value
+ * for example. Row 0: the max value is 1 and it's rightmost location is index 0
+ *
+ *  IDX  0 1 2 3 4 5 6 7
+ *  ROW  | | | | | | | |
+ *  0-A  1 0 0 0 0 0 0 0 -> MAX: 1, RIGHTMOST IDX of (1): 0
+ *  1-C  0 0 3 0 0 3 0 0 -> MAX: 3, RIGHTMOST IDX of (3): 5
+ *  2-Z  0 0 0 2 1 0 2 1 -> MAX: 2, RIGHTMOST IDX of (2): 6
+ *  3-Z  0 0 0 1 1 0 1 1 -> MAX: 1, RIGHTMOST IDX of (1): 7
+ *
+ * The LCS Boundary Offsets are therefore [0, 5, 6, 7]
+ * Which corresponds with                 [A, C, Z, Z]
+ *
+ * DP BFS here is way faster and more intuitive than recursive approach
+ */
 const getLCSBoundaryOffsets = (
   sequence: Array<string>,
   lcs: Array<string>
 ): Array<number> => {
-  let graph = []
+  let graph = [];
   for (let i = 0; i < lcs.length; ++i) {
     graph.push([]);
     for (let j = 0; j < sequence.length; ++j) {
-      graph[i].push(0);
-    }
-  }
-  for (let i = 0; i < lcs.length; ++i) {
-    for (let j = 0; j < sequence.length; ++j) {
       if (lcs[i] == sequence[j]) {
-        graph[i][j]++;
-        let back = 0
-        while (i - back > 0 && j - back > 0 && graph[i - back - 1][j - back - 1] > 0) {
-            graph[i - back - 1][j - back - 1]++;
-            back++;
+        graph[i].push(1);
+        let backtrace = 0;
+        while (
+          i - backtrace > 0 &&
+          j - backtrace > 0 &&
+          graph[i - backtrace - 1][j - backtrace - 1] > 0
+        ) {
+          graph[i - backtrace - 1][j - backtrace - 1]++;
+          backtrace++;
         }
+      } else {
+        graph[i].push(0);
       }
     }
   }
@@ -306,7 +522,27 @@ const getLCSBoundaryOffsets = (
   }
   return out;
 };
-
+/***
+ * Considering following:
+ * idx        0 1 2 3 4 5 6 7
+ * sequence = A F C Z Z C Z Z
+ * lcs =      A C Z Z
+ * offsets = [0, 5, 6, 7] (see above)
+ *  getLCSOffsetMergeSeqments produces following merge segments from offsets
+ *
+ * sequence:   A     F   C   Z   Z     C      Z      Z
+ *             |     |   |   |   |     |      |      |
+ * indices:    0     1   2   3   4     5      6      7
+ *             |     |   |   |   |     |      |      |
+ * offsets:    0     |   |   |   |     5      6      7
+ *             |     |   |   |   |     |      |      |
+ *             |     F   C   Z   Z     |      |      |
+ *             A     *   *   *   *     C      Z      Z
+ * segs:  { [] -   [ F,  C , Z , Z ]   -  []  -  []  -  [] }
+ *
+ * output is following,
+ * [[], [ F,  C , Z , Z ], [], [], []]
+ */
 const getLCSOffsetMergeSeqments = (
   sequence: Array<string>,
   offsets: Array<number>
@@ -316,9 +552,9 @@ const getLCSOffsetMergeSeqments = (
   out.push(sequence.slice(0, offsets[0]));
   for (let i = 0; i < offsets.length; ++i) {
     if (i == offsets.length - 1) {
-      out.push(sequence.slice(offsets[i] + 1))
+      out.push(sequence.slice(offsets[i] + 1));
     } else {
-      out.push(sequence.slice(offsets[i] + 1, offsets[i + 1]))
+      out.push(sequence.slice(offsets[i] + 1, offsets[i + 1]));
     }
   }
   return out;
