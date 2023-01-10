@@ -25,6 +25,7 @@ export interface CommitData {
     userId: string;
     timestamp: string;
     parent: string | null;
+    historicalParent: string | null;
     message: string;
 }
 export declare const getKVHashes: (obj: {
@@ -43,7 +44,10 @@ export declare const getRowHash: (obj: {
     };
 }) => string;
 export declare const getDiffHash: (commitData: CommitData) => string;
+export declare const getLCS: (left: Array<string>, right: Array<string>) => Array<string>;
 export declare const getDiff: (before: Array<DiffElement>, after: Array<DiffElement>) => Diff;
 export declare const splitTextForDiff: (str: string) => Array<string>;
 export declare const getTextDiff: (before: string, after: string) => TextDiff;
 export declare const applyDiff: <T extends string | DiffElement>(diffset: Diff | TextDiff, state: T[]) => T[];
+export declare const getMergeSequence: (origin: Array<string>, from: Array<string>, into: Array<string>) => Array<string>;
+export declare const canAutoMerge: (origin: Array<string>, from: Array<string>, into: Array<string>) => boolean;

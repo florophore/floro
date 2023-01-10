@@ -48,8 +48,8 @@ export const getKVHashes = (obj: {
   key: string;
   value: { [key: string]: number | string | boolean };
 }): { keyHash: string; valueHash: string } => {
-  const keyHash = Crypto.sha256(obj.key);
-  const valueHash = Crypto.sha256(getObjectStringValue(obj.value));
+  const keyHash = Crypto.SHA256(obj.key);
+  const valueHash = Crypto.SHA256(getObjectStringValue(obj.value));
   return {
     keyHash,
     valueHash,
@@ -61,7 +61,7 @@ export const getRowHash = (obj: {
   value: { [key: string]: number | string | boolean };
 }): string => {
   const { keyHash, valueHash } = getKVHashes(obj);
-  return Crypto.sha256(keyHash + valueHash);
+  return Crypto.SHA256(keyHash + valueHash);
 };
 
 export const getDiffHash = (commitData: CommitData): string => {
@@ -79,13 +79,13 @@ export const getDiffHash = (commitData: CommitData): string => {
   // WE AVOID JSON.stringify due to consistency problems (you cannot rely upon key order).
   if (!commitData.parent) {
     const str = `userId:${commitData.userId}/timestamp:${commitData.timestamp}/message:${commitData.timestamp}/diff:${diffString}`;
-    return Crypto.sha256(str);
+    return Crypto.SHA256(str);
   }
   if (!commitData.historicalParent) {
     return null;
   }
   const str = `userId:${commitData.userId}/timestamp:${commitData.timestamp}/message:${commitData.timestamp}/parent:${commitData.parent}/historicalParent:${commitData.historicalParent}/diff:${diffString}`;
-  return Crypto.sha256(str);
+  return Crypto.SHA256(str);
 };
 
 export const getLCS = (

@@ -37,6 +37,7 @@ exports.vConfigPluginsPath = path_1.default.join(exports.vConfigPath, "plugins.j
 exports.userSessionPath = path_1.default.join(exports.vUserPath, "session.json");
 // ~/.floro/user/user.json
 exports.userPath = path_1.default.join(exports.vUserPath, "user.json");
+const NODE_ENV = process.env.NODE_ENV;
 const writeDefaultFiles = (isReset = false) => {
     // ~/.floro/config/cors.txt
     if (isReset || !fs_1.default.existsSync(exports.vConfigCORSPath)) {
@@ -65,31 +66,45 @@ const writeDefaultFiles = (isReset = false) => {
 const buildFloroFilestructure = () => {
     if (!fs_1.default.existsSync(exports.homePath)) {
         fs_1.default.mkdirSync(exports.homePath);
-        fs_1.default.chmodSync(exports.homePath, 0o755);
+        if (NODE_ENV != "test") {
+            fs_1.default.chmodSync(exports.homePath, 0o755);
+        }
     }
     if (!fs_1.default.existsSync(exports.vConfigPath)) {
         fs_1.default.mkdirSync(exports.vConfigPath);
-        fs_1.default.chmodSync(exports.vConfigPath, 0o755);
+        if (NODE_ENV != "test") {
+            fs_1.default.chmodSync(exports.vConfigPath, 0o755);
+        }
     }
     if (!fs_1.default.existsSync(exports.vCachePath)) {
         fs_1.default.mkdirSync(exports.vCachePath);
-        fs_1.default.chmodSync(exports.vCachePath, 0o755);
+        if (NODE_ENV != "test") {
+            fs_1.default.chmodSync(exports.vCachePath, 0o755);
+        }
     }
     if (!fs_1.default.existsSync(exports.vUserPath)) {
         fs_1.default.mkdirSync(exports.vUserPath);
-        fs_1.default.chmodSync(exports.vUserPath, 0o755);
+        if (NODE_ENV != "test") {
+            fs_1.default.chmodSync(exports.vUserPath, 0o755);
+        }
     }
     if (!fs_1.default.existsSync(exports.vReposPath)) {
         fs_1.default.mkdirSync(exports.vReposPath);
-        fs_1.default.chmodSync(exports.vReposPath, 0o755);
+        if (NODE_ENV != "test") {
+            fs_1.default.chmodSync(exports.vReposPath, 0o755);
+        }
     }
     if (!fs_1.default.existsSync(exports.vPluginsPath)) {
         fs_1.default.mkdirSync(exports.vPluginsPath);
-        fs_1.default.chmodSync(exports.vPluginsPath, 0o755);
+        if (NODE_ENV != "test") {
+            fs_1.default.chmodSync(exports.vPluginsPath, 0o755);
+        }
     }
     if (!fs_1.default.existsSync(exports.vTMPPath)) {
         fs_1.default.mkdirSync(exports.vTMPPath);
-        fs_1.default.chmodSync(exports.vTMPPath, 0o755);
+        if (NODE_ENV != "test") {
+            fs_1.default.chmodSync(exports.vTMPPath, 0o755);
+        }
     }
     writeDefaultFiles();
 };

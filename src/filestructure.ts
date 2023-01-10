@@ -34,6 +34,8 @@ export const userSessionPath = path.join(vUserPath, "session.json");
 // ~/.floro/user/user.json
 export const userPath = path.join(vUserPath, "user.json");
 
+const NODE_ENV = process.env.NODE_ENV;
+
 const writeDefaultFiles = (isReset = false) => {
   // ~/.floro/config/cors.txt
   if (isReset || !fs.existsSync(vConfigCORSPath)) {
@@ -65,37 +67,51 @@ const writeDefaultFiles = (isReset = false) => {
 export const buildFloroFilestructure = (): void => {
   if (!fs.existsSync(homePath)) {
     fs.mkdirSync(homePath);
-    fs.chmodSync(homePath, 0o755);
+    if (NODE_ENV != "test") {
+      fs.chmodSync(homePath, 0o755);
+    }
   }
 
   if (!fs.existsSync(vConfigPath)) {
     fs.mkdirSync(vConfigPath);
-    fs.chmodSync(vConfigPath, 0o755);
+    if (NODE_ENV != "test") {
+      fs.chmodSync(vConfigPath, 0o755);
+    }
   }
 
   if (!fs.existsSync(vCachePath)) {
     fs.mkdirSync(vCachePath);
-    fs.chmodSync(vCachePath, 0o755);
+    if (NODE_ENV != "test") {
+      fs.chmodSync(vCachePath, 0o755);
+    }
   }
 
   if (!fs.existsSync(vUserPath)) {
     fs.mkdirSync(vUserPath);
-    fs.chmodSync(vUserPath, 0o755);
+    if (NODE_ENV != "test") {
+      fs.chmodSync(vUserPath, 0o755);
+    }
   }
 
   if (!fs.existsSync(vReposPath)) {
     fs.mkdirSync(vReposPath);
-    fs.chmodSync(vReposPath, 0o755);
+    if (NODE_ENV != "test") {
+      fs.chmodSync(vReposPath, 0o755);
+    }
   }
 
   if (!fs.existsSync(vPluginsPath)) {
     fs.mkdirSync(vPluginsPath);
-    fs.chmodSync(vPluginsPath, 0o755);
+    if (NODE_ENV != "test") {
+      fs.chmodSync(vPluginsPath, 0o755);
+    }
   }
 
   if (!fs.existsSync(vTMPPath)) {
     fs.mkdirSync(vTMPPath);
-    fs.chmodSync(vTMPPath, 0o755);
+    if (NODE_ENV != "test") {
+      fs.chmodSync(vTMPPath, 0o755);
+    }
   }
 
   writeDefaultFiles();
@@ -148,6 +164,7 @@ export const removeUser = () => {
 
 export interface User {
   id: string;
+  username: string;
 }
 
 export const getUser = (): User|null => {

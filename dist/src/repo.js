@@ -26,7 +26,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.buildStateStore = exports.updateCurrentBranch = exports.updateCurrentWithNewBranch = exports.updateCurrentWithSHA = exports.updateCurrentCommitSHA = exports.saveDiffListToCurrent = exports.getRepoState = exports.getUnstagedCommitState = exports.getCurrentBranch = exports.getCommitState = exports.updateLocalBranch = exports.deleteLocalBranch = exports.getLocalBranch = exports.getHistory = exports.writeCommit = exports.readCommit = exports.getCommitDirPath = exports.getLocalBranches = exports.getCurrentCommitSha = exports.getCurrentState = exports.getRepoSettings = exports.cloneRepo = exports.getLocalRepos = void 0;
+exports.buildStateStore = exports.updateCurrentBranch = exports.updateCurrentWithNewBranch = exports.updateCurrentWithSHA = exports.updateCurrentCommitSHA = exports.saveDiffListToCurrent = exports.getRepoState = exports.getUnstagedCommitState = exports.getCurrentBranch = exports.getCommitState = exports.updateLocalBranch = exports.deleteLocalBranch = exports.getLocalBranch = exports.getHistory = exports.writeCommit = exports.readCommit = exports.canCommit = exports.diffIsEmpty = exports.getCommitDirPath = exports.getLocalBranches = exports.getCurrentCommitSha = exports.getCurrentState = exports.getRepoSettings = exports.cloneRepo = exports.getLocalRepos = void 0;
 const axios_1 = __importDefault(require("axios"));
 const fs_1 = __importStar(require("fs"));
 const path_1 = __importDefault(require("path"));
@@ -49,6 +49,7 @@ const EMPTY_COMMIT_DIFF = {
     store: {},
     binaries: { add: {}, remove: {} },
 };
+const EMPTY_COMMIT_DIFF_STRING = JSON.stringify(EMPTY_COMMIT_DIFF);
 const getLocalRepos = async () => {
     const repoDir = await fs_1.default.promises.readdir(filestructure_1.vReposPath);
     return repoDir?.filter((repoName) => {
@@ -96,7 +97,9 @@ const cloneRepo = async (repoId) => {
         const exists = await (0, filestructure_1.existsAsync)(repoPath);
         if (!exists) {
             await fs_1.default.promises.mkdir(repoPath);
-            await fs_1.default.promises.chmod(repoPath, 0o755);
+            if (process.env.NODE_ENV != "test") {
+                await fs_1.default.promises.chmod(repoPath, 0o755);
+            }
             await tar_1.default.x({
                 file: downloadPath,
                 cwd: repoPath,
@@ -172,10 +175,36 @@ const getCommitDirPath = (repoId, commitSha) => {
     return path_1.default.join(filestructure_1.vReposPath, repoId, "commits", commitSha.substring(0, 2));
 };
 exports.getCommitDirPath = getCommitDirPath;
+const diffIsEmpty = (stateDiff) => {
+    return JSON.stringify(stateDiff) == EMPTY_COMMIT_DIFF_STRING;
+};
+exports.diffIsEmpty = diffIsEmpty;
+const canCommit = async (repoId, user, message) => {
+    if (!user || !user.id) {
+        return false;
+    }
+    if ((message ?? "").length == 0) {
+        return false;
+    }
+    const currentSha = await (0, exports.getCurrentCommitSha)(repoId);
+    const commit = await (0, exports.readCommit)(repoId, currentSha);
+    if (!commit) {
+        return false;
+    }
+    const currentState = await (0, exports.getCurrentState)(repoId);
+    if (!currentState) {
+        return false;
+    }
+    if ((0, exports.diffIsEmpty)(currentState.diff)) {
+        return false;
+    }
+    return true;
+};
+exports.canCommit = canCommit;
 const readCommit = async (repoId, commitSha) => {
     try {
         const commitDir = (0, exports.getCommitDirPath)(repoId, commitSha);
-        const commitPath = path_1.default.join(commitDir, `${commitSha}.json`);
+        const commitPath = path_1.default.join(commitDir, `${commitSha.substring(2)}.json`);
         const commitDataString = await fs_1.default.promises.readFile(commitPath);
         return JSON.parse(commitDataString.toString());
     }
@@ -191,7 +220,7 @@ const writeCommit = async (repoId, commitSha, commitData) => {
         if (!commitDirExists) {
             await fs_1.default.promises.mkdir(commitDir, 0o755);
         }
-        const commitPath = path_1.default.join(commitDir, `${commitSha}.json`);
+        const commitPath = path_1.default.join(commitDir, `${commitSha.substring(2)}.json`);
         await fs_1.default.promises.writeFile(commitPath, Buffer.from(JSON.stringify(commitData, null, 2)));
         return commitData;
     }
@@ -208,7 +237,7 @@ const getHistory = async (repoId, sha) => {
     if (commit == null) {
         return null;
     }
-    const history = await (0, exports.getHistory)(repoId, commit.parent);
+    const history = await (0, exports.getHistory)(repoId, commit.historicalParent);
     return [{
             sha,
             message: commit.message

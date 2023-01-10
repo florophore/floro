@@ -7,10 +7,15 @@ import {
     vConfigPath,
     vCachePath,
     vUserPath,
-    vReposPath
+    vReposPath,
+    vPluginsPath,
+    vTMPPath,
+    vConfigCORSPath,
+    vConfigRemotePath
 } from '../src/filestructure';
 
 jest.mock('fs');
+jest.mock('fs/promises');
 
 describe('buildFloroFilestructure', () => {
 
@@ -32,6 +37,13 @@ describe('buildFloroFilestructure', () => {
         expect(fs.existsSync(vCachePath)).toBe(false);
         expect(fs.existsSync(vUserPath)).toBe(false);
         expect(fs.existsSync(vReposPath)).toBe(false);
+        expect(fs.existsSync(vPluginsPath)).toBe(false);
+        expect(fs.existsSync(vTMPPath)).toBe(false);
+
+        expect(fs.existsSync(vConfigCORSPath)).toBe(false);
+        expect(fs.existsSync(vConfigRemotePath)).toBe(false);
+        expect(fs.existsSync(vConfigRemotePath)).toBe(false);
+
 
         buildFloroFilestructure();
 
@@ -40,5 +52,11 @@ describe('buildFloroFilestructure', () => {
         expect(fs.existsSync(vCachePath)).toBe(true);
         expect(fs.existsSync(vUserPath)).toBe(true);
         expect(fs.existsSync(vReposPath)).toBe(true);
+        expect(fs.existsSync(vPluginsPath)).toBe(true);
+        expect(fs.existsSync(vTMPPath)).toBe(true);
+
+        expect(fs.existsSync(vConfigCORSPath)).toBe(true);
+        expect(fs.existsSync(vConfigRemotePath)).toBe(true);
+        expect(fs.existsSync(vConfigRemotePath)).toBe(true);
     });
 })

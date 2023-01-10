@@ -124,7 +124,9 @@ export const cloneRepo = async (repoId: string): Promise<boolean> => {
     const exists = await existsAsync(repoPath);
     if (!exists) {
       await fs.promises.mkdir(repoPath);
-      await fs.promises.chmod(repoPath, 0o755);
+      if (process.env.NODE_ENV != "test") {
+        await fs.promises.chmod(repoPath, 0o755);
+      }
       await tar.x({
         file: downloadPath,
         cwd: repoPath,

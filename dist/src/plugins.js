@@ -277,6 +277,7 @@ const buildObjectsAtPath = (rootSchema, path, properties, out = {}) => {
             continue;
         }
         if (Array.isArray(current)) {
+            // UPDATE TO UNCLUDE KEYLESS VALUES
             const element = current?.find?.((v) => v?.[part.key] == part.value) ?? {
                 [part.key]: part.value,
             };

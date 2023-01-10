@@ -20,8 +20,12 @@ export declare const getUserSession: () => any;
 export declare const getUserSessionAsync: () => Promise<any>;
 export declare const writeUser: (user: any) => Promise<void>;
 export declare const removeUser: () => Promise<void>;
-export declare const getUser: () => any;
-export declare const getUserAsync: () => Promise<any>;
+export interface User {
+    id: string;
+    username: string;
+}
+export declare const getUser: () => User | null;
+export declare const getUserAsync: () => Promise<User | null>;
 export declare const existsAsync: (file: any) => Promise<boolean>;
 export declare const getPluginsJson: () => {
     plugins: {

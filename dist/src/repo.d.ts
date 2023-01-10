@@ -1,3 +1,4 @@
+import { User } from "./filestructure";
 import { CommitData, Diff, TextDiff } from "./versioncontrol";
 export interface RawStore {
     [name: string]: Array<{
@@ -54,6 +55,8 @@ export declare const getCurrentState: (repoId: string) => Promise<State>;
 export declare const getCurrentCommitSha: (repoId: string) => Promise<string | null>;
 export declare const getLocalBranches: (repoId: string) => Promise<Array<Branch>>;
 export declare const getCommitDirPath: (repoId: string, commitSha: string) => string;
+export declare const diffIsEmpty: (stateDiff: StateDiff) => boolean;
+export declare const canCommit: (repoId: string, user: User, message: string) => Promise<boolean>;
 export declare const readCommit: (repoId: string, commitSha: string) => Promise<CommitData | null>;
 export declare const writeCommit: (repoId: string, commitSha: string, commitData: CommitData) => Promise<CommitData>;
 export declare const getHistory: (repoId: string, sha: string | null) => Promise<Array<CommitHistory> | null>;
@@ -61,7 +64,7 @@ export declare const getLocalBranch: (repoId: string, branchName: string) => Pro
 export declare const deleteLocalBranch: (repoId: string, branchName: string) => Promise<boolean>;
 export declare const updateLocalBranch: (repoId: string, branchName: string, branchData: Branch) => Promise<Branch | null>;
 export declare const getCommitState: (repoId: string, sha?: string) => Promise<CommitState | null>;
-export declare const getCurrentBranch: (repoId: string) => Promise<Branch>;
+export declare const getCurrentBranch: (repoId: string) => Promise<Branch | null>;
 export declare const getUnstagedCommitState: (repoId: string) => Promise<CommitState>;
 export declare const getRepoState: (repoId: string) => Promise<CommitState>;
 export declare const saveDiffListToCurrent: (repoId: string, diffList: Array<{
