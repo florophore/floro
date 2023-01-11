@@ -1,9 +1,10 @@
-import { getPluginsJson } from "./filestructure";
+import { getPluginsJsonAsync, vDEVPath, vPluginsPath } from "./filestructure";
 
 import axios from "axios";
+import path from "path";
 import { DiffElement } from "./versioncontrol";
-
-const pluginsJSON = getPluginsJson();
+import { fs } from "memfs";
+import { Crypto } from "cryptojs";
 
 export interface PluginElement {
   key: string;
@@ -22,6 +23,14 @@ export interface TypeStruct {
 }
 
 export interface Manifest {
+  version: string;
+  name: string;
+  displayName: string;
+  publisher: string;
+  icon:string|{
+    light: string;
+    dark: string;
+  },
   imports: {
     [name: string]: string;
   };
@@ -29,8 +38,9 @@ export interface Manifest {
   store: TypeStruct;
 }
 
-export const readDevPluginManifest = async (pluginName: string) => {
-  if (!pluginsJSON.plugins[pluginName]) {
+export const readDevPluginManifest = async (pluginName: string, pluginVersion: string) => {
+  const pluginsJSON = await getPluginsJsonAsync();
+  if (!pluginsJSON) {
     return null;
   }
   if (pluginsJSON.plugins?.[pluginName]?.proxy) {
@@ -42,7 +52,13 @@ export const readDevPluginManifest = async (pluginName: string) => {
       return null;
     }
   }
-  // TODO ADD COMPILED PLUGIN CHECK HERE
+  try {
+    const pluginManifestPath = path.join(vDEVPath,`${pluginName}@${pluginVersion}`, 'floro', 'floro.manifest.json')
+    const manifestString = await fs.promises.readFile(pluginManifestPath);
+    return JSON.parse(manifestString.toString());
+  } catch (e) {
+    return null;
+  }
 };
 
 export const getPluginManifest = async (
@@ -53,11 +69,16 @@ export const getPluginManifest = async (
   if (!pluginInfo) {
     return;
   }
-  if (pluginInfo.value == "dev") {
-    return await readDevPluginManifest(pluginName);
+  if (pluginInfo.value.startsWith("dev")) {
+    const [, v] = pluginInfo.value.split("@");
+    return await readDevPluginManifest(pluginName, v ?? "");
   }
-  // todo implement semver
-  return null;
+  if (!pluginInfo.value) {
+    return null;
+  }
+  const pluginManifestPath = path.join(vPluginsPath,`${pluginName}@${pluginInfo.value}`, 'floro', 'floro.manifest.json')
+  const manifestString = await fs.promises.readFile(pluginManifestPath);
+  return JSON.parse(manifestString.toString());
 };
 
 export const hasPlugin = (
@@ -119,7 +140,7 @@ export const containsCyclicTypes = (
   visited = {}
 ) => {
   for (const prop in struct) {
-    if ((struct[prop].type as string) == "collection") {
+    if ((struct[prop].type as string) == "set") {
       if (
         visited[struct[prop].values as string] ||
         containsCyclicTypes(
@@ -169,9 +190,9 @@ export const constructRootSchema = (
   let out = {};
   for (const prop in struct) {
     out[prop] = {};
-    if (struct[prop]?.type == "collection") {
+    if (struct[prop]?.type == "set") {
       if (primitives.has(struct[prop]?.values as string)) {
-        out[prop].type = "collection";
+        out[prop].type = struct[prop].type;
         out[prop].values = constructRootSchema(
           schema,
           struct[prop]?.values as TypeStruct,
@@ -181,10 +202,43 @@ export const constructRootSchema = (
       }
 
       if (schema.types[struct[prop]?.values as string]) {
-        out[prop].type = "collection";
+        out[prop].type = struct[prop].type;
         out[prop].values = constructRootSchema(
           schema,
           schema.types[struct[prop]?.values as string] as TypeStruct,
+          pluginName
+        );
+        continue;
+      }
+    }
+    if (struct[prop]?.type == "array") {
+      if (primitives.has(struct[prop]?.values as string)) {
+        out[prop].type = struct[prop].type;
+        out[prop].values = constructRootSchema(
+          schema,
+          {
+            ...(struct[prop]?.values as TypeStruct),
+            ["(id)"]: {
+              type: "string",
+              isKey: true
+            }
+          },
+          pluginName
+        );
+        continue;
+      }
+
+      if (schema.types[struct[prop]?.values as string]) {
+        out[prop].type = struct[prop].type;
+        out[prop].values = constructRootSchema(
+          schema,
+          {
+            ...(schema.types[struct[prop]?.values as string] as TypeStruct),
+            ["(id)"]: {
+              type: "string",
+              isKey: true
+            }
+          },
           pluginName
         );
         continue;
@@ -290,13 +344,54 @@ export const decodeSchemaPath = (
   });
 };
 
+export const getStateId = (
+  schema: TypeStruct,
+  state: unknown) => {
+    let hashPairs = [];
+    for(let prop in schema) {
+      if (!schema[prop].type) {
+        hashPairs.push({
+          key: prop,
+          value: getStateId(schema[prop] as TypeStruct, state[prop])
+        })
+      }
+      if (primitives.has(schema[prop].type as string)) {
+        hashPairs.push({
+          key: prop,
+          value: Crypto.MD5(`${state[prop]}`)
+        })
+      }
+      if (schema[prop].type == "set" || schema[prop].type == "array") {
+        hashPairs.push({
+          key: prop,
+          value: state[prop]?.reduce((s, element) => {
+            return Crypto.MD5(
+              s + getStateId(schema[prop].values as TypeStruct, element)
+            );
+          }, ""),
+        });
+
+      }
+    }
+    return Crypto.MD5(hashPairs.reduce((s, {key, value}) => {
+      if (key == "(id)") {
+        return s;
+      }
+      if (s == "") {
+        return `${key}:${value}`;
+      }
+      return s + "/" + `${key}:${value}`;
+    }, ""));
+  }
+
 export const flattenStateToSchemaPathKV = (
   schemaRoot: Manifest,
   state: unknown,
   traversalPath: Array<string>
 ): Array<DiffElement> => {
   const kv = [];
-  const collections = [];
+  const sets = [];
+  const arrays = [];
   const nestedStructures = [];
   const value = {};
   let primaryKey = null;
@@ -308,8 +403,12 @@ export const flattenStateToSchemaPathKV = (
       };
     }
 
-    if (schemaRoot[prop]?.type == "collection") {
-      collections.push(prop);
+    if (schemaRoot[prop]?.type == "set") {
+      sets.push(prop);
+      continue;
+    }
+    if (schemaRoot[prop]?.type == "array") {
+      arrays.push(prop);
       continue;
     }
     if (
@@ -336,7 +435,19 @@ export const flattenStateToSchemaPathKV = (
       ])
     );
   }
-  for (let prop of collections) {
+  for (let prop of arrays) {
+    (state?.[prop] ?? []).forEach((element) => {
+      const id = getStateId(schemaRoot[prop].values, element);
+
+      kv.push(
+        ...flattenStateToSchemaPathKV(schemaRoot[prop].values, {...element, ["(id)"]: id}, [
+          ...traversalPath,
+          prop,
+        ])
+      );
+    });
+  }
+  for (let prop of sets) {
     (state?.[prop] ?? []).forEach((element) => {
       kv.push(
         ...flattenStateToSchemaPathKV(schemaRoot[prop].values, element, [
@@ -363,7 +474,18 @@ export const buildObjectsAtPath = (
   for (const part of decodedPath) {
     if (
       typeof part == "string" &&
-      currentSchema?.[part]?.type == "collection"
+      currentSchema?.[part]?.type == "set"
+    ) {
+      if (!current[part as string]) {
+        current[part as string] = [];
+      }
+      current = current[part];
+      currentSchema = currentSchema[part].values;
+      continue;
+    }
+    if (
+      typeof part == "string" &&
+      currentSchema?.[part]?.type == "array"
     ) {
       if (!current[part as string]) {
         current[part as string] = [];
@@ -381,14 +503,23 @@ export const buildObjectsAtPath = (
       continue;
     }
     if (Array.isArray(current)) {
-      // UPDATE TO UNCLUDE KEYLESS VALUES
-      const element = current?.find?.((v) => v?.[part.key] == part.value) ?? {
-        [part.key]: part.value,
-      };
-      if (!current.find((v) => v?.[part.key] == part.value)) {
-        current.push(element);
+      if (part.key == "(id)") {
+        const element = findLast?.(current, (v) => v?.[part.key] == part.value) ?? {
+          [part.key]: part.value,
+        };
+        if (!findLast(current, (v) => v?.[part.key] == part.value)) {
+          current.push(element);
+        }
+        current = element;
+      } else {
+        const element = current?.find?.((v) => v?.[part.key] == part.value) ?? {
+          [part.key]: part.value,
+        };
+        if (!current.find((v) => v?.[part.key] == part.value)) {
+          current.push(element);
+        }
+        current = element;
       }
-      current = element;
     }
   }
   for (const prop in properties) {
@@ -396,6 +527,24 @@ export const buildObjectsAtPath = (
   }
   return out;
 };
+
+export const cleanArrayIDFromState = (state: object) => {
+  const out = {};
+  for (let prop in state) {
+    if (Array.isArray(state[prop])) {
+      out[prop] = state[prop].map((v: object) => cleanArrayIDFromState(v));
+      continue;
+    }
+    if (typeof state[prop] == "object") {
+      out[prop] =  cleanArrayIDFromState(state[prop]);
+      continue;
+    }
+    if (prop != "(id)") {
+      out[prop] = state[prop];
+    }
+  }
+  return out;
+}
 
 export const generateKVFromState = (
   schema: Manifest,
@@ -410,7 +559,7 @@ export const generateKVFromState = (
   const rootSchema = constructRootSchema(schema, schema.store, pluginName);
   // type check schema again state
   return flattenStateToSchemaPathKV(rootSchema as unknown as Manifest, state, [
-    `"$(${pluginName})`,
+    `$(${pluginName})`,
   ])?.map(({ key, value }) => {
     return {
       key: writePathString(key as unknown as Array<string | DiffElement>),
@@ -450,8 +599,8 @@ export const iterateSchemaTypes = (
   let out = {};
   for (const prop in types) {
     out[prop] = {};
-    if (types[prop]?.type === "collection") {
-      out[prop].type = "collection";
+    if (types[prop]?.type === "set") {
+      out[prop].type = "set";
       if (
         typeof types[prop].values == "string" &&
         (types[prop].values as string).split(".").length == 1
@@ -594,3 +743,12 @@ export const getKVStateForPlugin = (
     };
   });
 };
+
+const findLast = <T> (array: T[], condition: (element: T, index: number) => boolean): T|null => {
+  for (let i = array.length - 1; i >= 0; --i) {
+    if (condition(array[i], i)) {
+      return array[i];
+    }
+  }
+  return null;
+}

@@ -19,6 +19,8 @@ export const vReposPath = path.join(homePath, "repos");
 export const vPluginsPath = path.join(homePath, "plugins");
 // ~/.floro/tmp
 export const vTMPPath = path.join(homePath, "tmp");
+// ~/.floro/dev
+export const vDEVPath = path.join(homePath, "dev");
 
 // FILES
 // CONFIG
@@ -114,6 +116,13 @@ export const buildFloroFilestructure = (): void => {
     }
   }
 
+  if (!fs.existsSync(vDEVPath)) {
+    fs.mkdirSync(vDEVPath);
+    if (NODE_ENV != "test") {
+      fs.chmodSync(vDEVPath, 0o755);
+    }
+  }
+
   writeDefaultFiles();
 }
 
@@ -192,9 +201,18 @@ export const existsAsync = (file): Promise<boolean> => {
     .catch(() => false);
 }
 
-export const getPluginsJson = (): {plugins: {[key: string]: { proxy?: boolean, host: string}}} => {
+export const getPluginsJson = (): {plugins: {[key: string]: { proxy?: boolean, version?: string, host?: string}}} => {
   try {
     const remotePluginsJSON = fs.readFileSync(vConfigPluginsPath, { encoding: 'utf-8' });
+    return JSON.parse(remotePluginsJSON);
+  } catch(e) {
+    return {plugins: {}};
+  }
+}
+
+export const getPluginsJsonAsync = async (): Promise<{plugins: {[key: string]: { proxy?: boolean, host?: string}}}> => {
+  try {
+    const remotePluginsJSON = await fs.promises.readFile(vConfigPluginsPath, { encoding: 'utf-8' });
     return JSON.parse(remotePluginsJSON);
   } catch(e) {
     return {plugins: {}};

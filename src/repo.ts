@@ -222,8 +222,8 @@ export const canCommit = async (
   }
   const currentSha = await getCurrentCommitSha(repoId);
   const commit = await readCommit(repoId, currentSha);
-  if (!commit) {
-    return false;
+  if (commit) {
+    // ensure safe
   }
   const currentState = await getCurrentState(repoId);
   if (!currentState) {

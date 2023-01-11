@@ -1,7 +1,4 @@
-import express from "express";
 import path from "path";
-import http from "http";
-import cors from "cors";
 import {
   existsAsync,
   vReposPath,
@@ -342,7 +339,7 @@ export const readCurrentHistory = async (repoId?: string) => {
   try {
     const sha = await getCurrentCommitSha(repoId);
     if (!sha) {
-      return null;
+      return [];
     }
     const history = await getHistory(repoId, sha);
     if (!history) {
@@ -489,7 +486,8 @@ export const writeRepoCommit = async (repoId?: string, message?: string) => {
     if (!user.id) {
       return null;
     }
-    if (!canCommit(repoId, user, message)) {
+    const commitIsValid = await canCommit(repoId, user, message);
+    if (!commitIsValid) {
       return null;
     }
     const currentState = await getCurrentState(repoId);
