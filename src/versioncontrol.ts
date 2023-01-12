@@ -36,17 +36,21 @@ export interface CommitData {
 }
 
 const getObjectStringValue = (obj: {
-  [key: string]: number | string | boolean;
+  [key: string]: number | string | boolean | Array<number|string|boolean>;
 }): string => {
   if (typeof obj == "string") return obj;
   return Object.keys(obj).reduce((s, key) => {
+    if (Array.isArray(obj[key])) {
+      const value = (obj[key] as Array<number|string|boolean>).join("-");
+      return `${s}/${key}:${value}`;
+    }
     return `${s}/${key}:${obj[key]}`;
   }, "");
 };
 
 export const getKVHashes = (obj: {
   key: string;
-  value: { [key: string]: number | string | boolean };
+  value: { [key: string]: number | string | boolean | Array<number|string|boolean> };
 }): { keyHash: string; valueHash: string } => {
   const keyHash = Crypto.SHA256(obj.key);
   const valueHash = Crypto.SHA256(getObjectStringValue(obj.value));
@@ -58,7 +62,7 @@ export const getKVHashes = (obj: {
 
 export const getRowHash = (obj: {
   key: string;
-  value: { [key: string]: number | string | boolean };
+  value: { [key: string]: number | string | boolean | Array<number|string|boolean> };
 }): string => {
   const { keyHash, valueHash } = getKVHashes(obj);
   return Crypto.SHA256(keyHash + valueHash);
@@ -541,6 +545,7 @@ const getLCSBoundaryOffsets = (
   }
   return out;
 };
+
 /***
  * Considering following:
  * idx        0 1 2 3 4 5 6 7
