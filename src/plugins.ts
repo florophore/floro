@@ -15,7 +15,9 @@ export interface ManifestNode {
   type: string;
   isKey?: boolean;
   values?: string | TypeStruct;
-  path?: string;
+  ref?: string;
+  refKeyType?: string;
+  refType?: string;
 }
 
 export interface TypeStruct {
@@ -27,10 +29,12 @@ export interface Manifest {
   name: string;
   displayName: string;
   publisher: string;
-  icon:string|{
-    light: string;
-    dark: string;
-  },
+  icon:
+    | string
+    | {
+        light: string;
+        dark: string;
+      };
   imports: {
     [name: string]: string;
   };
@@ -38,7 +42,12 @@ export interface Manifest {
   store: TypeStruct;
 }
 
-export const readDevPluginManifest = async (pluginName: string, pluginVersion: string): Promise<Manifest|null> => {
+const primitives = new Set(["int", "float", "boolean", "string"]);
+
+export const readDevPluginManifest = async (
+  pluginName: string,
+  pluginVersion: string
+): Promise<Manifest | null> => {
   const pluginsJSON = await getPluginsJsonAsync();
   if (!pluginsJSON) {
     return null;
@@ -53,7 +62,12 @@ export const readDevPluginManifest = async (pluginName: string, pluginVersion: s
     }
   }
   try {
-    const pluginManifestPath = path.join(vDEVPath,`${pluginName}@${pluginVersion}`, 'floro', 'floro.manifest.json')
+    const pluginManifestPath = path.join(
+      vDEVPath,
+      `${pluginName}@${pluginVersion}`,
+      "floro",
+      "floro.manifest.json"
+    );
     const manifestString = await fs.promises.readFile(pluginManifestPath);
     return JSON.parse(manifestString.toString());
   } catch (e) {
@@ -76,7 +90,12 @@ export const getPluginManifest = async (
   if (!pluginInfo.value) {
     return null;
   }
-  const pluginManifestPath = path.join(vPluginsPath,`${pluginName}@${pluginInfo.value}`, 'floro', 'floro.manifest.json')
+  const pluginManifestPath = path.join(
+    vPluginsPath,
+    `${pluginName}@${pluginInfo.value}`,
+    "floro",
+    "floro.manifest.json"
+  );
   const manifestString = await fs.promises.readFile(pluginManifestPath);
   return JSON.parse(manifestString.toString());
 };
@@ -132,8 +151,6 @@ export const getUpstreamDependencyList = async (
   return deps;
 };
 
-export const primitives = new Set(["int", "float", "boolean", "string"]);
-
 export const containsCyclicTypes = (
   schema: Manifest,
   struct: TypeStruct,
@@ -182,7 +199,7 @@ export const containsCyclicTypes = (
   return false;
 };
 
-export const constructRootSchema = (
+const constructRootSchema = (
   schema: Manifest,
   struct: TypeStruct,
   pluginName: string
@@ -191,13 +208,19 @@ export const constructRootSchema = (
   for (const prop in struct) {
     out[prop] = {};
     if (struct[prop]?.type == "set") {
-      if (typeof struct[prop]?.values == "string" && primitives.has(struct[prop]?.values as string)) {
+      if (
+        typeof struct[prop]?.values == "string" &&
+        primitives.has(struct[prop]?.values as string)
+      ) {
         out[prop].type = struct[prop].type;
         out[prop].values = struct[prop].values;
         continue;
       }
 
-      if (typeof struct[prop]?.values == "string" && schema.types[struct[prop]?.values as string]) {
+      if (
+        typeof struct[prop]?.values == "string" &&
+        schema.types[struct[prop]?.values as string]
+      ) {
         out[prop].type = struct[prop].type;
         out[prop].values = constructRootSchema(
           schema,
@@ -217,13 +240,19 @@ export const constructRootSchema = (
       }
     }
     if (struct[prop]?.type == "array") {
-      if (typeof struct[prop]?.values == "string" && primitives.has(struct[prop]?.values as string)) {
+      if (
+        typeof struct[prop]?.values == "string" &&
+        primitives.has(struct[prop]?.values as string)
+      ) {
         out[prop].type = struct[prop].type;
         out[prop].values = struct[prop].values;
         continue;
       }
 
-      if (typeof struct[prop]?.values == "string" && schema.types[struct[prop]?.values as string]) {
+      if (
+        typeof struct[prop]?.values == "string" &&
+        schema.types[struct[prop]?.values as string]
+      ) {
         out[prop].type = struct[prop].type;
         out[prop].values = constructRootSchema(
           schema,
@@ -231,8 +260,8 @@ export const constructRootSchema = (
             ...(schema.types[struct[prop]?.values as string] as TypeStruct),
             ["(id)"]: {
               type: "string",
-              isKey: true
-            }
+              isKey: true,
+            },
           },
           pluginName
         );
@@ -247,8 +276,8 @@ export const constructRootSchema = (
             ...((struct[prop]?.values ?? {}) as TypeStruct),
             ["(id)"]: {
               type: "string",
-              isKey: true
-            }
+              isKey: true,
+            },
           },
           pluginName
         );
@@ -259,17 +288,28 @@ export const constructRootSchema = (
       out[prop] = struct[prop];
       continue;
     }
-    if (/^ref<([A-z-_\.]+)>$/.test(struct[prop].type as string)) {
-      const typeName = /^ref<([A-z-_\.]+)>$/.exec(
-        struct[prop].type as string
-      )[1];
+    if (/^ref<(.+)>$/.test(struct[prop].type as string)) {
+      const typeName = /^ref<(.+)>$/.exec(struct[prop].type as string)[1];
       if (primitives.has(typeName)) {
         out[prop] = struct[prop];
         out[prop].type = "ref";
         out[prop].refType = typeName;
         out[prop].refKeyType = typeName;
       } else {
+        if ((typeName ?? "")?.startsWith("$")) {
+          out[prop].type = "ref";
+          out[prop].refType = typeName.startsWith("$.")
+            ? typeName.replace("$.", `$(${pluginName}).`)
+            : typeName;
+          out[prop].refType = typeName;
+          out[prop].refKeyType = "<?>";
+          if (struct[prop].isKey) {
+            out[prop].isKey = true;
+          }
+          continue;
+        }
         if (!schema.types[typeName]) {
+          debugger;
           const message = "Invalid reference type: " + typeName;
           throw new Error(message);
         }
@@ -289,14 +329,6 @@ export const constructRootSchema = (
             typeName +
             " has no key";
           throw new Error(message);
-        }
-        if ((struct?.[prop]?.path as string)?.startsWith("$.")) {
-          out[prop].path = (struct[prop].path as string).replace(
-            "$.",
-            `$(${pluginName}).`
-          );
-        } else {
-          out[prop].path = struct[prop].path;
         }
         out[prop].type = "ref";
         out[prop].refType = typeName;
@@ -355,42 +387,41 @@ export const decodeSchemaPath = (
   });
 };
 
-export const getStateId = (
-  schema: TypeStruct,
-  state: unknown) => {
-    let hashPairs = [];
-    debugger;
-    for(let prop in schema) {
-      if (!schema[prop].type) {
-        hashPairs.push({
-          key: prop,
-          value: getStateId(schema[prop] as TypeStruct, state[prop])
-        })
-      }
-      if (primitives.has(schema[prop].type as string)) {
-        hashPairs.push({
-          key: prop,
-          value: Crypto.SHA256(`${state[prop]}`)
-        })
-      }
-      if (schema[prop].type == "set" || schema[prop].type == "array") {
-        hashPairs.push({
-          key: prop,
-          value: state[prop]?.reduce((s: string, element) => {
-            if (typeof schema[prop].values == "string" && primitives.has(schema[prop].values as string)) {
-              return Crypto.SHA256(
-                s + `${element}`
-              );
-            }
-            return Crypto.SHA256(
-              s + getStateId(schema[prop].values as TypeStruct, element)
-            );
-          }, ""),
-        });
-
-      }
+export const getStateId = (schema: TypeStruct, state: unknown) => {
+  let hashPairs = [];
+  debugger;
+  for (let prop in schema) {
+    if (!schema[prop].type) {
+      hashPairs.push({
+        key: prop,
+        value: getStateId(schema[prop] as TypeStruct, state[prop]),
+      });
     }
-    return Crypto.SHA256(hashPairs.reduce((s, {key, value}) => {
+    if (primitives.has(schema[prop].type as string)) {
+      hashPairs.push({
+        key: prop,
+        value: Crypto.SHA256(`${state[prop]}`),
+      });
+    }
+    if (schema[prop].type == "set" || schema[prop].type == "array") {
+      hashPairs.push({
+        key: prop,
+        value: state[prop]?.reduce((s: string, element) => {
+          if (
+            typeof schema[prop].values == "string" &&
+            primitives.has(schema[prop].values as string)
+          ) {
+            return Crypto.SHA256(s + `${element}`);
+          }
+          return Crypto.SHA256(
+            s + getStateId(schema[prop].values as TypeStruct, element)
+          );
+        }, ""),
+      });
+    }
+  }
+  return Crypto.SHA256(
+    hashPairs.reduce((s, { key, value }) => {
       if (key == "(id)") {
         return s;
       }
@@ -398,8 +429,9 @@ export const getStateId = (
         return `${key}:${value}`;
       }
       return s + "/" + `${key}:${value}`;
-    }, ""));
-  }
+    }, "")
+  );
+};
 
 export const flattenStateToSchemaPathKV = (
   schemaRoot: Manifest,
@@ -420,17 +452,27 @@ export const flattenStateToSchemaPathKV = (
       };
     }
 
-    if (schemaRoot[prop]?.type == "set" && !primitives.has(schemaRoot[prop].values)) {
+    if (
+      schemaRoot[prop]?.type == "set" &&
+      !primitives.has(schemaRoot[prop].values)
+    ) {
       sets.push(prop);
       continue;
     }
-    if (schemaRoot[prop]?.type == "array" && !primitives.has(schemaRoot[prop].values)) {
+    if (
+      schemaRoot[prop]?.type == "array" &&
+      !primitives.has(schemaRoot[prop].values)
+    ) {
       arrays.push(prop);
       continue;
     }
     if (
       !primitives.has(schemaRoot[prop]?.type) &&
-      !((schemaRoot[prop]?.type == "array" || schemaRoot[prop]?.type == "set") && primitives.has(schemaRoot[prop]?.values)) &&
+      !(
+        (schemaRoot[prop]?.type == "array" ||
+          schemaRoot[prop]?.type == "set") &&
+        primitives.has(schemaRoot[prop]?.values)
+      ) &&
       schemaRoot[prop]?.type != "ref"
     ) {
       nestedStructures.push(prop);
@@ -455,12 +497,13 @@ export const flattenStateToSchemaPathKV = (
   }
   for (let prop of arrays) {
     (state?.[prop] ?? []).forEach((element) => {
-      const id = getStateId(schemaRoot[prop].values, element)
+      const id = getStateId(schemaRoot[prop].values, element);
       kv.push(
-        ...flattenStateToSchemaPathKV(schemaRoot[prop].values, {...element, ["(id)"]: id}, [
-          ...traversalPath,
-          prop,
-        ])
+        ...flattenStateToSchemaPathKV(
+          schemaRoot[prop].values,
+          { ...element, ["(id)"]: id },
+          [...traversalPath, prop]
+        )
       );
     });
   }
@@ -478,43 +521,45 @@ export const flattenStateToSchemaPathKV = (
   return kv;
 };
 
-export const indexArrayDuplicates = (kvs: Array<DiffElement>): Array<DiffElement> => {
-  let visitedIds: { [key: string]: {count: number}} = {};
+export const indexArrayDuplicates = (
+  kvs: Array<DiffElement>
+): Array<DiffElement> => {
+  let visitedIds: { [key: string]: { count: number } } = {};
   let out = [];
-  for (let { key, value} of kvs) {
+  for (let { key, value } of kvs) {
     const [, ...decodedPath] = decodeSchemaPath(key);
     const concatenatedId = decodedPath.reduce((s, part) => {
       if (typeof part != "string" && part?.key == "(id)") {
         return s == "" ? part?.value : s + ":" + part?.value;
       }
       return s;
-    }, "")
+    }, "");
     if (value["(id)"]) {
       if (visitedIds[concatenatedId] == undefined) {
         visitedIds[concatenatedId] = {
-          count: 0
+          count: 0,
         };
       } else {
         visitedIds[concatenatedId].count++;
       }
     }
     let updatedKey = key;
-    let ids = concatenatedId.split(":").filter(v => v != "");
+    let ids = concatenatedId.split(":").filter((v) => v != "");
     for (let i = 0; i < ids.length; ++i) {
       const id = ids[i];
       const subId = ids.slice(0, i + 1).join(":");
       const count = visitedIds[subId]?.count ?? 0;
-      updatedKey = updatedKey.replace(id, `${id}:${count}`)
+      updatedKey = updatedKey.replace(id, `${id}:${count}`);
     }
-    if (value['(id)']) {
+    if (value["(id)"]) {
       const id = ids[ids.length - 1];
       const count = visitedIds[concatenatedId].count ?? 0;
-      value['(id)'] = value['(id)'].replace(id, `${id}:${count}`);
+      value["(id)"] = value["(id)"].replace(id, `${id}:${count}`);
     }
-    out.push({key: updatedKey, value})
+    out.push({ key: updatedKey, value });
   }
   return out;
-}
+};
 
 export const buildObjectsAtPath = (
   rootSchema: Manifest,
@@ -527,10 +572,7 @@ export const buildObjectsAtPath = (
   let current = out;
   let currentSchema = rootSchema;
   for (const part of decodedPath) {
-    if (
-      typeof part == "string" &&
-      currentSchema?.[part]?.type == "set"
-    ) {
+    if (typeof part == "string" && currentSchema?.[part]?.type == "set") {
       if (!current[part as string]) {
         current[part as string] = [];
       }
@@ -538,10 +580,7 @@ export const buildObjectsAtPath = (
       currentSchema = currentSchema[part].values;
       continue;
     }
-    if (
-      typeof part == "string" &&
-      currentSchema?.[part]?.type == "array"
-    ) {
+    if (typeof part == "string" && currentSchema?.[part]?.type == "array") {
       if (!current[part as string]) {
         current[part as string] = [];
       }
@@ -577,8 +616,12 @@ const cleanArrayIDsFromState = (state: object) => {
   const out = {};
   for (let prop in state) {
     if (Array.isArray(state[prop])) {
-      out[prop] = state[prop].map((v: object|string|number|boolean) => {
-        if (typeof v == "string" || typeof v == "number" || typeof v == "boolean") {
+      out[prop] = state[prop].map((v: object | string | number | boolean) => {
+        if (
+          typeof v == "string" ||
+          typeof v == "number" ||
+          typeof v == "boolean"
+        ) {
           return v;
         }
         return cleanArrayIDsFromState(v);
@@ -586,7 +629,7 @@ const cleanArrayIDsFromState = (state: object) => {
       continue;
     }
     if (typeof state[prop] == "object") {
-      out[prop] =  cleanArrayIDsFromState(state[prop]);
+      out[prop] = cleanArrayIDsFromState(state[prop]);
       continue;
     }
     if (prop != "(id)") {
@@ -594,20 +637,13 @@ const cleanArrayIDsFromState = (state: object) => {
     }
   }
   return out;
-}
+};
 
-export const generateKVFromState = (
-  schema: Manifest,
-  state: unknown,
-  pluginName: string
+const generateKVFromStateWithRootSchema = (
+  rootSchema: TypeStruct,
+  pluginName: string,
+  state: unknown
 ): Array<DiffElement> => {
-  const hasCycle = containsCyclicTypes(schema, schema.store);
-  if (hasCycle) {
-    console.error("type cycle detected, try using references");
-    return;
-  }
-  const rootSchema = constructRootSchema(schema, schema.store, pluginName);
-  // type check schema again state
   return flattenStateToSchemaPathKV(rootSchema as unknown as Manifest, state, [
     `$(${pluginName})`,
   ])?.map(({ key, value }) => {
@@ -637,15 +673,22 @@ export const generateStateFromKV = (
   return cleanArrayIDsFromState(out);
 };
 
-export const iterateSchemaTypes = (
+const iterateSchemaTypes = (
   types: Manifest["types"],
   pluginName: string
 ): unknown => {
   let out = {};
   for (const prop in types) {
     out[prop] = {};
-    if (types[prop]?.type === "set") {
-      out[prop].type = "set";
+    if (types[prop]?.type === "set" || types[prop]?.type === "array") {
+      out[prop].type = types[prop]?.type;
+      if (
+        typeof types[prop].values == "string" &&
+        primitives.has(types[prop].values as string)
+      ) {
+        out[prop].values = types[prop].values;
+        continue;
+      }
       if (
         typeof types[prop].values == "string" &&
         (types[prop].values as string).split(".").length == 1
@@ -661,27 +704,14 @@ export const iterateSchemaTypes = (
         continue;
       }
     }
-    if (/^ref<([A-z-_\.]+)>$/.test(types[prop].type as string)) {
+    if (/^ref<(.+)>$/.test(types[prop].type as string)) {
       out[prop] = { ...types[prop] };
-      const typeGroup = /^ref<([A-z-_\.]+)>$/.exec(
-        types[prop].type as string
-      )[1];
+      const typeGroup = /^ref<(.+)>$/.exec(types[prop].type as string)[1];
       const splitGroup = typeGroup.split(".");
       if (splitGroup?.length == 1) {
         out[prop].type = `ref<${pluginName}.${typeGroup}>`;
       } else {
         out[prop].type = types[prop].type;
-      }
-      if (
-        typeof types?.[prop]?.path == "string" &&
-        (types?.[prop]?.path as string)?.startsWith("$.")
-      ) {
-        out[prop].path = (types[prop].path as string).replace(
-          "$.",
-          `$(${pluginName}).`
-        );
-      } else {
-        out[prop].path = types[prop].path;
       }
       continue;
     }
@@ -696,7 +726,7 @@ export const iterateSchemaTypes = (
   return out;
 };
 
-export const drawSchemaTypesFromImports = (
+const drawSchemaTypesFromImports = (
   schema: { [key: string]: Manifest },
   pluginName: string
 ): TypeStruct => {
@@ -749,12 +779,14 @@ export const constructDependencySchema = async (
 };
 
 export const getRootSchemaForPlugin = (
-  schema: { [key: string]: Manifest },
-  manifest: Manifest,
+  schemaMap: { [key: string]: Manifest },
   pluginName: string
 ): TypeStruct => {
-  const schemaWithTypes = drawSchemaTypesFromImports(schema, pluginName);
-  const schemaWithStores = iterateSchemaTypes(manifest.store, pluginName);
+  const schemaWithTypes = drawSchemaTypesFromImports(schemaMap, pluginName);
+  const schemaWithStores = iterateSchemaTypes(
+    schemaMap[pluginName].store,
+    pluginName
+  );
 
   return constructRootSchema(
     {
@@ -765,26 +797,98 @@ export const getRootSchemaForPlugin = (
   );
 };
 
+export const getRootSchemaMap = (schemaMap: {
+  [key: string]: Manifest;
+}): { [key: string]: TypeStruct } => {
+  let rootSchemaMap = {};
+  for (let pluginName in schemaMap) {
+    rootSchemaMap[pluginName] = getRootSchemaForPlugin(schemaMap, pluginName);
+  }
+  return fillInRefKeyType(rootSchemaMap);
+};
+
+const getKeyType = (
+  keyPath: string,
+  rootSchemaMap: { [key: string]: TypeStruct }
+): string | null => {
+  const [pluginWrapper, ...path] = keyPath.split(".");
+  let current = null;
+  const typeGroup = /^\$\((.+)\)$/.exec(pluginWrapper as string)?.[1] ?? null;
+  if (typeGroup && rootSchemaMap[typeGroup]) {
+    current = rootSchemaMap[typeGroup];
+  }
+  if (current != null) {
+    for (let part of path) {
+      if (current[part]) {
+        current = current[part];
+      }
+    }
+    if (typeof current == "object") {
+      for (let prop in current) {
+        if (current[prop]?.isKey) {
+          if (
+            typeof current[prop].type == "string" &&
+            (primitives.has(current[prop].type) || current[prop].type == "ref")
+          ) {
+            return current[prop].type;
+          } else {
+            return null;
+          }
+        }
+      }
+    }
+  }
+
+  return null;
+};
+
+const traverseSchemaMapForRefKeyTypes = (
+  schemaMap: { [key: string]: TypeStruct | ManifestNode },
+  rootSchemaMap: { [key: string]: TypeStruct }
+) => {
+  let out = {};
+  for (let prop in schemaMap) {
+    if (
+      (schemaMap?.[prop] as ManifestNode)?.type == "ref" &&
+      schemaMap?.[prop]?.refKeyType == "<?>"
+    ) {
+      const next = { ...schemaMap[prop] };
+      const refKeyType = getKeyType(
+        schemaMap?.[prop]?.refType as string,
+        rootSchemaMap
+      );
+      if (refKeyType) {
+        next.refKeyType = refKeyType;
+      }
+      out[prop] = next;
+      continue;
+    }
+    if (typeof schemaMap[prop] == "object") {
+      const next = traverseSchemaMapForRefKeyTypes(
+        schemaMap[prop] as TypeStruct,
+        rootSchemaMap
+      );
+      out[prop] = next;
+      continue;
+    }
+    out[prop] = schemaMap[prop];
+  }
+  return out;
+};
+
+const fillInRefKeyType = (schemaMap: { [key: string]: TypeStruct }) => {
+  return traverseSchemaMapForRefKeyTypes(schemaMap, schemaMap);
+};
+
 export const getKVStateForPlugin = (
   schema: { [key: string]: Manifest },
-  manifest: Manifest,
   pluginName: string,
-  state: unknown
+  state: { [key: string]: unknown }
 ): Array<DiffElement> => {
-  const rootUpsteamSchema = getRootSchemaForPlugin(
-    schema,
-    manifest,
-    pluginName
+  const rootUpsteamSchema = getRootSchemaForPlugin(schema, pluginName);
+  return generateKVFromStateWithRootSchema(
+    rootUpsteamSchema,
+    pluginName,
+    state?.[pluginName]
   );
-  const pluginKVState = flattenStateToSchemaPathKV(
-    rootUpsteamSchema as unknown as Manifest,
-    state ?? {},
-    [`$(${pluginName})`]
-  );
-  return pluginKVState?.map(({ key, value }) => {
-    return {
-      key: writePathString(key as unknown as Array<string | DiffElement>),
-      value,
-    };
-  });
 };

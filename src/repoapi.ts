@@ -660,40 +660,42 @@ export const updatePluginState = async (repoId?: string, pluginName?: string, up
       current?.plugins ?? []
     );
     const upsteamSchema = await constructDependencySchema(upstreamDependencies);
-    const rootSchema = getRootSchemaForPlugin(
-      upsteamSchema,
-      manifest,
-      pluginName
-    );
-    const kvState = getKVStateForPlugin(
-      upsteamSchema,
-      manifest,
-      pluginName,
-      updateState ?? {}
-    );
-    const diff = getDiff(unstagedState.store?.[pluginName] ?? [], kvState);
+    // TOOD: FIX THIS
+    // COME BACK
+    //const rootSchema = getRootSchemaForPlugin(
+    //  upsteamSchema,
+    //  manifest,
+    //  pluginName
+    //);
+    //const kvState = getKVStateForPlugin(
+    //  upsteamSchema,
+    //  manifest,
+    //  pluginName,
+    //  updateState ?? {}
+    //);
+    //const diff = getDiff(unstagedState.store?.[pluginName] ?? [], kvState);
 
-    // needs to be looped through for each plugin in downstream deps
-    const nextState = applyDiff(diff, unstagedState?.store?.[pluginName] ?? []);
-    // END TODO
+    //// needs to be looped through for each plugin in downstream deps
+    //const nextState = applyDiff(diff, unstagedState?.store?.[pluginName] ?? []);
+    //// END TODO
 
-    const commitState = await saveDiffListToCurrent(repoId, [
-      {
-        diff,
-        namespace: "store",
-        pluginName,
-      },
-    ]);
+    //const commitState = await saveDiffListToCurrent(repoId, [
+    //  {
+    //    diff,
+    //    namespace: "store",
+    //    pluginName,
+    //  },
+    //]);
 
-    const state = generateStateFromKV(manifest, nextState, pluginName);
+    //const state = generateStateFromKV(manifest, nextState, pluginName);
 
-    // run cascade next
-    // find downstream plugins
-    // run cascades on downstream schemas
-    // save all diffs against respective manifests
+    //// run cascade next
+    //// find downstream plugins
+    //// run cascades on downstream schemas
+    //// save all diffs against respective manifests
 
-    // return constructed kv state of plugin and upstreams
-    return { [pluginName]: state };
+    //// return constructed kv state of plugin and upstreams
+    //return { [pluginName]: state };
   } catch (e) {
     return null;
   }
