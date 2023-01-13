@@ -18,6 +18,8 @@ export interface ManifestNode {
   ref?: string;
   refKeyType?: string;
   refType?: string;
+  nullable?: boolean;
+  onDelete?: string;
 }
 
 export interface TypeStruct {
@@ -295,6 +297,8 @@ const constructRootSchema = (
         out[prop].type = "ref";
         out[prop].refType = typeName;
         out[prop].refKeyType = typeName;
+        out[prop].onDelete = struct[prop]?.onDelete ?? "delete";
+        out[prop].nullable = struct[prop]?.nullable ?? false;
       } else {
         if ((typeName ?? "")?.startsWith("$")) {
           out[prop].type = "ref";
@@ -303,13 +307,14 @@ const constructRootSchema = (
             : typeName;
           out[prop].refType = typeName;
           out[prop].refKeyType = "<?>";
+          out[prop].onDelete = struct[prop]?.onDelete ?? "delete";
+          out[prop].nullable = struct[prop]?.nullable ?? false;
           if (struct[prop].isKey) {
             out[prop].isKey = true;
           }
           continue;
         }
         if (!schema.types[typeName]) {
-          debugger;
           const message = "Invalid reference type: " + typeName;
           throw new Error(message);
         }
@@ -333,6 +338,8 @@ const constructRootSchema = (
         out[prop].type = "ref";
         out[prop].refType = typeName;
         out[prop].refKeyType = key.type;
+        out[prop].onDelete = struct[prop]?.onDelete ?? "delete";
+        out[prop].nullable = struct[prop]?.nullable ?? false;
         if (struct[prop].isKey) {
           out[prop].isKey = true;
         }
@@ -389,7 +396,6 @@ export const decodeSchemaPath = (
 
 export const getStateId = (schema: TypeStruct, state: unknown) => {
   let hashPairs = [];
-  debugger;
   for (let prop in schema) {
     if (!schema[prop].type) {
       hashPairs.push({
@@ -610,6 +616,29 @@ export const buildObjectsAtPath = (
     current[prop] = properties[prop];
   }
   return out;
+};
+const getSchemaAtPath = (
+  rootSchema: Manifest | TypeStruct,
+  path: string
+): object => {
+  // ignore $(store)
+  const [, ...decodedPath] = decodeSchemaPath(path);
+  let currentSchema = rootSchema;
+  for (const part of decodedPath) {
+    if (typeof part == "string" && currentSchema?.[part]?.type == "set") {
+      currentSchema = currentSchema[part].values;
+      continue;
+    }
+    if (typeof part == "string" && currentSchema?.[part]?.type == "array") {
+      currentSchema = currentSchema[part].values;
+      continue;
+    }
+    if (typeof part == "string") {
+      currentSchema = currentSchema[part];
+      continue;
+    }
+  }
+  return currentSchema;
 };
 
 const cleanArrayIDsFromState = (state: object) => {
@@ -892,3 +921,218 @@ export const getKVStateForPlugin = (
     state?.[pluginName]
   );
 };
+
+const getUpstreamDepsInSchemaMap = (
+  schemaMap: { [key: string]: Manifest },
+  pluginName: string
+): Array<string> => {
+  const current = schemaMap[pluginName];
+  if (Object.keys(current.imports).length == 0) {
+    return [];
+  }
+  const deps = Object.keys(current.imports);
+  for (let dep of deps) {
+    const upstreamDeps = getUpstreamDepsInSchemaMap(schemaMap, dep);
+    deps.push(...upstreamDeps);
+  }
+  return deps;
+};
+
+const getDownstreamDepsInSchemaMap = (
+  schemaMap: { [key: string]: Manifest },
+  pluginName: string,
+  memo: { [pluginName: string]: boolean } = {}
+): Array<string> => {
+  if (memo[pluginName]) {
+    return [];
+  }
+  memo[pluginName] = true;
+  let out = [];
+  for (let dep in schemaMap) {
+    if (dep == pluginName) {
+      continue;
+    }
+    if (schemaMap[dep].imports[pluginName]) {
+      out.push(
+        dep,
+        ...getDownstreamDepsInSchemaMap(schemaMap, pluginName, memo)
+      );
+    }
+  }
+  return out;
+};
+
+const objectIsSubsetOfObject = (current: object, next: object): boolean => {
+  if (typeof current != "object") {
+    return false;
+  }
+  if (typeof next != "object") {
+    return false;
+  }
+  let nested = [];
+  for (let prop in current) {
+    if (typeof current[prop] == "object" && typeof next[prop] == "object") {
+      nested.push([current[prop], next[prop]]);
+      continue;
+    }
+    if (current[prop] != next[prop]) {
+      return false;
+    }
+  }
+  return nested.reduce((match, [c, n]) => {
+    if (!match) {
+      return false;
+    }
+    return objectIsSubsetOfObject(c, n);
+  }, true);
+};
+
+export const pluginManifestIsSubsetOfManifest = (
+  currentSchemaMap: { [key: string]: Manifest },
+  nextSchemaMap: { [key: string]: Manifest },
+  pluginName: string
+): boolean => {
+  const currentDeps = [
+    pluginName,
+    ...getUpstreamDepsInSchemaMap(currentSchemaMap, pluginName),
+  ];
+  const currentGraph = currentDeps.reduce((graph, plugin) => {
+    return {
+      ...graph,
+      [plugin]: getRootSchemaForPlugin(currentSchemaMap, plugin),
+    };
+  }, {});
+  const nextDeps = [
+    pluginName,
+    ...getUpstreamDepsInSchemaMap(nextSchemaMap, pluginName),
+  ];
+  const nextGraph = nextDeps.reduce((graph, plugin) => {
+    return {
+      ...graph,
+      [plugin]: getRootSchemaForPlugin(nextSchemaMap, plugin),
+    };
+  }, {});
+  return objectIsSubsetOfObject(currentGraph, nextGraph);
+};
+
+const refSetFromKey = (key: string): Array<string> => {
+  const out = [];
+  const parts = key.split(".");
+  const curr = [];
+  for (const part of parts) {
+    curr.push(part);
+    if (/\(<.+>\)$/.test(part)) {
+      out.push(curr.join("."));
+    }
+  }
+  return out;
+};
+
+export const cascadePluginState = (
+  schemaMap: { [key: string]: Manifest },
+  stateMap: { [key: string]: unknown },
+  pluginName: string,
+  rootSchemaMap?: { [key: string]: TypeStruct },
+  memo?: { [key: string]: { [key: string]: unknown } }
+): { [key: string]: unknown } => {
+  if (!rootSchemaMap) {
+    rootSchemaMap = getRootSchemaMap(schemaMap);
+  }
+  if (!memo) {
+    memo = {};
+  }
+  const kvs = getKVStateForPlugin(schemaMap, pluginName, stateMap);
+  const validRefs = kvs
+    .map((v) => v.key)
+    .filter((key) => {
+      if (/<.+>$/.test(key)) {
+        return true;
+      }
+      return false;
+    });
+  const validRefsWithoutArrays = validRefs.filter((key) => {
+    if (/\(id\)<[a-f0-9]+>/.test(key)) {
+      return false;
+    }
+    if (/<.+>$/.test(key)) {
+      return true;
+    }
+    return false;
+  });
+  const validRefSet = new Set(validRefs);
+  const validRefsWithoutArraysSet = new Set(validRefsWithoutArrays);
+  const next = [];
+  for (let { key, value } of kvs) {
+    const subSchema = getSchemaAtPath(rootSchemaMap[pluginName], key);
+    for (let prop in subSchema) {
+      const refs = refSetFromKey(key);
+      const hasAllRefs = refs.reduce((hasRef: boolean, refPath: string) => {
+        if (!hasRef) {
+          return false;
+        }
+        return validRefSet.has(refPath);
+      }, true);
+      if (!hasAllRefs) {
+        continue;
+      }
+      if (subSchema[prop]?.isKey) {
+        if (!validRefsWithoutArraysSet.has(value[prop])) {
+          if (subSchema[prop]?.onDelete == "nullify") {
+            value[prop] = null;
+            next.push({
+              key,
+              value,
+            });
+            continue;
+          } else {
+            validRefSet.delete(value[prop]);
+            validRefsWithoutArraysSet.delete(value[prop]);
+            continue;
+          }
+        }
+        continue;
+      }
+      next.push({ key, value });
+    }
+    const newPluginState = generateStateFromKV(
+      schemaMap[pluginName],
+      next,
+      pluginName
+    );
+    const nextStateMap = { ...stateMap, [pluginName]: newPluginState };
+    if (next.length != kvs.length) {
+      return cascadePluginState(
+        schemaMap,
+        { ...stateMap, [pluginName]: newPluginState },
+        pluginName,
+        rootSchemaMap,
+        memo
+      );
+    }
+    const downstreamDeps = getDownstreamDepsInSchemaMap(schemaMap, pluginName);
+    const result = downstreamDeps.reduce((stateMap, dependentPluginName) => {
+      if (memo[`${pluginName}:${dependentPluginName}`]) {
+        return {
+          ...stateMap,
+          ...memo[`${pluginName}:${dependentPluginName}`],
+        };
+      }
+      const result = {
+        ...stateMap,
+        ...cascadePluginState(
+          schemaMap,
+          stateMap,
+          dependentPluginName,
+          rootSchemaMap
+        ),
+      };
+      memo[`${pluginName}:${dependentPluginName}`] = result;
+      return result;
+    }, nextStateMap);
+    return result;
+  }
+};
+
+// validation
+// 1) check nullability
+// 2) check refs exist

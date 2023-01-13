@@ -5,6 +5,7 @@ import {
   getPluginManifest,
   getRootSchemaMap,
   getKVStateForPlugin,
+  pluginManifestIsSubsetOfManifest,
 } from "../src/plugins";
 import { makeSignedInUser } from "./helpers/fsmocks";
 import { createPlugin, SIMPLE_PLUGIN_MANIFEST } from "./helpers/pluginmocks";
@@ -47,7 +48,7 @@ describe("plugins", () => {
     });
   });
 
-  describe("generateKVFromState", () => {
+  describe("getKVStateForPlugin", () => {
     test("flatten simple object", () => {
       const kvs = getKVStateForPlugin(
         {
@@ -82,203 +83,203 @@ describe("plugins", () => {
         value: "second",
       });
     });
-  });
 
-  test("can serialize array and set primitive array or set state", () => {
-    const ARRAY_PLUGIN_MANIFEST = {
-      version: "0.0.0",
-      name: "simple",
-      displayName: "Simple",
-      publisher: "@jamiesunderland",
-      icon: {
-        light: "./palette-plugin-icon.svg",
-        dark: "./palette-plugin-icon.svg",
-      },
-      imports: {},
-      types: {
-        entity: {
-          name: {
-            type: "string",
+    test("can serialize array and set primitive array or set state", () => {
+      const ARRAY_PLUGIN_MANIFEST = {
+        version: "0.0.0",
+        name: "simple",
+        displayName: "Simple",
+        publisher: "@jamiesunderland",
+        icon: {
+          light: "./palette-plugin-icon.svg",
+          dark: "./palette-plugin-icon.svg",
+        },
+        imports: {},
+        types: {
+          entity: {
+            name: {
+              type: "string",
+            },
+            list: {
+              type: "array",
+              values: "int",
+            },
           },
-          list: {
+        },
+        store: {
+          objects: {
             type: "array",
-            values: "int",
+            values: "entity",
           },
         },
-      },
-      store: {
-        objects: {
-          type: "array",
-          values: "entity",
-        },
-      },
-    };
-    const kvs = getKVStateForPlugin(
-      {[ARRAY_PLUGIN_MANIFEST.name]: ARRAY_PLUGIN_MANIFEST},
-      ARRAY_PLUGIN_MANIFEST.name,
-      {
-        [ARRAY_PLUGIN_MANIFEST.name]: {
-          objects: [
-            {
-              name: "abc",
-              list: [1, 2, 3],
-            },
-            {
-              name: "def",
-              list: [4, 5],
-            },
-            {
-              name: "abc",
-              list: [1, 2, 3],
-            },
-          ],
+      };
+      const kvs = getKVStateForPlugin(
+        { [ARRAY_PLUGIN_MANIFEST.name]: ARRAY_PLUGIN_MANIFEST },
+        ARRAY_PLUGIN_MANIFEST.name,
+        {
+          [ARRAY_PLUGIN_MANIFEST.name]: {
+            objects: [
+              {
+                name: "abc",
+                list: [1, 2, 3],
+              },
+              {
+                name: "def",
+                list: [4, 5],
+              },
+              {
+                name: "abc",
+                list: [1, 2, 3],
+              },
+            ],
+          },
         }
-      }
-    );
-    const s1 = generateStateFromKV(
-      ARRAY_PLUGIN_MANIFEST,
-      kvs,
-      ARRAY_PLUGIN_MANIFEST.name
-    );
-    const kv2 = getKVStateForPlugin(
-      {[ARRAY_PLUGIN_MANIFEST.name]: ARRAY_PLUGIN_MANIFEST},
-      ARRAY_PLUGIN_MANIFEST.name,
-      {
-        [ARRAY_PLUGIN_MANIFEST.name]: s1
-      }
-    );
-    const s2 = generateStateFromKV(
-      ARRAY_PLUGIN_MANIFEST,
-      kv2,
-      ARRAY_PLUGIN_MANIFEST.name
-    );
-    expect(s1).toEqual(s2);
-    expect(s2).toEqual({
-      objects: [
+      );
+      const s1 = generateStateFromKV(
+        ARRAY_PLUGIN_MANIFEST,
+        kvs,
+        ARRAY_PLUGIN_MANIFEST.name
+      );
+      const kv2 = getKVStateForPlugin(
+        { [ARRAY_PLUGIN_MANIFEST.name]: ARRAY_PLUGIN_MANIFEST },
+        ARRAY_PLUGIN_MANIFEST.name,
         {
-          name: "abc",
-          list: [1, 2, 3],
-        },
-        {
-          name: "def",
-          list: [4, 5],
-        },
-        {
-          name: "abc",
-          list: [1, 2, 3],
-        },
-      ],
+          [ARRAY_PLUGIN_MANIFEST.name]: s1,
+        }
+      );
+      const s2 = generateStateFromKV(
+        ARRAY_PLUGIN_MANIFEST,
+        kv2,
+        ARRAY_PLUGIN_MANIFEST.name
+      );
+      expect(s1).toEqual(s2);
+      expect(s2).toEqual({
+        objects: [
+          {
+            name: "abc",
+            list: [1, 2, 3],
+          },
+          {
+            name: "def",
+            list: [4, 5],
+          },
+          {
+            name: "abc",
+            list: [1, 2, 3],
+          },
+        ],
+      });
     });
-  });
 
-  test("serializes and hashes array state and dehashes state", () => {
-    const ARRAY_PLUGIN_MANIFEST = {
-      version: "0.0.0",
-      name: "simple",
-      displayName: "Simple",
-      publisher: "@jamiesunderland",
-      icon: {
-        light: "./palette-plugin-icon.svg",
-        dark: "./palette-plugin-icon.svg",
-      },
-      imports: {},
-      types: {
-        entity: {
-          name: {
-            type: "string",
-          },
-          value: {
-            type: "string",
-          },
-          other: {
-            someProp: {
-              type: "int",
+    test("serializes and hashes array state and dehashes state", () => {
+      const ARRAY_PLUGIN_MANIFEST = {
+        version: "0.0.0",
+        name: "simple",
+        displayName: "Simple",
+        publisher: "@jamiesunderland",
+        icon: {
+          light: "./palette-plugin-icon.svg",
+          dark: "./palette-plugin-icon.svg",
+        },
+        imports: {},
+        types: {
+          entity: {
+            name: {
+              type: "string",
+            },
+            value: {
+              type: "string",
+            },
+            other: {
+              someProp: {
+                type: "int",
+              },
             },
           },
         },
-      },
-      store: {
-        objects: {
-          type: "array",
-          values: "entity",
+        store: {
+          objects: {
+            type: "array",
+            values: "entity",
+          },
         },
-      },
-    };
+      };
 
-    const kvs = getKVStateForPlugin(
-      { [ARRAY_PLUGIN_MANIFEST.name]: ARRAY_PLUGIN_MANIFEST },
-      ARRAY_PLUGIN_MANIFEST.name,
-      {
-        [ARRAY_PLUGIN_MANIFEST.name]: {
-          objects: [
-            {
-              name: "abc",
-              value: "first",
-              other: {
-                someProp: 1,
-              },
-            },
-            {
-              name: "def",
-              value: "second",
-              other: {
-                someProp: 2,
-              },
-            },
-            {
-              name: "abc",
-              value: "first",
-              other: {
-                someProp: 1,
-              },
-            },
-          ],
-        },
-      }
-    );
-    const s1 = generateStateFromKV(
-      ARRAY_PLUGIN_MANIFEST,
-      kvs,
-      ARRAY_PLUGIN_MANIFEST.name
-    );
-    const kv2 = getKVStateForPlugin(
-      {[ARRAY_PLUGIN_MANIFEST.name]: ARRAY_PLUGIN_MANIFEST},
-      ARRAY_PLUGIN_MANIFEST.name,
-      {
-        [ARRAY_PLUGIN_MANIFEST.name]: s1
-      }
-    );
-    const s2 = generateStateFromKV(
-      ARRAY_PLUGIN_MANIFEST,
-      kv2,
-      ARRAY_PLUGIN_MANIFEST.name
-    );
-    expect(kv2).toEqual(kvs);
-    expect(s1).toEqual(s2);
-    expect(s2).toEqual({
-      objects: [
+      const kvs = getKVStateForPlugin(
+        { [ARRAY_PLUGIN_MANIFEST.name]: ARRAY_PLUGIN_MANIFEST },
+        ARRAY_PLUGIN_MANIFEST.name,
         {
-          name: "abc",
-          value: "first",
-          other: {
-            someProp: 1,
+          [ARRAY_PLUGIN_MANIFEST.name]: {
+            objects: [
+              {
+                name: "abc",
+                value: "first",
+                other: {
+                  someProp: 1,
+                },
+              },
+              {
+                name: "def",
+                value: "second",
+                other: {
+                  someProp: 2,
+                },
+              },
+              {
+                name: "abc",
+                value: "first",
+                other: {
+                  someProp: 1,
+                },
+              },
+            ],
           },
-        },
+        }
+      );
+      const s1 = generateStateFromKV(
+        ARRAY_PLUGIN_MANIFEST,
+        kvs,
+        ARRAY_PLUGIN_MANIFEST.name
+      );
+      const kv2 = getKVStateForPlugin(
+        { [ARRAY_PLUGIN_MANIFEST.name]: ARRAY_PLUGIN_MANIFEST },
+        ARRAY_PLUGIN_MANIFEST.name,
         {
-          name: "def",
-          value: "second",
-          other: {
-            someProp: 2,
+          [ARRAY_PLUGIN_MANIFEST.name]: s1,
+        }
+      );
+      const s2 = generateStateFromKV(
+        ARRAY_PLUGIN_MANIFEST,
+        kv2,
+        ARRAY_PLUGIN_MANIFEST.name
+      );
+      expect(kv2).toEqual(kvs);
+      expect(s1).toEqual(s2);
+      expect(s2).toEqual({
+        objects: [
+          {
+            name: "abc",
+            value: "first",
+            other: {
+              someProp: 1,
+            },
           },
-        },
-        {
-          name: "abc",
-          value: "first",
-          other: {
-            someProp: 1,
+          {
+            name: "def",
+            value: "second",
+            other: {
+              someProp: 2,
+            },
           },
-        },
-      ],
+          {
+            name: "abc",
+            value: "first",
+            other: {
+              someProp: 1,
+            },
+          },
+        ],
+      });
     });
   });
 
@@ -414,6 +415,8 @@ describe("plugins", () => {
                 type: "ref",
                 refType: "a-plugin.typeA",
                 refKeyType: "int",
+                nullable: false,
+                onDelete: "delete",
               },
               nestedSet: {
                 type: "set",
@@ -436,17 +439,424 @@ describe("plugins", () => {
                 isKey: true,
               },
               a: {
+                nullable: false,
+                onDelete: "delete",
                 type: "ref",
                 refType: "$(a-plugin).aObjects.values",
                 refKeyType: "int",
               },
               bNested: {
+                nullable: false,
+                onDelete: "delete",
                 type: "ref",
                 refType: "$(b-plugin).bObjects.values.nestedSet.values",
                 refKeyType: "float",
               },
             },
           },
+        },
+      });
+    });
+  });
+
+  describe("pluginManifestIsSubsetOfManifest", () => {
+    test("returns true when current rootSchema is subset of next rootSchema", () => {
+      const CURRENT_A_PLUGIN_MANIFEST = {
+        version: "0.0.0",
+        name: "a-plugin",
+        displayName: "A",
+        publisher: "@jamiesunderland",
+        icon: {
+          light: "./palette-plugin-icon.svg",
+          dark: "./palette-plugin-icon.svg",
+        },
+        imports: {},
+        types: {
+          typeA: {
+            name: {
+              type: "int",
+              isKey: true,
+            },
+          },
+        },
+        store: {
+          aObjects: {
+            type: "set",
+            values: "typeA",
+          },
+        },
+      };
+
+      const CURRENT_B_PLUGIN_MANIFEST = {
+        version: "0.0.0",
+        name: "b-plugin",
+        displayName: "Simple",
+        publisher: "@jamiesunderland",
+        icon: {
+          light: "./palette-plugin-icon.svg",
+          dark: "./palette-plugin-icon.svg",
+        },
+        imports: {
+          "a-plugin": "~0.0.0",
+        },
+        types: {
+          typeB: {
+            name: {
+              type: "string",
+              isKey: true,
+            },
+            a: {
+              type: "ref<a-plugin.typeA>",
+            },
+          },
+        },
+        store: {
+          bObjects: {
+            type: "set",
+            values: "typeB",
+          },
+        },
+      };
+
+      const NEXT_A_PLUGIN_MANIFEST = {
+        version: "0.0.0",
+        name: "a-plugin",
+        displayName: "A",
+        publisher: "@jamiesunderland",
+        icon: {
+          light: "./palette-plugin-icon.svg",
+          dark: "./palette-plugin-icon.svg",
+        },
+        imports: {},
+        types: {
+          typeA: {
+            name: {
+              type: "int",
+              isKey: true,
+            },
+            additionalPropToA: {
+              type: "float",
+            },
+          },
+        },
+        store: {
+          aObjects: {
+            type: "set",
+            values: "typeA",
+          },
+        },
+      };
+
+      const NEXT_B_PLUGIN_MANIFEST = {
+        version: "0.0.0",
+        name: "b-plugin",
+        displayName: "Simple",
+        publisher: "@jamiesunderland",
+        icon: {
+          light: "./palette-plugin-icon.svg",
+          dark: "./palette-plugin-icon.svg",
+        },
+        imports: {
+          "a-plugin": "~0.0.0",
+        },
+        types: {
+          typeB: {
+            name: {
+              type: "string",
+              isKey: true,
+            },
+            a: {
+              type: "ref<a-plugin.typeA>",
+            },
+            newProp: {
+              type: "int",
+            },
+          },
+        },
+        store: {
+          bObjects: {
+            type: "set",
+            values: "typeB",
+          },
+        },
+      };
+
+      const currentSchemaMap = {
+        "a-plugin": CURRENT_A_PLUGIN_MANIFEST,
+        "b-plugin": CURRENT_B_PLUGIN_MANIFEST,
+      };
+
+      const nextSchemaMap = {
+        "a-plugin": NEXT_A_PLUGIN_MANIFEST,
+        "b-plugin": NEXT_B_PLUGIN_MANIFEST,
+      };
+
+      const isSubset = pluginManifestIsSubsetOfManifest(
+        currentSchemaMap,
+        nextSchemaMap,
+        "b-plugin"
+      );
+      expect(isSubset).toBe(true);
+    });
+
+    test("returns false when current rootSchema is NOT subset of next rootSchema", () => {
+      const CURRENT_A_PLUGIN_MANIFEST = {
+        version: "0.0.0",
+        name: "a-plugin",
+        displayName: "A",
+        publisher: "@jamiesunderland",
+        icon: {
+          light: "./palette-plugin-icon.svg",
+          dark: "./palette-plugin-icon.svg",
+        },
+        imports: {},
+        types: {
+          typeA: {
+            name: {
+              type: "int",
+              isKey: true,
+            },
+            oldFeature: {
+              type: "string",
+            },
+          },
+        },
+        store: {
+          aObjects: {
+            type: "set",
+            values: "typeA",
+          },
+        },
+      };
+
+      const CURRENT_B_PLUGIN_MANIFEST = {
+        version: "0.0.0",
+        name: "b-plugin",
+        displayName: "Simple",
+        publisher: "@jamiesunderland",
+        icon: {
+          light: "./palette-plugin-icon.svg",
+          dark: "./palette-plugin-icon.svg",
+        },
+        imports: {
+          "a-plugin": "~0.0.0",
+        },
+        types: {
+          typeB: {
+            name: {
+              type: "string",
+              isKey: true,
+            },
+            a: {
+              type: "ref<a-plugin.typeA>",
+            },
+          },
+        },
+        store: {
+          bObjects: {
+            type: "set",
+            values: "typeB",
+          },
+        },
+      };
+
+      const NEXT_A_PLUGIN_MANIFEST = {
+        version: "0.0.0",
+        name: "a-plugin",
+        displayName: "A",
+        publisher: "@jamiesunderland",
+        icon: {
+          light: "./palette-plugin-icon.svg",
+          dark: "./palette-plugin-icon.svg",
+        },
+        imports: {},
+        types: {
+          typeA: {
+            name: {
+              type: "int",
+              isKey: true,
+            },
+            oldFeature: {
+              type: "float", // changed from string
+            },
+            additionalPropToA: {
+              type: "float",
+            },
+          },
+        },
+        store: {
+          aObjects: {
+            type: "set",
+            values: "typeA",
+          },
+        },
+      };
+
+      const NEXT_B_PLUGIN_MANIFEST = {
+        version: "0.0.0",
+        name: "b-plugin",
+        displayName: "Simple",
+        publisher: "@jamiesunderland",
+        icon: {
+          light: "./palette-plugin-icon.svg",
+          dark: "./palette-plugin-icon.svg",
+        },
+        imports: {
+          "a-plugin": "~0.0.0",
+        },
+        types: {
+          typeB: {
+            name: {
+              type: "string",
+              isKey: true,
+            },
+            a: {
+              type: "ref<a-plugin.typeA>",
+            },
+            newProp: {
+              type: "int",
+            },
+          },
+        },
+        store: {
+          bObjects: {
+            type: "set",
+            values: "typeB",
+          },
+        },
+      };
+
+      const currentSchemaMap = {
+        "a-plugin": CURRENT_A_PLUGIN_MANIFEST,
+        "b-plugin": CURRENT_B_PLUGIN_MANIFEST,
+      };
+
+      const nextSchemaMap = {
+        "a-plugin": NEXT_A_PLUGIN_MANIFEST,
+        "b-plugin": NEXT_B_PLUGIN_MANIFEST,
+      };
+
+      const isSubset = pluginManifestIsSubsetOfManifest(
+        currentSchemaMap,
+        nextSchemaMap,
+        "b-plugin"
+      );
+      expect(isSubset).toBe(false);
+    });
+  });
+
+  describe("cascading", () => {
+    test("throw away", () => {
+      const A_PLUGIN_MANIFEST = {
+        version: "0.0.0",
+        name: "a-plugin",
+        displayName: "A",
+        publisher: "@jamiesunderland",
+        icon: {
+          light: "./palette-plugin-icon.svg",
+          dark: "./palette-plugin-icon.svg",
+        },
+        imports: {},
+        types: {
+          typeA: {
+            name: {
+              type: "int",
+              isKey: true,
+            },
+          },
+        },
+        store: {
+          aObjects: {
+            type: "set",
+            values: "typeA",
+          },
+        },
+      };
+
+      const B_PLUGIN_MANIFEST = {
+        version: "0.0.0",
+        name: "b-plugin",
+        displayName: "Simple",
+        publisher: "@jamiesunderland",
+        icon: {
+          light: "./palette-plugin-icon.svg",
+          dark: "./palette-plugin-icon.svg",
+        },
+        imports: {
+          "a-plugin": "~0.0.0",
+        },
+        types: {
+          typeB: {
+            name: {
+              type: "string",
+              isKey: true,
+            },
+            a: {
+              type: "ref<a-plugin.typeA>",
+              onDelete: "nullify",
+              nullable: true,
+            },
+          },
+        },
+        store: {
+          bObjects: {
+            type: "set",
+            values: "typeB",
+          },
+        },
+      };
+
+      const schemaMap = {
+        "a-plugin": A_PLUGIN_MANIFEST,
+        "b-plugin": B_PLUGIN_MANIFEST,
+      };
+
+      const akv = getKVStateForPlugin(schemaMap, A_PLUGIN_MANIFEST.name, {
+        [A_PLUGIN_MANIFEST.name]: {
+          aObjects: [
+            {
+              name: 1,
+            },
+            {
+              name: 2,
+            },
+          ],
+        },
+        [B_PLUGIN_MANIFEST.name]: {
+          bObjects: [
+            {
+              name: "a",
+              a: "$(a-plugin).aObjects.name<1>",
+            },
+            {
+              name: "b",
+              a: "$(a-plugin).aObjects.name<2>",
+            },
+          ],
+        },
+      });
+      const bkv = getKVStateForPlugin(schemaMap, B_PLUGIN_MANIFEST.name, {
+        [A_PLUGIN_MANIFEST.name]: {
+          aObjects: [
+            {
+              name: 1,
+            },
+            {
+              name: 2,
+            },
+          ],
+        },
+        [B_PLUGIN_MANIFEST.name]: {
+          bObjects: [
+            {
+              name: "a",
+              a: "$(a-plugin).aObjects.name<1>",
+            },
+            {
+              name: "b",
+              a: "$(a-plugin).aObjects.name<2>",
+            },
+          ],
         },
       });
     });
