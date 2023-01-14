@@ -1,5 +1,5 @@
 import axios from "axios";
-import fs, { createWriteStream, existsSync } from "fs";
+import fs, { access, createWriteStream, existsSync } from "fs";
 import path from "path";
 import tar from "tar";
 import {
@@ -11,7 +11,7 @@ import {
   vTMPPath,
 } from "./filestructure";
 import { broadcastAllDevices } from "./multiplexer";
-import { generateStateFromKV, getPluginManifest } from "./plugins";
+import { getPluginManifest, getStateFromKVForPlugin } from "./plugins";
 import { applyDiff, CommitData, Diff, TextDiff } from "./versioncontrol";
 
 export interface RawStore {
@@ -576,12 +576,12 @@ export const buildStateStore = async (
   state: CommitState
 ): Promise<{ [key: string]: unknown }> => {
   let out = {};
-  const plugins = new Set(state.plugins.map(v => v.key));
+  const pluginsMap = state.plugins.reduce((acc, v) => ({...acc,[v.key]: v.value }), {});
   for (let pluginName in state.store) {
-    if (plugins.has(pluginName)) {
+    if (pluginsMap[pluginName]) {
       const kv = state?.store?.[pluginName] ?? [];
       const manifest = await getPluginManifest(pluginName, state?.plugins ?? []);
-      const pluginState = generateStateFromKV(manifest, kv, pluginName);
+      const pluginState = getStateFromKVForPlugin(pluginsMap, kv, pluginName);
       out[pluginName] = pluginState;
     }
   }

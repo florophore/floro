@@ -37,7 +37,7 @@ import {
 } from "./versioncontrol";
 import {
   constructDependencySchema,
-  generateStateFromKV,
+  getStateFromKVForPlugin,
   getKVStateForPlugin,
   getPluginManifest,
   getRootSchemaForPlugin,

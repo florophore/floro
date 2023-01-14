@@ -19,7 +19,7 @@ export interface ManifestNode {
   refKeyType?: string;
   refType?: string;
   nullable?: boolean;
-  onDelete?: string;
+  onDelete?: "delete" | "nullify";
 }
 
 export interface TypeStruct {
@@ -641,6 +641,33 @@ const getSchemaAtPath = (
   return currentSchema;
 };
 
+const getObjectInStateMap = (
+  stateMap: { [pluginName: string]: unknown },
+  path: string
+): unknown | null => {
+  let current = null;
+  const [pluginWrapper, ...decodedPath] = decodeSchemaPath(path);
+  const pluginName = /^\$\((.+)\)$/.exec(pluginWrapper as string)?.[1] ?? null;
+  current = stateMap[pluginName];
+  for (let part of decodedPath) {
+    if (!current) {
+      return null;
+    }
+    if (typeof part != "string") {
+      const { key, value } = part as DiffElement;
+      if (Array.isArray(current)) {
+        const element = current?.find?.((v) => v?.[key] == value);
+        current = element;
+      } else {
+        return null;
+      }
+    } else {
+      current = current[part];
+    }
+  }
+  return current ?? null;
+};
+
 const cleanArrayIDsFromState = (state: object) => {
   const out = {};
   for (let prop in state) {
@@ -655,6 +682,10 @@ const cleanArrayIDsFromState = (state: object) => {
         }
         return cleanArrayIDsFromState(v);
       });
+      continue;
+    }
+    if (state[prop] == null) {
+      out[prop] = null;
       continue;
     }
     if (typeof state[prop] == "object") {
@@ -681,25 +712,6 @@ const generateKVFromStateWithRootSchema = (
       value,
     };
   });
-};
-
-export const generateStateFromKV = (
-  schema: Manifest,
-  kv: Array<DiffElement>,
-  pluginName: string
-): unknown => {
-  const rootSchema = constructRootSchema(schema, schema.store, pluginName);
-  const kvArray = indexArrayDuplicates(kv);
-  let out = {};
-  for (let pair of kvArray) {
-    out = buildObjectsAtPath(
-      rootSchema as unknown as Manifest,
-      pair.key,
-      pair.value,
-      out
-    );
-  }
-  return cleanArrayIDsFromState(out);
 };
 
 const iterateSchemaTypes = (
@@ -807,6 +819,25 @@ export const constructDependencySchema = async (
   };
 };
 
+export const getStateFromKVForPlugin = (
+  schemaMap: { [key: string]: Manifest },
+  kv: Array<DiffElement>,
+  pluginName: string
+) => {
+  const rootSchema = getRootSchemaForPlugin(schemaMap, pluginName);
+  const kvArray = indexArrayDuplicates(kv);
+  let out = {};
+  for (let pair of kvArray) {
+    out = buildObjectsAtPath(
+      rootSchema as unknown as Manifest,
+      pair.key,
+      pair.value,
+      out
+    );
+  }
+  return cleanArrayIDsFromState(out);
+};
+
 export const getRootSchemaForPlugin = (
   schemaMap: { [key: string]: Manifest },
   pluginName: string
@@ -867,7 +898,6 @@ const getKeyType = (
       }
     }
   }
-
   return null;
 };
 
@@ -1021,7 +1051,7 @@ const refSetFromKey = (key: string): Array<string> => {
   const curr = [];
   for (const part of parts) {
     curr.push(part);
-    if (/\(<.+>\)$/.test(part)) {
+    if (/<.+>$/.test(part)) {
       out.push(curr.join("."));
     }
   }
@@ -1042,95 +1072,92 @@ export const cascadePluginState = (
     memo = {};
   }
   const kvs = getKVStateForPlugin(schemaMap, pluginName, stateMap);
-  const validRefs = kvs
-    .map((v) => v.key)
-    .filter((key) => {
-      if (/<.+>$/.test(key)) {
-        return true;
-      }
-      return false;
-    });
-  const validRefsWithoutArrays = validRefs.filter((key) => {
-    if (/\(id\)<[a-f0-9]+>/.test(key)) {
-      return false;
-    }
-    if (/<.+>$/.test(key)) {
-      return true;
-    }
-    return false;
-  });
-  const validRefSet = new Set(validRefs);
-  const validRefsWithoutArraysSet = new Set(validRefsWithoutArrays);
-  const next = [];
-  for (let { key, value } of kvs) {
+  const removedRefs = new Set();
+  let next = [];
+  for (const kv of kvs) {
+    const key = kv.key;
+    const value = {
+      ...kv.value,
+    };
     const subSchema = getSchemaAtPath(rootSchemaMap[pluginName], key);
-    for (let prop in subSchema) {
-      const refs = refSetFromKey(key);
-      const hasAllRefs = refs.reduce((hasRef: boolean, refPath: string) => {
-        if (!hasRef) {
-          return false;
+    const containsReferences = Object.keys(subSchema).reduce(
+      (hasARef, subSchemaKey) => {
+        if (hasARef) {
+          return true;
         }
-        return validRefSet.has(refPath);
-      }, true);
-      if (!hasAllRefs) {
-        continue;
-      }
-      if (subSchema[prop]?.isKey) {
-        if (!validRefsWithoutArraysSet.has(value[prop])) {
-          if (subSchema[prop]?.onDelete == "nullify") {
-            value[prop] = null;
-            next.push({
-              key,
-              value,
-            });
-            continue;
-          } else {
-            validRefSet.delete(value[prop]);
-            validRefsWithoutArraysSet.delete(value[prop]);
-            continue;
+        return subSchema[subSchemaKey]?.type == "ref";
+      },
+      false
+    );
+
+    let shouldDelete = false;
+    if (containsReferences) {
+      for (let prop in subSchema) {
+        if (subSchema[prop]?.type == "ref") {
+          const referencedObject = value[prop]
+            ? getObjectInStateMap(stateMap, value[prop])
+            : null;
+          if (!referencedObject) {
+            if (subSchema[prop]?.onDelete == "nullify") {
+              value[prop] = null;
+            } else {
+              shouldDelete = true;
+              break;
+            }
           }
         }
-        continue;
       }
-      next.push({ key, value });
     }
-    const newPluginState = generateStateFromKV(
-      schemaMap[pluginName],
-      next,
-      pluginName
+    const refs = refSetFromKey(key);
+    const containsRemovedRef = refs.reduce((containsRef, refKey) => {
+      if (containsRef) {
+        return true;
+      }
+      return removedRefs.has(refKey);
+    }, false);
+    if (!shouldDelete && !containsRemovedRef) {
+      next.push({
+        key,
+        value,
+      });
+    } else {
+      removedRefs.add(key);
+    }
+  }
+
+  const newPluginState = getStateFromKVForPlugin(schemaMap, next, pluginName);
+  const nextStateMap = { ...stateMap, [pluginName]: newPluginState };
+  if (next.length != kvs.length) {
+    return cascadePluginState(
+      schemaMap,
+      { ...stateMap, [pluginName]: newPluginState },
+      pluginName,
+      rootSchemaMap,
+      memo
     );
-    const nextStateMap = { ...stateMap, [pluginName]: newPluginState };
-    if (next.length != kvs.length) {
-      return cascadePluginState(
+  }
+  const downstreamDeps = getDownstreamDepsInSchemaMap(schemaMap, pluginName);
+  const result = downstreamDeps.reduce((stateMap, dependentPluginName) => {
+    if (memo[`${pluginName}:${dependentPluginName}`]) {
+      return {
+        ...stateMap,
+        ...memo[`${pluginName}:${dependentPluginName}`],
+      };
+    }
+    const result = {
+      ...stateMap,
+      ...cascadePluginState(
         schemaMap,
-        { ...stateMap, [pluginName]: newPluginState },
-        pluginName,
+        stateMap,
+        dependentPluginName,
         rootSchemaMap,
         memo
-      );
-    }
-    const downstreamDeps = getDownstreamDepsInSchemaMap(schemaMap, pluginName);
-    const result = downstreamDeps.reduce((stateMap, dependentPluginName) => {
-      if (memo[`${pluginName}:${dependentPluginName}`]) {
-        return {
-          ...stateMap,
-          ...memo[`${pluginName}:${dependentPluginName}`],
-        };
-      }
-      const result = {
-        ...stateMap,
-        ...cascadePluginState(
-          schemaMap,
-          stateMap,
-          dependentPluginName,
-          rootSchemaMap
-        ),
-      };
-      memo[`${pluginName}:${dependentPluginName}`] = result;
-      return result;
-    }, nextStateMap);
+      ),
+    };
+    memo[`${pluginName}:${dependentPluginName}`] = result;
     return result;
-  }
+  }, nextStateMap);
+  return result;
 };
 
 // validation

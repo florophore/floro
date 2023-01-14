@@ -1,11 +1,13 @@
 import { fs, vol } from "memfs";
 import { buildFloroFilestructure, userHome } from "../src/filestructure";
 import {
-  generateStateFromKV,
+  getStateFromKVForPlugin,
   getPluginManifest,
   getRootSchemaMap,
   getKVStateForPlugin,
   pluginManifestIsSubsetOfManifest,
+  cascadePluginState,
+  Manifest,
 } from "../src/plugins";
 import { makeSignedInUser } from "./helpers/fsmocks";
 import { createPlugin, SIMPLE_PLUGIN_MANIFEST } from "./helpers/pluginmocks";
@@ -135,8 +137,8 @@ describe("plugins", () => {
           },
         }
       );
-      const s1 = generateStateFromKV(
-        ARRAY_PLUGIN_MANIFEST,
+      const s1 = getStateFromKVForPlugin(
+        {[ARRAY_PLUGIN_MANIFEST.name]: ARRAY_PLUGIN_MANIFEST},
         kvs,
         ARRAY_PLUGIN_MANIFEST.name
       );
@@ -147,8 +149,8 @@ describe("plugins", () => {
           [ARRAY_PLUGIN_MANIFEST.name]: s1,
         }
       );
-      const s2 = generateStateFromKV(
-        ARRAY_PLUGIN_MANIFEST,
+      const s2 = getStateFromKVForPlugin(
+        {[ARRAY_PLUGIN_MANIFEST.name]: ARRAY_PLUGIN_MANIFEST},
         kv2,
         ARRAY_PLUGIN_MANIFEST.name
       );
@@ -236,8 +238,8 @@ describe("plugins", () => {
           },
         }
       );
-      const s1 = generateStateFromKV(
-        ARRAY_PLUGIN_MANIFEST,
+      const s1 = getStateFromKVForPlugin(
+        {[ARRAY_PLUGIN_MANIFEST.name]: ARRAY_PLUGIN_MANIFEST},
         kvs,
         ARRAY_PLUGIN_MANIFEST.name
       );
@@ -248,8 +250,8 @@ describe("plugins", () => {
           [ARRAY_PLUGIN_MANIFEST.name]: s1,
         }
       );
-      const s2 = generateStateFromKV(
-        ARRAY_PLUGIN_MANIFEST,
+      const s2 = getStateFromKVForPlugin(
+        {[ARRAY_PLUGIN_MANIFEST.name]: ARRAY_PLUGIN_MANIFEST},
         kv2,
         ARRAY_PLUGIN_MANIFEST.name
       );
@@ -746,7 +748,7 @@ describe("plugins", () => {
   });
 
   describe("cascading", () => {
-    test("throw away", () => {
+    test("cascades deletions down plugin chain", () => {
       const A_PLUGIN_MANIFEST = {
         version: "0.0.0",
         name: "a-plugin",
@@ -762,6 +764,148 @@ describe("plugins", () => {
             name: {
               type: "int",
               isKey: true,
+            },
+            selfRef: {
+              type: "ref<a-plugin.typeA>",
+            },
+          },
+        },
+        store: {
+          aObjects: {
+            type: "set",
+            values: "typeA",
+          },
+        },
+      };
+
+      const B_PLUGIN_MANIFEST = {
+        version: "0.0.0",
+        name: "b-plugin",
+        displayName: "Simple",
+        publisher: "@jamiesunderland",
+        icon: {
+          light: "./palette-plugin-icon.svg",
+          dark: "./palette-plugin-icon.svg",
+        },
+        imports: {
+          "a-plugin": "~0.0.0",
+        },
+        types: {
+          typeB: {
+            name: {
+              type: "string",
+              isKey: true,
+            },
+            a: {
+              type: "ref<a-plugin.typeA>",
+            },
+            innerValue: {
+              someValue: {
+                type: "int",
+              },
+            },
+          },
+        },
+        store: {
+          bObjects: {
+            type: "set",
+            values: "typeB",
+          },
+        },
+      };
+
+      const schemaMap = {
+        "a-plugin": A_PLUGIN_MANIFEST,
+        "b-plugin": B_PLUGIN_MANIFEST,
+      };
+
+      const stateMap = {
+        [A_PLUGIN_MANIFEST.name]: {
+          aObjects: [
+            {
+              name: 1,
+              selfRef: "$(a-plugin).aObjects.name<1>",
+            },
+            {
+              name: 3,
+              selfRef: "$(a-plugin).aObjects.name<2>",
+            },
+          ],
+        },
+        [B_PLUGIN_MANIFEST.name]: {
+          bObjects: [
+            {
+              name: "a",
+              a: "$(a-plugin).aObjects.name<1>",
+              innerValue: {
+                someValue: 5,
+              },
+            },
+            {
+              name: "b",
+              a: "$(a-plugin).aObjects.name<2>",
+              innerValue: {
+                someValue: 4,
+              },
+            },
+            {
+              name: "c",
+              a: "$(a-plugin).aObjects.name<3>",
+              innerValue: {
+                someValue: 5,
+              },
+            },
+          ],
+        },
+      };
+      const cascadedAState = cascadePluginState(
+        schemaMap,
+        stateMap,
+        A_PLUGIN_MANIFEST.name
+      );
+      expect(cascadedAState).toEqual({
+        "a-plugin": {
+          aObjects: [
+            {
+              name: 1,
+              selfRef: "$(a-plugin).aObjects.name<1>",
+            },
+          ],
+        },
+        "b-plugin": {
+          bObjects: [
+            {
+              name: "a",
+              a: "$(a-plugin).aObjects.name<1>",
+              innerValue: {
+                someValue: 5,
+              },
+            },
+          ],
+        },
+      });
+    });
+
+    test("respects nullify", () => {
+      const A_PLUGIN_MANIFEST = {
+        version: "0.0.0",
+        name: "a-plugin",
+        displayName: "A",
+        publisher: "@jamiesunderland",
+        icon: {
+          light: "./palette-plugin-icon.svg",
+          dark: "./palette-plugin-icon.svg",
+        },
+        imports: {},
+        types: {
+          typeA: {
+            name: {
+              type: "int",
+              isKey: true,
+            },
+            selfRef: {
+              type: "ref<a-plugin.typeA>",
+              onDelete: "nullify",
             },
           },
         },
@@ -794,7 +938,11 @@ describe("plugins", () => {
             a: {
               type: "ref<a-plugin.typeA>",
               onDelete: "nullify",
-              nullable: true,
+            },
+            innerValue: {
+              someValue: {
+                type: "int",
+              },
             },
           },
         },
@@ -806,19 +954,21 @@ describe("plugins", () => {
         },
       };
 
-      const schemaMap = {
-        "a-plugin": A_PLUGIN_MANIFEST,
-        "b-plugin": B_PLUGIN_MANIFEST,
+      const schemaMap: { [key: string]: Manifest} = {
+        "a-plugin": A_PLUGIN_MANIFEST as Manifest,
+        "b-plugin": B_PLUGIN_MANIFEST as Manifest,
       };
 
-      const akv = getKVStateForPlugin(schemaMap, A_PLUGIN_MANIFEST.name, {
+      const stateMap = {
         [A_PLUGIN_MANIFEST.name]: {
           aObjects: [
             {
               name: 1,
+              selfRef: "$(a-plugin).aObjects.name<1>",
             },
             {
-              name: 2,
+              name: 3,
+              selfRef: "$(a-plugin).aObjects.name<2>",
             },
           ],
         },
@@ -827,34 +977,67 @@ describe("plugins", () => {
             {
               name: "a",
               a: "$(a-plugin).aObjects.name<1>",
+              innerValue: {
+                someValue: 5,
+              },
             },
             {
               name: "b",
               a: "$(a-plugin).aObjects.name<2>",
+              innerValue: {
+                someValue: 4,
+              },
+            },
+            {
+              name: "c",
+              a: "$(a-plugin).aObjects.name<3>",
+              innerValue: {
+                someValue: 5,
+              },
             },
           ],
         },
-      });
-      const bkv = getKVStateForPlugin(schemaMap, B_PLUGIN_MANIFEST.name, {
-        [A_PLUGIN_MANIFEST.name]: {
+      };
+      const cascadedAState = cascadePluginState(
+        schemaMap,
+        stateMap,
+        A_PLUGIN_MANIFEST.name
+      );
+      expect(cascadedAState).toEqual({
+        "a-plugin": {
           aObjects: [
             {
               name: 1,
+              selfRef: "$(a-plugin).aObjects.name<1>",
             },
             {
-              name: 2,
+              name: 3,
+              selfRef: null,
             },
           ],
         },
-        [B_PLUGIN_MANIFEST.name]: {
+        "b-plugin": {
           bObjects: [
             {
               name: "a",
               a: "$(a-plugin).aObjects.name<1>",
+              innerValue: {
+                someValue: 5,
+              },
             },
             {
               name: "b",
-              a: "$(a-plugin).aObjects.name<2>",
+              a: null,
+              innerValue: {
+                someValue: 4,
+              },
+            },
+            {
+              name: "c",
+              a: "$(a-plugin).aObjects.name<3>",
+              innerValue: {
+                someValue: 5,
+              },
             },
           ],
         },
