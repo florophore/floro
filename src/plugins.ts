@@ -864,7 +864,7 @@ export const getRootSchemaMap = (schemaMap: {
   for (let pluginName in schemaMap) {
     rootSchemaMap[pluginName] = getRootSchemaForPlugin(schemaMap, pluginName);
   }
-  return fillInRefKeyType(rootSchemaMap);
+  return traverseSchemaMapForRefKeyTypes(rootSchemaMap, rootSchemaMap);
 };
 
 const getKeyType = (
@@ -933,10 +933,6 @@ const traverseSchemaMapForRefKeyTypes = (
     out[prop] = schemaMap[prop];
   }
   return out;
-};
-
-const fillInRefKeyType = (schemaMap: { [key: string]: TypeStruct }) => {
-  return traverseSchemaMapForRefKeyTypes(schemaMap, schemaMap);
 };
 
 export const getKVStateForPlugin = (
