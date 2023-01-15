@@ -8,6 +8,7 @@ import {
   pluginManifestIsSubsetOfManifest,
   cascadePluginState,
   Manifest,
+  sanitizeState,
 } from "../src/plugins";
 import { makeSignedInUser } from "./helpers/fsmocks";
 import { createPlugin, SIMPLE_PLUGIN_MANIFEST } from "./helpers/pluginmocks";
@@ -1044,4 +1045,8 @@ describe("plugins", () => {
       });
     });
   });
+
+  //describe('state validation', () => {
+
+  //});
 });

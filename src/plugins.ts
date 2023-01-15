@@ -153,7 +153,7 @@ export const getUpstreamDependencyList = async (
   return deps;
 };
 
-export const containsCyclicTypes = (
+const containsCyclicTypes = (
   schema: Manifest,
   struct: TypeStruct,
   visited = {}
@@ -362,6 +362,154 @@ const constructRootSchema = (
       );
       continue;
     }
+  }
+  return out;
+};
+
+export const defaultVoidedState = (
+  schemaMap: { [key: string]: Manifest },
+  stateMap: { [key: string]: unknown }
+) => {
+  const rootSchemaMap = getRootSchemaMap(schemaMap);
+  return Object.keys(rootSchemaMap).reduce((acc, pluginName) => {
+    const struct = rootSchemaMap[pluginName];
+    const state = stateMap?.[pluginName] ?? {};
+    return {
+      ...acc,
+      [pluginName]: roundDownIntsAndSanitizeFloatsInSchemaState(
+        struct,
+        defaultMissingSchemaState(struct, state, stateMap)
+      ),
+    };
+  }, []);
+};
+
+const defaultMissingSchemaState = (
+  struct: TypeStruct,
+  state: unknown,
+  stateMap: { [key: string]: unknown }
+) => {
+  let out = {};
+  for (let prop in struct) {
+    if (
+      (struct[prop]?.type == "set" || struct[prop]?.type == "array") &&
+      primitives.has(struct[prop].values as string)
+    ) {
+      out[prop] = state?.[prop] ?? [];
+      continue;
+    }
+    if (
+      (struct[prop]?.type == "set" || struct[prop]?.type == "array") &&
+      typeof struct[prop]?.values == "object"
+    ) {
+      out[prop] =
+        (state?.[prop] ?? [])?.map((value: unknown) => {
+          return defaultMissingSchemaState(
+            struct[prop]?.values as TypeStruct,
+            value,
+            stateMap
+          );
+        }) ?? [];
+      continue;
+    }
+    if (primitives.has(struct[prop]?.type as string)) {
+      out[prop] = state?.[prop] ?? null;
+      continue;
+    }
+
+    if (struct[prop]?.type == "ref") {
+      if (state?.[prop]) {
+        const referencedObject = getObjectInStateMap(stateMap, state?.[prop]);
+        if (!referencedObject) {
+          out[prop] = null;
+          continue;
+        }
+      }
+      out[prop] = state?.[prop] ?? null;
+      continue;
+    }
+    if (struct[prop]) {
+      out[prop] = defaultMissingSchemaState(
+        struct[prop] as TypeStruct,
+        state[prop] ?? {},
+        stateMap
+      );
+    }
+  }
+  return out;
+};
+
+const roundDownIntsAndSanitizeFloatsInSchemaState = (
+  struct: TypeStruct,
+  state: unknown
+) => {
+  let out = {};
+  for (let prop in struct) {
+    if (
+      (struct[prop]?.type == "set" || struct[prop]?.type == "array") &&
+      struct[prop].values == "int"
+    ) {
+      out[prop] = state?.[prop]
+        ?.map((v) => {
+          if (typeof v == "number" && !Number.isNaN(state[prop])) {
+            return Math.floor(v);
+          }
+          return null;
+        })
+        .filter((v) => v != null);
+      continue;
+    }
+    if (
+      (struct[prop]?.type == "set" || struct[prop]?.type == "array") &&
+      struct[prop].values == "float"
+    ) {
+      out[prop] = state?.[prop]
+        ?.map((v) => {
+          if (typeof v == "number" && !Number.isNaN(state[prop])) {
+            return v;
+          }
+          return null;
+        })
+        .filter((v) => v != null);
+      continue;
+    }
+    if (
+      (struct[prop]?.type == "set" || struct[prop]?.type == "array") &&
+      typeof struct[prop]?.values == "object"
+    ) {
+      out[prop] = (state?.[prop] ?? [])?.map((value: unknown) => {
+        return roundDownIntsAndSanitizeFloatsInSchemaState(
+          struct[prop]?.values as TypeStruct,
+          value
+        );
+      });
+      continue;
+    }
+    if (struct[prop]?.type == "int") {
+      if (typeof state[prop] == "number" && !Number.isNaN(state[prop])) {
+        out[prop] = Math.floor(state[prop]);
+        continue;
+      }
+      out[prop] = null;
+      continue;
+    }
+
+    if (struct[prop]?.type == "float") {
+      if (typeof state[prop] == "number" && !Number.isNaN(state[prop])) {
+        out[prop] = state[prop];
+        continue;
+      }
+      out[prop] = null;
+      continue;
+    }
+    if (!struct[prop]?.type) {
+      out[prop] = roundDownIntsAndSanitizeFloatsInSchemaState(
+        struct[prop] as TypeStruct,
+        state[prop] ?? {}
+      );
+      continue;
+    }
+    out[prop] = state[prop] ?? null;
   }
   return out;
 };
@@ -617,6 +765,7 @@ export const buildObjectsAtPath = (
   }
   return out;
 };
+
 const getSchemaAtPath = (
   rootSchema: Manifest | TypeStruct,
   path: string
@@ -938,9 +1087,10 @@ const traverseSchemaMapForRefKeyTypes = (
 export const getKVStateForPlugin = (
   schema: { [key: string]: Manifest },
   pluginName: string,
-  state: { [key: string]: unknown }
+  stateMap: { [key: string]: unknown }
 ): Array<DiffElement> => {
   const rootUpsteamSchema = getRootSchemaForPlugin(schema, pluginName);
+  const state = defaultVoidedState(schema, stateMap);
   return generateKVFromStateWithRootSchema(
     rootUpsteamSchema,
     pluginName,
@@ -1159,3 +1309,25 @@ export const cascadePluginState = (
 // validation
 // 1) check nullability
 // 2) check refs exist
+
+// clean up ints and sets
+export const sanitizeState = (
+  schemaMap: { [key: string]: Manifest },
+  stateMap: { [key: string]: unknown },
+  pluginName: string
+) => {
+  const rootSchemaMap = getRootSchemaMap(schemaMap);
+  const kvs = getKVStateForPlugin(schemaMap, pluginName, stateMap);
+
+  for (const kv of kvs) {
+    const subSchema = getSchemaAtPath(rootSchemaMap[pluginName], kv.key);
+    console.log("SUB", JSON.stringify(subSchema, null, 2));
+    const value = {
+      ...kv.value,
+    };
+    // get relevant fields from subSchema
+    // just means type
+    for (let prop in subSchema) {
+    }
+  }
+};
