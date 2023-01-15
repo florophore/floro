@@ -19,6 +19,7 @@ export interface ManifestNode {
   refKeyType?: string;
   refType?: string;
   nullable?: boolean;
+  emptyable?: boolean;
   onDelete?: "delete" | "nullify";
 }
 
@@ -215,6 +216,7 @@ const constructRootSchema = (
         primitives.has(struct[prop]?.values as string)
       ) {
         out[prop].type = struct[prop].type;
+        out[prop].emptyable = struct[prop]?.emptyable ?? true;
         out[prop].values = struct[prop].values;
         continue;
       }
@@ -224,6 +226,7 @@ const constructRootSchema = (
         schema.types[struct[prop]?.values as string]
       ) {
         out[prop].type = struct[prop].type;
+        out[prop].emptyable = struct[prop]?.emptyable ?? true;
         out[prop].values = constructRootSchema(
           schema,
           schema.types[struct[prop]?.values as string] as TypeStruct,
@@ -233,6 +236,7 @@ const constructRootSchema = (
       }
       if (typeof struct[prop]?.values != "string") {
         out[prop].type = struct[prop].type;
+        out[prop].emptyable = struct[prop]?.emptyable ?? true;
         out[prop].values = constructRootSchema(
           schema,
           (struct[prop]?.values ?? {}) as TypeStruct,
@@ -247,6 +251,7 @@ const constructRootSchema = (
         primitives.has(struct[prop]?.values as string)
       ) {
         out[prop].type = struct[prop].type;
+        out[prop].emptyable = struct[prop]?.emptyable ?? true;
         out[prop].values = struct[prop].values;
         continue;
       }
@@ -256,6 +261,7 @@ const constructRootSchema = (
         schema.types[struct[prop]?.values as string]
       ) {
         out[prop].type = struct[prop].type;
+        out[prop].emptyable = struct[prop]?.emptyable ?? true;
         out[prop].values = constructRootSchema(
           schema,
           {
@@ -272,6 +278,7 @@ const constructRootSchema = (
 
       if (typeof struct[prop]?.values != "string") {
         out[prop].type = struct[prop].type;
+        out[prop].emptyable = struct[prop]?.emptyable ?? true;
         out[prop].values = constructRootSchema(
           schema,
           {
@@ -945,6 +952,7 @@ const iterateSchemaTypes = (
     out[prop] = {};
     if (types[prop]?.type === "set" || types[prop]?.type === "array") {
       out[prop].type = types[prop]?.type;
+      out[prop].emptyable = types[prop]?.emptyable ?? true;
       if (
         typeof types[prop].values == "string" &&
         primitives.has(types[prop].values as string)
@@ -1336,6 +1344,15 @@ export const validatePluginState = (
   for (const { key, value } of kvs) {
     const subSchema = getSchemaAtPath(rootSchemaMap[pluginName], key);
     for (let prop in subSchema) {
+      if (subSchema[prop]?.type == "array" || subSchema[prop]?.type == "set") {
+        if (!subSchema[prop]?.emptyable) {
+          const referencedObject = getObjectInStateMap(stateMap, key);
+          if ((referencedObject?.[prop]?.length ?? 0) == 0) {
+            return false;
+          }
+        }
+        continue;
+      }
       if (
         subSchema[prop]?.type &&
         (!subSchema[prop]?.nullable || subSchema[prop]?.isKey) &&
@@ -1464,19 +1481,33 @@ export const isTopologicalSubsetValid = (
   // be invalid in the new version but dont exist in the old version
   const oldRootSchemaMap = getRootSchemaMap(oldSchemaMap);
   // ignore $(store)
-  const [,...oldKVs] = getKVStateForPlugin(oldSchemaMap, pluginName, oldStateMap).map(
-    ({ key }) => key
-  );
+  const [, ...oldKVs] = getKVStateForPlugin(
+    oldSchemaMap,
+    pluginName,
+    oldStateMap
+  ).map(({ key }) => key);
   const oldKVsSet = new Set(oldKVs);
   // ignore $(store)
-  const [,...newKVs] = getKVStateForPlugin(
+  const [, ...newKVs] = getKVStateForPlugin(
     newSchemaMap,
     pluginName,
     newStateMap
   ).filter(({ key }) => oldKVsSet.has(key));
+  // we can check against newKV since isTopologicalSubset check ensures the key
+  // intersection already exists. Here we just have to ensure the new values are
+  // compatible against the old schema
   for (const { key, value } of newKVs) {
     const subSchema = getSchemaAtPath(oldRootSchemaMap[pluginName], key);
     for (let prop in subSchema) {
+      if (subSchema[prop]?.type == "array" || subSchema[prop]?.type == "set") {
+        if (!subSchema[prop]?.emptyable) {
+          const referencedObject = getObjectInStateMap(newStateMap, key);
+          if ((referencedObject?.[prop]?.length ?? 0) == 0) {
+            return false;
+          }
+        }
+        continue;
+      }
       if (
         subSchema[prop]?.type &&
         (!subSchema[prop]?.nullable || subSchema[prop]?.isKey) &&

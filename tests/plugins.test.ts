@@ -1,4 +1,3 @@
-import NumberPrompt from "inquirer/lib/prompts/number";
 import { fs, vol } from "memfs";
 import { buildFloroFilestructure, userHome } from "../src/filestructure";
 import {
@@ -10,7 +9,7 @@ import {
   cascadePluginState,
   Manifest,
   validatePluginState,
-  isTopologicalSubsetValid
+  isTopologicalSubsetValid,
 } from "../src/plugins";
 import { makeSignedInUser } from "./helpers/fsmocks";
 import { createPlugin, SIMPLE_PLUGIN_MANIFEST } from "./helpers/pluginmocks";
@@ -141,7 +140,7 @@ describe("plugins", () => {
         }
       );
       const s1 = getStateFromKVForPlugin(
-        {[ARRAY_PLUGIN_MANIFEST.name]: ARRAY_PLUGIN_MANIFEST},
+        { [ARRAY_PLUGIN_MANIFEST.name]: ARRAY_PLUGIN_MANIFEST },
         kvs,
         ARRAY_PLUGIN_MANIFEST.name
       );
@@ -153,7 +152,7 @@ describe("plugins", () => {
         }
       );
       const s2 = getStateFromKVForPlugin(
-        {[ARRAY_PLUGIN_MANIFEST.name]: ARRAY_PLUGIN_MANIFEST},
+        { [ARRAY_PLUGIN_MANIFEST.name]: ARRAY_PLUGIN_MANIFEST },
         kv2,
         ARRAY_PLUGIN_MANIFEST.name
       );
@@ -242,7 +241,7 @@ describe("plugins", () => {
         }
       );
       const s1 = getStateFromKVForPlugin(
-        {[ARRAY_PLUGIN_MANIFEST.name]: ARRAY_PLUGIN_MANIFEST},
+        { [ARRAY_PLUGIN_MANIFEST.name]: ARRAY_PLUGIN_MANIFEST },
         kvs,
         ARRAY_PLUGIN_MANIFEST.name
       );
@@ -254,7 +253,7 @@ describe("plugins", () => {
         }
       );
       const s2 = getStateFromKVForPlugin(
-        {[ARRAY_PLUGIN_MANIFEST.name]: ARRAY_PLUGIN_MANIFEST},
+        { [ARRAY_PLUGIN_MANIFEST.name]: ARRAY_PLUGIN_MANIFEST },
         kv2,
         ARRAY_PLUGIN_MANIFEST.name
       );
@@ -400,6 +399,7 @@ describe("plugins", () => {
         "a-plugin": {
           aObjects: {
             type: "set",
+            emptyable: true,
             values: {
               name: {
                 type: "int",
@@ -411,6 +411,7 @@ describe("plugins", () => {
         "b-plugin": {
           bObjects: {
             type: "set",
+            emptyable: true,
             values: {
               name: {
                 type: "string",
@@ -425,6 +426,7 @@ describe("plugins", () => {
               },
               nestedSet: {
                 type: "set",
+                emptyable: true,
                 values: {
                   mainKey: {
                     type: "float",
@@ -438,6 +440,7 @@ describe("plugins", () => {
         "c-plugin": {
           cObjects: {
             type: "set",
+            emptyable: true,
             values: {
               name: {
                 type: "string",
@@ -957,7 +960,7 @@ describe("plugins", () => {
         },
       };
 
-      const schemaMap: { [key: string]: Manifest} = {
+      const schemaMap: { [key: string]: Manifest } = {
         "a-plugin": A_PLUGIN_MANIFEST as Manifest,
         "b-plugin": B_PLUGIN_MANIFEST as Manifest,
       };
@@ -1048,9 +1051,8 @@ describe("plugins", () => {
     });
   });
 
-  describe('state validation', () => {
-
-    test('returns true when state is valid', () => {
+  describe("state validation", () => {
+    test("returns true when state is valid", () => {
       const A_PLUGIN_MANIFEST = {
         version: "0.0.0",
         name: "a-plugin",
@@ -1069,16 +1071,16 @@ describe("plugins", () => {
             },
             nullableProp: {
               type: "int",
-              nullable: true
+              nullable: true,
             },
             nonNullableProp: {
               type: "int",
-              nullable: false
+              nullable: false,
             },
             list: {
               type: "array",
-              values: "string"
-            }
+              values: "string",
+            },
           },
         },
         store: {
@@ -1089,7 +1091,7 @@ describe("plugins", () => {
         },
       };
 
-      const schemaMap: { [key: string]: Manifest} = {
+      const schemaMap: { [key: string]: Manifest } = {
         "a-plugin": A_PLUGIN_MANIFEST as Manifest,
       };
       const validStateMap = {
@@ -1097,17 +1099,21 @@ describe("plugins", () => {
           aObjects: [
             {
               name: "test",
-              nonNullableProp: 5
+              nonNullableProp: 5,
             },
           ],
         },
       };
 
-      const validState = validatePluginState(schemaMap, validStateMap, A_PLUGIN_MANIFEST.name);
+      const validState = validatePluginState(
+        schemaMap,
+        validStateMap,
+        A_PLUGIN_MANIFEST.name
+      );
       expect(validState).toEqual(true);
     });
 
-    test('returns false when state is invalid', () => {
+    test("returns false when state is invalid", () => {
       const A_PLUGIN_MANIFEST = {
         version: "0.0.0",
         name: "a-plugin",
@@ -1126,16 +1132,16 @@ describe("plugins", () => {
             },
             nullableProp: {
               type: "int",
-              nullable: true
+              nullable: true,
             },
             nonNullableProp: {
               type: "int",
-              nullable: false
+              nullable: false,
             },
             list: {
               type: "array",
-              values: "string"
-            }
+              values: "string",
+            },
           },
         },
         store: {
@@ -1146,7 +1152,7 @@ describe("plugins", () => {
         },
       };
 
-      const schemaMap: { [key: string]: Manifest} = {
+      const schemaMap: { [key: string]: Manifest } = {
         "a-plugin": A_PLUGIN_MANIFEST as Manifest,
       };
 
@@ -1155,19 +1161,144 @@ describe("plugins", () => {
           aObjects: [
             {
               name: "test",
-              nullableProp: 2
+              nullableProp: 2,
             },
           ],
         },
       };
 
-      const invalidState = validatePluginState(schemaMap, invalidStateMap, A_PLUGIN_MANIFEST.name);
+      const invalidState = validatePluginState(
+        schemaMap,
+        invalidStateMap,
+        A_PLUGIN_MANIFEST.name
+      );
+      expect(invalidState).toEqual(false);
+    });
+
+    test("returns true when empty array is emptyable", () => {
+      const A_PLUGIN_MANIFEST = {
+        version: "0.0.0",
+        name: "a-plugin",
+        displayName: "A",
+        publisher: "@jamiesunderland",
+        icon: {
+          light: "./palette-plugin-icon.svg",
+          dark: "./palette-plugin-icon.svg",
+        },
+        imports: {},
+        types: {
+          typeA: {
+            name: {
+              type: "string",
+              isKey: true,
+            },
+            list: {
+              type: "array",
+              values: {
+                name: {
+                  type: "string",
+                },
+              },
+              emptyable: false,
+            },
+          },
+        },
+        store: {
+          aObjects: {
+            type: "set",
+            values: "typeA",
+          },
+        },
+      };
+
+      const schemaMap: { [key: string]: Manifest } = {
+        "a-plugin": A_PLUGIN_MANIFEST as Manifest,
+      };
+
+      const validStateMap = {
+        [A_PLUGIN_MANIFEST.name]: {
+          aObjects: [
+            {
+              name: "test",
+              list: [
+                {
+                  name: "something",
+                },
+              ],
+            },
+          ],
+        },
+      };
+
+      const validState = validatePluginState(
+        schemaMap,
+        validStateMap,
+        A_PLUGIN_MANIFEST.name
+      );
+      expect(validState).toEqual(true);
+    });
+
+    test("returns false when empty array is not emptyable", () => {
+      const A_PLUGIN_MANIFEST = {
+        version: "0.0.0",
+        name: "a-plugin",
+        displayName: "A",
+        publisher: "@jamiesunderland",
+        icon: {
+          light: "./palette-plugin-icon.svg",
+          dark: "./palette-plugin-icon.svg",
+        },
+        imports: {},
+        types: {
+          typeA: {
+            name: {
+              type: "string",
+              isKey: true,
+            },
+            list: {
+              type: "array",
+              values: {
+                name: {
+                  type: "string",
+                },
+              },
+              emptyable: false,
+            },
+          },
+        },
+        store: {
+          aObjects: {
+            type: "set",
+            values: "typeA",
+          },
+        },
+      };
+
+      const schemaMap: { [key: string]: Manifest } = {
+        "a-plugin": A_PLUGIN_MANIFEST as Manifest,
+      };
+
+      const invalidStateMap = {
+        [A_PLUGIN_MANIFEST.name]: {
+          aObjects: [
+            {
+              name: "test",
+              list: [],
+            },
+          ],
+        },
+      };
+
+      const invalidState = validatePluginState(
+        schemaMap,
+        invalidStateMap,
+        A_PLUGIN_MANIFEST.name
+      );
       expect(invalidState).toEqual(false);
     });
   });
 
-  describe('topological subset', () => {
-
+  describe("topological subset", () => {
     test("returns true when is not a valid subset", () => {
       const BEFORE_PLUGIN_MANIFEST = {
         version: "0.0.0",
@@ -1198,7 +1329,7 @@ describe("plugins", () => {
         },
       };
 
-      const beforeSchemaMap: { [key: string]: Manifest} = {
+      const beforeSchemaMap: { [key: string]: Manifest } = {
         "a-plugin": BEFORE_PLUGIN_MANIFEST as Manifest,
       };
       const beforeStateMap = {
@@ -1206,11 +1337,11 @@ describe("plugins", () => {
           aObjects: [
             {
               name: "a",
-              someProp: 1
+              someProp: 1,
             },
             {
               name: "b",
-              someProp: 2
+              someProp: 2,
             },
           ],
         },
@@ -1248,7 +1379,7 @@ describe("plugins", () => {
         },
       };
 
-      const afterSchemaMap: { [key: string]: Manifest} = {
+      const afterSchemaMap: { [key: string]: Manifest } = {
         "a-plugin": AFTER_PLUGIN_MANIFEST as Manifest,
       };
       const afterStateMap = {
@@ -1257,17 +1388,17 @@ describe("plugins", () => {
             {
               name: "a",
               someProp: 15,
-              newProp: 0.5
+              newProp: 0.5,
             },
             {
               name: "b",
               someProp: 20,
-              newProp: 1.5
+              newProp: 1.5,
             },
             {
               name: "c",
               someProp: 3,
-              newProp: 2.5
+              newProp: 2.5,
             },
           ],
         },
@@ -1312,7 +1443,7 @@ describe("plugins", () => {
         },
       };
 
-      const beforeSchemaMap: { [key: string]: Manifest} = {
+      const beforeSchemaMap: { [key: string]: Manifest } = {
         "a-plugin": BEFORE_PLUGIN_MANIFEST as Manifest,
       };
       const beforeStateMap = {
@@ -1320,11 +1451,11 @@ describe("plugins", () => {
           aObjects: [
             {
               name: "a",
-              someProp: 1
+              someProp: 1,
             },
             {
               name: "b",
-              someProp: 2
+              someProp: 2,
             },
           ],
         },
@@ -1362,7 +1493,7 @@ describe("plugins", () => {
         },
       };
 
-      const afterSchemaMap: { [key: string]: Manifest} = {
+      const afterSchemaMap: { [key: string]: Manifest } = {
         "a-plugin": AFTER_PLUGIN_MANIFEST as Manifest,
       };
       const afterStateMap = {
@@ -1371,12 +1502,12 @@ describe("plugins", () => {
             {
               name: "a",
               someProp: 15,
-              newProp: 0.5
+              newProp: 0.5,
             },
             {
               name: "c",
               someProp: 3,
-              newProp: 2.5
+              newProp: 2.5,
             },
           ],
         },
@@ -1407,7 +1538,7 @@ describe("plugins", () => {
             },
             someProp: {
               type: "int",
-              nullable: true
+              nullable: true,
             },
             newProp: {
               type: "float",
@@ -1422,7 +1553,7 @@ describe("plugins", () => {
         },
       };
 
-      const bAfterSchemaMap: { [key: string]: Manifest} = {
+      const bAfterSchemaMap: { [key: string]: Manifest } = {
         "a-plugin": B_AFTER_PLUGIN_MANIFEST as Manifest,
       };
       const bAfterStateMap = {
@@ -1431,21 +1562,27 @@ describe("plugins", () => {
             {
               name: "a",
               someProp: 15,
-              newProp: 0.5
+              newProp: 0.5,
             },
             {
               name: "b",
-              newProp: 0.5
+              newProp: 0.5,
             },
             {
               name: "c",
               someProp: 3,
-              newProp: 2.5
+              newProp: 2.5,
             },
           ],
         },
       };
-      expect(validatePluginState(bAfterSchemaMap, bAfterStateMap, BEFORE_PLUGIN_MANIFEST.name)).toBe(true);
+      expect(
+        validatePluginState(
+          bAfterSchemaMap,
+          bAfterStateMap,
+          BEFORE_PLUGIN_MANIFEST.name
+        )
+      ).toBe(true);
       const bIsTopSubset = isTopologicalSubsetValid(
         beforeSchemaMap,
         beforeStateMap,
@@ -1454,7 +1591,6 @@ describe("plugins", () => {
         BEFORE_PLUGIN_MANIFEST.name
       );
       expect(bIsTopSubset).toEqual(false);
-
     });
   });
 });
