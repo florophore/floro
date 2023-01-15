@@ -375,7 +375,7 @@ const constructRootSchema = (
 
 export const defaultVoidedState = (
   schemaMap: { [key: string]: Manifest },
-  stateMap: { [key: string]: unknown }
+  stateMap: { [key: string]: object }
 ) => {
   const rootSchemaMap = getRootSchemaMap(schemaMap);
   return Object.keys(rootSchemaMap).reduce((acc, pluginName) => {
@@ -393,8 +393,8 @@ export const defaultVoidedState = (
 
 const defaultMissingSchemaState = (
   struct: TypeStruct,
-  state: unknown,
-  stateMap: { [key: string]: unknown }
+  state: object,
+  stateMap: { [key: string]: object }
 ) => {
   let out = {};
   for (let prop in struct) {
@@ -410,10 +410,10 @@ const defaultMissingSchemaState = (
       typeof struct[prop]?.values == "object"
     ) {
       out[prop] =
-        (state?.[prop] ?? [])?.map((value: unknown) => {
+        (state?.[prop] ?? [])?.map((value: object) => {
           return defaultMissingSchemaState(
             struct[prop]?.values as TypeStruct,
-            value,
+            value as object,
             stateMap
           );
         }) ?? [];
@@ -460,7 +460,7 @@ const enforcePrimitiveSet = (
   return out;
 };
 
-const sanitizePrimitivesWithSchema = (struct: TypeStruct, state: unknown) => {
+const sanitizePrimitivesWithSchema = (struct: TypeStruct, state: object) => {
   let out = {};
   for (let prop in struct) {
     if (
@@ -538,10 +538,10 @@ const sanitizePrimitivesWithSchema = (struct: TypeStruct, state: unknown) => {
       (struct[prop]?.type == "set" || struct[prop]?.type == "array") &&
       typeof struct[prop]?.values == "object"
     ) {
-      out[prop] = (state?.[prop] ?? [])?.map((value: unknown) => {
+      out[prop] = (state?.[prop] ?? [])?.map((value: object) => {
         return sanitizePrimitivesWithSchema(
           struct[prop]?.values as TypeStruct,
-          value
+          value 
         );
       });
       continue;
@@ -622,7 +622,7 @@ export const decodeSchemaPath = (
   });
 };
 
-export const getStateId = (schema: TypeStruct, state: unknown) => {
+export const getStateId = (schema: TypeStruct, state: object) => {
   let hashPairs = [];
   for (let prop in schema) {
     if (!schema[prop].type) {
@@ -669,7 +669,7 @@ export const getStateId = (schema: TypeStruct, state: unknown) => {
 
 export const flattenStateToSchemaPathKV = (
   schemaRoot: Manifest,
-  state: unknown,
+  state: object,
   traversalPath: Array<string>
 ): Array<DiffElement> => {
   const kv = [];
@@ -800,7 +800,7 @@ export const buildObjectsAtPath = (
   path: string,
   properties: { [key: string]: number | string | boolean },
   out = {}
-): unknown => {
+): object => {
   // ignore $(store)
   const [, ...decodedPath] = decodeSchemaPath(path);
   let current = out;
@@ -871,9 +871,9 @@ const getSchemaAtPath = (
 };
 
 const getObjectInStateMap = (
-  stateMap: { [pluginName: string]: unknown },
+  stateMap: { [pluginName: string]: object },
   path: string
-): unknown | null => {
+): object | null => {
   let current = null;
   const [pluginWrapper, ...decodedPath] = decodeSchemaPath(path);
   const pluginName = /^\$\((.+)\)$/.exec(pluginWrapper as string)?.[1] ?? null;
@@ -931,7 +931,7 @@ const cleanArrayIDsFromState = (state: object) => {
 const generateKVFromStateWithRootSchema = (
   rootSchema: TypeStruct,
   pluginName: string,
-  state: unknown
+  state: object
 ): Array<DiffElement> => {
   return flattenStateToSchemaPathKV(rootSchema as unknown as Manifest, state, [
     `$(${pluginName})`,
@@ -946,7 +946,7 @@ const generateKVFromStateWithRootSchema = (
 const iterateSchemaTypes = (
   types: Manifest["types"],
   pluginName: string
-): unknown => {
+): object => {
   let out = {};
   for (const prop in types) {
     out[prop] = {};
@@ -1053,7 +1053,7 @@ export const getStateFromKVForPlugin = (
   schemaMap: { [key: string]: Manifest },
   kv: Array<DiffElement>,
   pluginName: string
-) => {
+): object => {
   const rootSchema = getRootSchemaForPlugin(schemaMap, pluginName);
   const kvArray = indexArrayDuplicates(kv);
   let out = {};
@@ -1134,7 +1134,7 @@ const getKeyType = (
 const traverseSchemaMapForRefKeyTypes = (
   schemaMap: { [key: string]: TypeStruct | ManifestNode },
   rootSchemaMap: { [key: string]: TypeStruct }
-) => {
+): { [key: string]: TypeStruct } => {
   let out = {};
   for (let prop in schemaMap) {
     if (
@@ -1168,7 +1168,7 @@ const traverseSchemaMapForRefKeyTypes = (
 export const getKVStateForPlugin = (
   schema: { [key: string]: Manifest },
   pluginName: string,
-  stateMap: { [key: string]: unknown }
+  stateMap: { [key: string]: object }
 ): Array<DiffElement> => {
   const rootUpsteamSchema = getRootSchemaForPlugin(schema, pluginName);
   const state = defaultVoidedState(schema, stateMap);
@@ -1231,13 +1231,17 @@ const refSetFromKey = (key: string): Array<string> => {
   return out;
 };
 
+/***
+ * cascading is heavy but infrequent. It only needs to be
+ * called when updating state. Not called when applying diffs
+ */
 export const cascadePluginState = (
   schemaMap: { [key: string]: Manifest },
-  stateMap: { [key: string]: unknown },
+  stateMap: { [key: string]: object },
   pluginName: string,
   rootSchemaMap?: { [key: string]: TypeStruct },
-  memo?: { [key: string]: { [key: string]: unknown } }
-): { [key: string]: unknown } => {
+  memo?: { [key: string]: { [key: string]: object } }
+): { [key: string]: object } => {
   if (!rootSchemaMap) {
     rootSchemaMap = getRootSchemaMap(schemaMap);
   }
@@ -1297,7 +1301,6 @@ export const cascadePluginState = (
       removedRefs.add(key);
     }
   }
-
   const newPluginState = getStateFromKVForPlugin(schemaMap, next, pluginName);
   const nextStateMap = { ...stateMap, [pluginName]: newPluginState };
   if (next.length != kvs.length) {
@@ -1335,7 +1338,7 @@ export const cascadePluginState = (
 
 export const validatePluginState = (
   schemaMap: { [key: string]: Manifest },
-  stateMap: { [key: string]: unknown },
+  stateMap: { [key: string]: object },
   pluginName: string
 ): boolean => {
   const rootSchemaMap = getRootSchemaMap(schemaMap);
@@ -1420,11 +1423,11 @@ export const pluginManifestIsSubsetOfManifest = (
 
 export const isTopologicalSubset = (
   oldSchemaMap: { [key: string]: Manifest },
-  oldStateMap: { [key: string]: unknown },
+  oldStateMap: { [key: string]: object },
   newSchemaMap: { [key: string]: Manifest },
-  newStateMap: { [key: string]: unknown },
+  newStateMap: { [key: string]: object },
   pluginName: string
-) => {
+): boolean => {
   if (!oldSchemaMap[pluginName] && !newSchemaMap[pluginName]) {
     return true;
   }
@@ -1460,11 +1463,11 @@ export const isTopologicalSubset = (
 
 export const isTopologicalSubsetValid = (
   oldSchemaMap: { [key: string]: Manifest },
-  oldStateMap: { [key: string]: unknown },
+  oldStateMap: { [key: string]: object },
   newSchemaMap: { [key: string]: Manifest },
-  newStateMap: { [key: string]: unknown },
+  newStateMap: { [key: string]: object },
   pluginName: string
-) => {
+): boolean => {
   if (
     !isTopologicalSubset(
       oldSchemaMap,
