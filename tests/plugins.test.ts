@@ -1,3 +1,4 @@
+import NumberPrompt from "inquirer/lib/prompts/number";
 import { fs, vol } from "memfs";
 import { buildFloroFilestructure, userHome } from "../src/filestructure";
 import {
@@ -8,7 +9,8 @@ import {
   pluginManifestIsSubsetOfManifest,
   cascadePluginState,
   Manifest,
-  validatePluginState
+  validatePluginState,
+  isTopologicalSubsetValid
 } from "../src/plugins";
 import { makeSignedInUser } from "./helpers/fsmocks";
 import { createPlugin, SIMPLE_PLUGIN_MANIFEST } from "./helpers/pluginmocks";
@@ -1166,12 +1168,292 @@ describe("plugins", () => {
 
   describe('topological subset', () => {
 
-    test("returns true when is a subset", () => {
-      console.log("FILL IN")
+    test("returns true when is not a valid subset", () => {
+      const BEFORE_PLUGIN_MANIFEST = {
+        version: "0.0.0",
+        name: "a-plugin",
+        displayName: "A",
+        publisher: "@jamiesunderland",
+        icon: {
+          light: "./palette-plugin-icon.svg",
+          dark: "./palette-plugin-icon.svg",
+        },
+        imports: {},
+        types: {
+          typeA: {
+            name: {
+              type: "string",
+              isKey: true,
+            },
+            someProp: {
+              type: "int",
+            },
+          },
+        },
+        store: {
+          aObjects: {
+            type: "set",
+            values: "typeA",
+          },
+        },
+      };
+
+      const beforeSchemaMap: { [key: string]: Manifest} = {
+        "a-plugin": BEFORE_PLUGIN_MANIFEST as Manifest,
+      };
+      const beforeStateMap = {
+        [BEFORE_PLUGIN_MANIFEST.name]: {
+          aObjects: [
+            {
+              name: "a",
+              someProp: 1
+            },
+            {
+              name: "b",
+              someProp: 2
+            },
+          ],
+        },
+      };
+
+      const AFTER_PLUGIN_MANIFEST = {
+        version: "0.0.0",
+        name: "a-plugin",
+        displayName: "A",
+        publisher: "@jamiesunderland",
+        icon: {
+          light: "./palette-plugin-icon.svg",
+          dark: "./palette-plugin-icon.svg",
+        },
+        imports: {},
+        types: {
+          typeA: {
+            name: {
+              type: "string",
+              isKey: true,
+            },
+            someProp: {
+              type: "int",
+            },
+            newProp: {
+              type: "float",
+            },
+          },
+        },
+        store: {
+          aObjects: {
+            type: "set",
+            values: "typeA",
+          },
+        },
+      };
+
+      const afterSchemaMap: { [key: string]: Manifest} = {
+        "a-plugin": AFTER_PLUGIN_MANIFEST as Manifest,
+      };
+      const afterStateMap = {
+        [AFTER_PLUGIN_MANIFEST.name]: {
+          aObjects: [
+            {
+              name: "a",
+              someProp: 15,
+              newProp: 0.5
+            },
+            {
+              name: "b",
+              someProp: 20,
+              newProp: 1.5
+            },
+            {
+              name: "c",
+              someProp: 3,
+              newProp: 2.5
+            },
+          ],
+        },
+      };
+      const isTopSubset = isTopologicalSubsetValid(
+        beforeSchemaMap,
+        beforeStateMap,
+        afterSchemaMap,
+        afterStateMap,
+        BEFORE_PLUGIN_MANIFEST.name
+      );
+      expect(isTopSubset).toEqual(true);
     });
 
-    test("returns false when is not a subset", () => {
-      console.log("FILL IN")
+    test("returns false when is NOT a valid subset", () => {
+      const BEFORE_PLUGIN_MANIFEST = {
+        version: "0.0.0",
+        name: "a-plugin",
+        displayName: "A",
+        publisher: "@jamiesunderland",
+        icon: {
+          light: "./palette-plugin-icon.svg",
+          dark: "./palette-plugin-icon.svg",
+        },
+        imports: {},
+        types: {
+          typeA: {
+            name: {
+              type: "string",
+              isKey: true,
+            },
+            someProp: {
+              type: "int",
+            },
+          },
+        },
+        store: {
+          aObjects: {
+            type: "set",
+            values: "typeA",
+          },
+        },
+      };
+
+      const beforeSchemaMap: { [key: string]: Manifest} = {
+        "a-plugin": BEFORE_PLUGIN_MANIFEST as Manifest,
+      };
+      const beforeStateMap = {
+        [BEFORE_PLUGIN_MANIFEST.name]: {
+          aObjects: [
+            {
+              name: "a",
+              someProp: 1
+            },
+            {
+              name: "b",
+              someProp: 2
+            },
+          ],
+        },
+      };
+
+      const AFTER_PLUGIN_MANIFEST = {
+        version: "0.0.0",
+        name: "a-plugin",
+        displayName: "A",
+        publisher: "@jamiesunderland",
+        icon: {
+          light: "./palette-plugin-icon.svg",
+          dark: "./palette-plugin-icon.svg",
+        },
+        imports: {},
+        types: {
+          typeA: {
+            name: {
+              type: "string",
+              isKey: true,
+            },
+            someProp: {
+              type: "int",
+            },
+            newProp: {
+              type: "float",
+            },
+          },
+        },
+        store: {
+          aObjects: {
+            type: "set",
+            values: "typeA",
+          },
+        },
+      };
+
+      const afterSchemaMap: { [key: string]: Manifest} = {
+        "a-plugin": AFTER_PLUGIN_MANIFEST as Manifest,
+      };
+      const afterStateMap = {
+        [AFTER_PLUGIN_MANIFEST.name]: {
+          aObjects: [
+            {
+              name: "a",
+              someProp: 15,
+              newProp: 0.5
+            },
+            {
+              name: "c",
+              someProp: 3,
+              newProp: 2.5
+            },
+          ],
+        },
+      };
+      const isTopSubset = isTopologicalSubsetValid(
+        beforeSchemaMap,
+        beforeStateMap,
+        afterSchemaMap,
+        afterStateMap,
+        BEFORE_PLUGIN_MANIFEST.name
+      );
+      expect(isTopSubset).toEqual(false);
+      const B_AFTER_PLUGIN_MANIFEST = {
+        version: "0.0.0",
+        name: "a-plugin",
+        displayName: "A",
+        publisher: "@jamiesunderland",
+        icon: {
+          light: "./palette-plugin-icon.svg",
+          dark: "./palette-plugin-icon.svg",
+        },
+        imports: {},
+        types: {
+          typeA: {
+            name: {
+              type: "string",
+              isKey: true,
+            },
+            someProp: {
+              type: "int",
+              nullable: true
+            },
+            newProp: {
+              type: "float",
+            },
+          },
+        },
+        store: {
+          aObjects: {
+            type: "set",
+            values: "typeA",
+          },
+        },
+      };
+
+      const bAfterSchemaMap: { [key: string]: Manifest} = {
+        "a-plugin": B_AFTER_PLUGIN_MANIFEST as Manifest,
+      };
+      const bAfterStateMap = {
+        [AFTER_PLUGIN_MANIFEST.name]: {
+          aObjects: [
+            {
+              name: "a",
+              someProp: 15,
+              newProp: 0.5
+            },
+            {
+              name: "b",
+              newProp: 0.5
+            },
+            {
+              name: "c",
+              someProp: 3,
+              newProp: 2.5
+            },
+          ],
+        },
+      };
+      expect(validatePluginState(bAfterSchemaMap, bAfterStateMap, BEFORE_PLUGIN_MANIFEST.name)).toBe(true);
+      const bIsTopSubset = isTopologicalSubsetValid(
+        beforeSchemaMap,
+        beforeStateMap,
+        bAfterSchemaMap,
+        bAfterStateMap,
+        BEFORE_PLUGIN_MANIFEST.name
+      );
+      expect(bIsTopSubset).toEqual(false);
 
     });
   });

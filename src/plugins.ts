@@ -1423,6 +1423,7 @@ export const isTopologicalSubset = (
   const oldKVs = getKVStateForPlugin(oldSchemaMap, pluginName, oldStateMap)
     .map(({ key }) => key)
     ?.filter((key) => {
+      // remove array refs, since unstable
       if (/\(id\)<.+>/.test(key)) {
         return false;
       }
@@ -1459,12 +1460,16 @@ export const isTopologicalSubsetValid = (
     return false;
   }
   // we need to apply old schema against new data to ensure valid/safe
+  // otherwise we would examine props outside of the subspace that may
+  // be invalid in the new version but dont exist in the old version
   const oldRootSchemaMap = getRootSchemaMap(oldSchemaMap);
-  const oldKVs = getKVStateForPlugin(oldSchemaMap, pluginName, oldStateMap).map(
+  // ignore $(store)
+  const [,...oldKVs] = getKVStateForPlugin(oldSchemaMap, pluginName, oldStateMap).map(
     ({ key }) => key
   );
   const oldKVsSet = new Set(oldKVs);
-  const newKVs = getKVStateForPlugin(
+  // ignore $(store)
+  const [,...newKVs] = getKVStateForPlugin(
     newSchemaMap,
     pluginName,
     newStateMap
