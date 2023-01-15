@@ -8,7 +8,7 @@ import {
   pluginManifestIsSubsetOfManifest,
   cascadePluginState,
   Manifest,
-  sanitizeState,
+  validatePluginState
 } from "../src/plugins";
 import { makeSignedInUser } from "./helpers/fsmocks";
 import { createPlugin, SIMPLE_PLUGIN_MANIFEST } from "./helpers/pluginmocks";
@@ -1046,7 +1046,133 @@ describe("plugins", () => {
     });
   });
 
-  //describe('state validation', () => {
+  describe('state validation', () => {
 
-  //});
+    test('returns true when state is valid', () => {
+      const A_PLUGIN_MANIFEST = {
+        version: "0.0.0",
+        name: "a-plugin",
+        displayName: "A",
+        publisher: "@jamiesunderland",
+        icon: {
+          light: "./palette-plugin-icon.svg",
+          dark: "./palette-plugin-icon.svg",
+        },
+        imports: {},
+        types: {
+          typeA: {
+            name: {
+              type: "string",
+              isKey: true,
+            },
+            nullableProp: {
+              type: "int",
+              nullable: true
+            },
+            nonNullableProp: {
+              type: "int",
+              nullable: false
+            },
+            list: {
+              type: "array",
+              values: "string"
+            }
+          },
+        },
+        store: {
+          aObjects: {
+            type: "set",
+            values: "typeA",
+          },
+        },
+      };
+
+      const schemaMap: { [key: string]: Manifest} = {
+        "a-plugin": A_PLUGIN_MANIFEST as Manifest,
+      };
+      const validStateMap = {
+        [A_PLUGIN_MANIFEST.name]: {
+          aObjects: [
+            {
+              name: "test",
+              nonNullableProp: 5
+            },
+          ],
+        },
+      };
+
+      const validState = validatePluginState(schemaMap, validStateMap, A_PLUGIN_MANIFEST.name);
+      expect(validState).toEqual(true);
+    });
+
+    test('returns false when state is invalid', () => {
+      const A_PLUGIN_MANIFEST = {
+        version: "0.0.0",
+        name: "a-plugin",
+        displayName: "A",
+        publisher: "@jamiesunderland",
+        icon: {
+          light: "./palette-plugin-icon.svg",
+          dark: "./palette-plugin-icon.svg",
+        },
+        imports: {},
+        types: {
+          typeA: {
+            name: {
+              type: "string",
+              isKey: true,
+            },
+            nullableProp: {
+              type: "int",
+              nullable: true
+            },
+            nonNullableProp: {
+              type: "int",
+              nullable: false
+            },
+            list: {
+              type: "array",
+              values: "string"
+            }
+          },
+        },
+        store: {
+          aObjects: {
+            type: "set",
+            values: "typeA",
+          },
+        },
+      };
+
+      const schemaMap: { [key: string]: Manifest} = {
+        "a-plugin": A_PLUGIN_MANIFEST as Manifest,
+      };
+
+      const invalidStateMap = {
+        [A_PLUGIN_MANIFEST.name]: {
+          aObjects: [
+            {
+              name: "test",
+              nullableProp: 2
+            },
+          ],
+        },
+      };
+
+      const invalidState = validatePluginState(schemaMap, invalidStateMap, A_PLUGIN_MANIFEST.name);
+      expect(invalidState).toEqual(false);
+    });
+  });
+
+  describe('topological subset', () => {
+
+    test("returns true when is a subset", () => {
+      console.log("FILL IN")
+    });
+
+    test("returns false when is not a subset", () => {
+      console.log("FILL IN")
+
+    });
+  });
 });

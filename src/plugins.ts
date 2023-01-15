@@ -376,7 +376,7 @@ export const defaultVoidedState = (
     const state = stateMap?.[pluginName] ?? {};
     return {
       ...acc,
-      [pluginName]: roundDownIntsAndSanitizeFloatsInSchemaState(
+      [pluginName]: sanitizePrimitivesWithSchema(
         struct,
         defaultMissingSchemaState(struct, state, stateMap)
       ),
@@ -439,46 +439,100 @@ const defaultMissingSchemaState = (
   return out;
 };
 
-const roundDownIntsAndSanitizeFloatsInSchemaState = (
-  struct: TypeStruct,
-  state: unknown
-) => {
+const enforcePrimitiveSet = (
+  set: Array<boolean | string | number>
+): Array<boolean | string | number> => {
+  const out = [];
+  const seen = new Set();
+  for (let i = 0; i < set.length; ++i) {
+    if (!seen.has(set[i])) {
+      out.push(set[i]);
+      seen.add(i);
+    }
+  }
+  return out;
+};
+
+const sanitizePrimitivesWithSchema = (struct: TypeStruct, state: unknown) => {
   let out = {};
   for (let prop in struct) {
     if (
       (struct[prop]?.type == "set" || struct[prop]?.type == "array") &&
       struct[prop].values == "int"
     ) {
-      out[prop] = state?.[prop]
-        ?.map((v) => {
-          if (typeof v == "number" && !Number.isNaN(state[prop])) {
-            return Math.floor(v);
-          }
-          return null;
-        })
-        .filter((v) => v != null);
+      const list =
+        state?.[prop]
+          ?.map((v) => {
+            if (typeof v == "number" && !Number.isNaN(state[prop])) {
+              return Math.floor(v);
+            }
+            return null;
+          })
+          ?.filter((v) => v != null) ?? [];
+      out[prop] =
+        struct[prop]?.type == "set" ? enforcePrimitiveSet(list) : list;
       continue;
     }
     if (
       (struct[prop]?.type == "set" || struct[prop]?.type == "array") &&
       struct[prop].values == "float"
     ) {
-      out[prop] = state?.[prop]
-        ?.map((v) => {
-          if (typeof v == "number" && !Number.isNaN(state[prop])) {
-            return v;
-          }
-          return null;
-        })
-        .filter((v) => v != null);
+      const list =
+        state?.[prop]
+          ?.map((v) => {
+            if (typeof v == "number" && !Number.isNaN(state[prop])) {
+              return v;
+            }
+            return null;
+          })
+          ?.filter((v) => v != null) ?? [];
+      out[prop] =
+        struct[prop]?.type == "set" ? enforcePrimitiveSet(list) : list;
       continue;
     }
+
+    if (
+      (struct[prop]?.type == "set" || struct[prop]?.type == "array") &&
+      struct[prop].values == "boolean"
+    ) {
+      const list =
+        state?.[prop]
+          ?.map((v) => {
+            if (typeof v == "boolean") {
+              return v;
+            }
+            return null;
+          })
+          ?.filter((v) => v != null) ?? [];
+      out[prop] =
+        struct[prop]?.type == "set" ? enforcePrimitiveSet(list) : list;
+      continue;
+    }
+
+    if (
+      (struct[prop]?.type == "set" || struct[prop]?.type == "array") &&
+      struct[prop].values == "string"
+    ) {
+      const list =
+        state?.[prop]
+          ?.map((v) => {
+            if (typeof v == "string") {
+              return v;
+            }
+            return null;
+          })
+          ?.filter((v) => v != null) ?? [];
+      out[prop] =
+        struct[prop]?.type == "set" ? enforcePrimitiveSet(list) : list;
+      continue;
+    }
+
     if (
       (struct[prop]?.type == "set" || struct[prop]?.type == "array") &&
       typeof struct[prop]?.values == "object"
     ) {
       out[prop] = (state?.[prop] ?? [])?.map((value: unknown) => {
-        return roundDownIntsAndSanitizeFloatsInSchemaState(
+        return sanitizePrimitivesWithSchema(
           struct[prop]?.values as TypeStruct,
           value
         );
@@ -502,8 +556,27 @@ const roundDownIntsAndSanitizeFloatsInSchemaState = (
       out[prop] = null;
       continue;
     }
+
+    if (struct[prop]?.type == "boolean") {
+      if (typeof state[prop] == "boolean") {
+        out[prop] = state[prop];
+        continue;
+      }
+      out[prop] = null;
+      continue;
+    }
+
+    if (struct[prop]?.type == "string") {
+      if (typeof state[prop] == "string") {
+        out[prop] = state[prop];
+        continue;
+      }
+      out[prop] = null;
+      continue;
+    }
+
     if (!struct[prop]?.type) {
-      out[prop] = roundDownIntsAndSanitizeFloatsInSchemaState(
+      out[prop] = sanitizePrimitivesWithSchema(
         struct[prop] as TypeStruct,
         state[prop] ?? {}
       );
@@ -1137,60 +1210,6 @@ const getDownstreamDepsInSchemaMap = (
   }
   return out;
 };
-
-const objectIsSubsetOfObject = (current: object, next: object): boolean => {
-  if (typeof current != "object") {
-    return false;
-  }
-  if (typeof next != "object") {
-    return false;
-  }
-  let nested = [];
-  for (let prop in current) {
-    if (typeof current[prop] == "object" && typeof next[prop] == "object") {
-      nested.push([current[prop], next[prop]]);
-      continue;
-    }
-    if (current[prop] != next[prop]) {
-      return false;
-    }
-  }
-  return nested.reduce((match, [c, n]) => {
-    if (!match) {
-      return false;
-    }
-    return objectIsSubsetOfObject(c, n);
-  }, true);
-};
-
-export const pluginManifestIsSubsetOfManifest = (
-  currentSchemaMap: { [key: string]: Manifest },
-  nextSchemaMap: { [key: string]: Manifest },
-  pluginName: string
-): boolean => {
-  const currentDeps = [
-    pluginName,
-    ...getUpstreamDepsInSchemaMap(currentSchemaMap, pluginName),
-  ];
-  const currentGraph = currentDeps.reduce((graph, plugin) => {
-    return {
-      ...graph,
-      [plugin]: getRootSchemaForPlugin(currentSchemaMap, plugin),
-    };
-  }, {});
-  const nextDeps = [
-    pluginName,
-    ...getUpstreamDepsInSchemaMap(nextSchemaMap, pluginName),
-  ];
-  const nextGraph = nextDeps.reduce((graph, plugin) => {
-    return {
-      ...graph,
-      [plugin]: getRootSchemaForPlugin(nextSchemaMap, plugin),
-    };
-  }, {});
-  return objectIsSubsetOfObject(currentGraph, nextGraph);
-};
-
 const refSetFromKey = (key: string): Array<string> => {
   const out = [];
   const parts = key.split(".");
@@ -1306,28 +1325,161 @@ export const cascadePluginState = (
   return result;
 };
 
-// validation
-// 1) check nullability
-// 2) check refs exist
-
-// clean up ints and sets
-export const sanitizeState = (
+export const validatePluginState = (
   schemaMap: { [key: string]: Manifest },
   stateMap: { [key: string]: unknown },
   pluginName: string
-) => {
+): boolean => {
   const rootSchemaMap = getRootSchemaMap(schemaMap);
-  const kvs = getKVStateForPlugin(schemaMap, pluginName, stateMap);
-
-  for (const kv of kvs) {
-    const subSchema = getSchemaAtPath(rootSchemaMap[pluginName], kv.key);
-    console.log("SUB", JSON.stringify(subSchema, null, 2));
-    const value = {
-      ...kv.value,
-    };
-    // get relevant fields from subSchema
-    // just means type
+  // ignore $(store)
+  const [, ...kvs] = getKVStateForPlugin(schemaMap, pluginName, stateMap);
+  for (const { key, value } of kvs) {
+    const subSchema = getSchemaAtPath(rootSchemaMap[pluginName], key);
     for (let prop in subSchema) {
+      if (
+        subSchema[prop]?.type &&
+        (!subSchema[prop]?.nullable || subSchema[prop]?.isKey) &&
+        value[prop] == null
+      ) {
+        return false;
+      }
     }
   }
+  return true;
+};
+
+const objectIsSubsetOfObject = (current: object, next: object): boolean => {
+  if (typeof current != "object") {
+    return false;
+  }
+  if (typeof next != "object") {
+    return false;
+  }
+  let nested = [];
+  for (let prop in current) {
+    if (typeof current[prop] == "object" && typeof next[prop] == "object") {
+      nested.push([current[prop], next[prop]]);
+      continue;
+    }
+    if (current[prop] != next[prop]) {
+      return false;
+    }
+  }
+  return nested.reduce((match, [c, n]) => {
+    if (!match) {
+      return false;
+    }
+    return objectIsSubsetOfObject(c, n);
+  }, true);
+};
+
+export const pluginManifestIsSubsetOfManifest = (
+  currentSchemaMap: { [key: string]: Manifest },
+  nextSchemaMap: { [key: string]: Manifest },
+  pluginName: string
+): boolean => {
+  const currentDeps = [
+    pluginName,
+    ...getUpstreamDepsInSchemaMap(currentSchemaMap, pluginName),
+  ];
+  const currentGraph = currentDeps.reduce((graph, plugin) => {
+    return {
+      ...graph,
+      [plugin]: getRootSchemaForPlugin(currentSchemaMap, plugin),
+    };
+  }, {});
+  const nextDeps = [
+    pluginName,
+    ...getUpstreamDepsInSchemaMap(nextSchemaMap, pluginName),
+  ];
+  const nextGraph = nextDeps.reduce((graph, plugin) => {
+    return {
+      ...graph,
+      [plugin]: getRootSchemaForPlugin(nextSchemaMap, plugin),
+    };
+  }, {});
+  return objectIsSubsetOfObject(currentGraph, nextGraph);
+};
+
+export const isTopologicalSubset = (
+  oldSchemaMap: { [key: string]: Manifest },
+  oldStateMap: { [key: string]: unknown },
+  newSchemaMap: { [key: string]: Manifest },
+  newStateMap: { [key: string]: unknown },
+  pluginName: string
+) => {
+  if (!oldSchemaMap[pluginName] && !newSchemaMap[pluginName]) {
+    return true;
+  }
+  if (oldSchemaMap[pluginName] && !newSchemaMap[pluginName]) {
+    return false;
+  }
+
+  if (
+    !pluginManifestIsSubsetOfManifest(oldSchemaMap, newSchemaMap, pluginName)
+  ) {
+    return false;
+  }
+  const oldKVs = getKVStateForPlugin(oldSchemaMap, pluginName, oldStateMap)
+    .map(({ key }) => key)
+    ?.filter((key) => {
+      if (/\(id\)<.+>/.test(key)) {
+        return false;
+      }
+      return true;
+    });
+  const newKVs = getKVStateForPlugin(newSchemaMap, pluginName, newStateMap).map(
+    ({ key }) => key
+  );
+  const newKVsSet = new Set(newKVs);
+  for (let key of oldKVs) {
+    if (!newKVsSet.has(key)) {
+      return false;
+    }
+  }
+  return true;
+};
+
+export const isTopologicalSubsetValid = (
+  oldSchemaMap: { [key: string]: Manifest },
+  oldStateMap: { [key: string]: unknown },
+  newSchemaMap: { [key: string]: Manifest },
+  newStateMap: { [key: string]: unknown },
+  pluginName: string
+) => {
+  if (
+    !isTopologicalSubset(
+      oldSchemaMap,
+      oldStateMap,
+      newSchemaMap,
+      newStateMap,
+      pluginName
+    )
+  ) {
+    return false;
+  }
+  // we need to apply old schema against new data to ensure valid/safe
+  const oldRootSchemaMap = getRootSchemaMap(oldSchemaMap);
+  const oldKVs = getKVStateForPlugin(oldSchemaMap, pluginName, oldStateMap).map(
+    ({ key }) => key
+  );
+  const oldKVsSet = new Set(oldKVs);
+  const newKVs = getKVStateForPlugin(
+    newSchemaMap,
+    pluginName,
+    newStateMap
+  ).filter(({ key }) => oldKVsSet.has(key));
+  for (const { key, value } of newKVs) {
+    const subSchema = getSchemaAtPath(oldRootSchemaMap[pluginName], key);
+    for (let prop in subSchema) {
+      if (
+        subSchema[prop]?.type &&
+        (!subSchema[prop]?.nullable || subSchema[prop]?.isKey) &&
+        value[prop] == null
+      ) {
+        return false;
+      }
+    }
+  }
+  return true;
 };
