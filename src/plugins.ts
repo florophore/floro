@@ -32,6 +32,7 @@ export interface Manifest {
   name: string;
   displayName: string;
   publisher: string;
+  copyable?: boolean;
   icon:
     | string
     | {
@@ -101,6 +102,70 @@ export const getPluginManifest = async (
   );
   const manifestString = await fs.promises.readFile(pluginManifestPath);
   return JSON.parse(manifestString.toString());
+};
+
+export const pluginManifestsAreCompatibleForUpdate = async (
+  oldPluginList: Array<PluginElement>,
+  newPluginList: Array<PluginElement>
+): Promise<boolean> => {
+  const oldManifests = await getPluginManifests(oldPluginList);
+  const newManifests = await getPluginManifests(newPluginList);
+  const oldSchemaMap = manifestListToSchemaMap(oldManifests);
+  const newSchemaMap = manifestListToSchemaMap(newManifests);
+
+  return newManifests.reduce((isCompatible, newManifest) => {
+    if (!isCompatible) {
+      return false;
+    }
+    if (!oldSchemaMap[newManifest.name]) {
+      return true;
+    }
+    return pluginManifestIsSubsetOfManifest(oldSchemaMap, newSchemaMap, newManifest.name);
+  }, true) 
+};
+
+export const getPluginManifests = async (
+  pluginList: Array<PluginElement>
+): Promise<Array<Manifest>> => {
+  const manifests = await Promise.all(pluginList.map(({key: pluginName}) => {
+    return getPluginManifest(pluginName, pluginList) 
+  }));
+  return manifests?.filter(manifest => {
+    return !!manifest;
+  })
+};
+
+export const pluginListToMap = (
+  pluginList: Array<PluginElement>
+): { [pluginName: string]: string } => {
+  return pluginList.reduce((map, { key, value }) => {
+    return {
+      ...map,
+      [key]: value,
+    };
+  }, {});
+};
+
+export const pluginMapToList = (pluginMap: {
+  [pluginName: string]: string;
+}): Array<PluginElement> => {
+  return Object.keys(pluginMap).map((key) => {
+    return {
+      key,
+      value: pluginMap[key],
+    };
+  });
+};
+
+export const manifestListToSchemaMap = (
+  manifestList: Array<Manifest>
+): { [pluginName: string]: Manifest } => {
+  return manifestList.reduce((acc, manifest) => {
+    return {
+      ...acc,
+      [manifest.name]: manifest,
+    };
+  }, {});
 };
 
 export const hasPlugin = (

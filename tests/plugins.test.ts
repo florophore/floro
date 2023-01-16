@@ -1004,13 +1004,11 @@ describe("plugins", () => {
           ],
         },
       };
-      console.time("TIME")
       const cascadedAState = cascadePluginState(
         schemaMap,
         stateMap,
         A_PLUGIN_MANIFEST.name
       );
-      console.timeEnd("TIME")
       expect(cascadedAState).toEqual({
         "a-plugin": {
           aObjects: [

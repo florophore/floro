@@ -43,6 +43,8 @@ import {
   getRootSchemaForPlugin,
   getUpstreamDependencyList,
   hasPlugin,
+  PluginElement,
+  pluginManifestsAreCompatibleForUpdate,
 } from "./plugins";
 import { LicenseCodes } from "./licensecodes";
 
@@ -579,7 +581,7 @@ export const checkoutSha = async (repoId?: string, sha?: string) => {
   }
 }
 
-export const updatePlugins = async (repoId?: string, plugins?) => {
+export const updatePlugins = async (repoId?: string, plugins?: Array<PluginElement>) => {
   if (!repoId) {
     return null;
   }
@@ -591,14 +593,22 @@ export const updatePlugins = async (repoId?: string, plugins?) => {
     return null;
   }
   try {
-    // perform compat check
     // fetch upstream plugins
+    // TODO: check each plugin is present in floro
+
     const unstagedState = await getUnstagedCommitState(repoId);
     const pluginsDiff = getDiff(unstagedState.plugins, plugins);
     const nextPluginState = applyDiff(pluginsDiff, unstagedState.plugins);
+    // attempt download
+    const areCompatible = await pluginManifestsAreCompatibleForUpdate(unstagedState.plugins, nextPluginState); 
+    if (!areCompatible) {
+      return null;
+    }
+    //const nextPluginSchemaMap = getPlugin 
     const pluginAdditions = [];
     for (let plugin of nextPluginState) {
       if (!hasPlugin(plugin.key, unstagedState.plugins)) {
+        //const initState = getKVStateForPlugin()
         pluginAdditions.push({
           namespace: "store",
           pluginName: plugin.key,

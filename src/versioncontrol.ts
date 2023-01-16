@@ -205,14 +205,15 @@ export const applyDiff = <T extends DiffElement | string>(
 export const getMergeSequence = (
   origin: Array<string>,
   from: Array<string>,
-  into: Array<string>
+  into: Array<string>,
+  whose: "theirs"|"yours" = "yours"
 ): Array<string> => {
   if (from.length == 0 && into.length == 0) {
     return [];
   }
   const lcs = getGreatestCommonLCS(origin, from, into);
   if (lcs.length == 0) {
-    return getMergeSubSequence(from, into);
+    return getMergeSubSequence(from, into, whose);
   }
   const originOffsets = getLCSBoundaryOffsets(origin, lcs);
   const originSequences = getLCSOffsetMergeSeqments(origin, originOffsets);
@@ -243,7 +244,8 @@ export const getMergeSequence = (
         mergeSequences.push(
           getMergeSubSequence(
             fromReconciledSequences[mergeIndex],
-            intoReconciledSequences[mergeIndex]
+            intoReconciledSequences[mergeIndex],
+            whose
           )
         );
     }
@@ -304,14 +306,18 @@ export const canAutoMerge = (
   return true;
 };
 
-const getMergeSubSequence = (from: Array<string>, into: Array<string>) => {
+const getMergeSubSequence = (from: Array<string>, into: Array<string>, whose: "theirs"|"yours" = "yours") => {
   if (from.length == 0 && into.length == 0) {
     return [];
   }
   const lcs = getLCS(from, into);
   if (lcs.length == 0) {
+    if (whose == "yours") {
+      return [...from, ...into];
+    } else {
+      return [...into, ...from];
+    }
     // conflict case, just concat
-    return [...from, ...into];
   }
 
   const fromOffsets = getLCSBoundaryOffsets(from, lcs);
@@ -323,8 +329,13 @@ const getMergeSubSequence = (from: Array<string>, into: Array<string>) => {
   let mergeSequences = [];
   let mergeIndex = 0;
   while (mergeIndex <= lcs.length) {
-    mergeSequences.push(fromSequences[mergeIndex]);
-    mergeSequences.push(intoSequences[mergeIndex]);
+    if (whose == "yours") {
+      mergeSequences.push(fromSequences[mergeIndex]);
+      mergeSequences.push(intoSequences[mergeIndex]);
+    } else {
+      mergeSequences.push(intoSequences[mergeIndex]);
+      mergeSequences.push(fromSequences[mergeIndex]);
+    }
     if (mergeIndex != lcs.length) {
       mergeSequences.push([lcs[mergeIndex]]);
     }
