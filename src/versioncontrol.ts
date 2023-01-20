@@ -317,7 +317,6 @@ const getMergeSubSequence = (from: Array<string>, into: Array<string>, whose: "t
     } else {
       return [...into, ...from];
     }
-    // conflict case, just concat
   }
 
   const fromOffsets = getLCSBoundaryOffsets(from, lcs);
@@ -441,11 +440,11 @@ const sequencesAreEqual = (a: Array<string>, b: Array<string>) => {
  * B: {[], [T, E, N, P], []}
  * C: {[], [X], []}
  *
- * B IS reconciled to the following: {[], [T, P], []}
+ * B IS reconciled to the following: {[], [T, P], []} (when yours, not theirs, otherwise {[], [P, T], []})
  * C IS reconciled to the following: {[], [X], []}
  *
  * Because B and C both have uncommon values at IDX (1), this results in merge coflict where both values are concatenated
- * to [T, P, X]
+ * to [T, P, X], (if yours)
  */
 
 const getReconciledSequence = (

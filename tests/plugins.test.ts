@@ -11,8 +11,8 @@ import {
   validatePluginState,
   isTopologicalSubsetValid,
 } from "../src/plugins";
-import { makeSignedInUser } from "./helpers/fsmocks";
-import { createPlugin, SIMPLE_PLUGIN_MANIFEST } from "./helpers/pluginmocks";
+import { makeSignedInUser, makeTestPlugin } from "./helpers/fsmocks";
+import { SIMPLE_PLUGIN_MANIFEST } from "./helpers/pluginmocks";
 
 jest.mock("fs");
 jest.mock("fs/promises");
@@ -30,7 +30,7 @@ describe("plugins", () => {
 
   describe("getPluginManifest", () => {
     test("returns dev manifest", async () => {
-      createPlugin(SIMPLE_PLUGIN_MANIFEST, true);
+      makeTestPlugin(SIMPLE_PLUGIN_MANIFEST, true);
       const manifest = await getPluginManifest("simple", [
         {
           key: "simple",
@@ -41,7 +41,7 @@ describe("plugins", () => {
     });
 
     test("returns non-dev manifest", async () => {
-      createPlugin(SIMPLE_PLUGIN_MANIFEST);
+      makeTestPlugin(SIMPLE_PLUGIN_MANIFEST);
       const manifest = await getPluginManifest("simple", [
         {
           key: "simple",

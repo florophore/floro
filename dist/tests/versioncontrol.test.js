@@ -104,6 +104,7 @@ describe("versioncontrol", () => {
             expect(merge).toEqual("RXALDFSJKZL");
             const canMerge = (0, versioncontrol_1.canAutoMerge)(A, B, C);
             expect(canMerge).toBe(false);
+            expect((0, versioncontrol_1.getMergeSequence)(A, B, C, "theirs").join("")).toEqual("RXALDFSJKLZ");
         });
         test('creates merge without conflict if subsequences with deletions can be reconciled', () => {
             const A = "DENF".split("");
@@ -122,6 +123,7 @@ describe("versioncontrol", () => {
             expect(merge).toEqual("DTPXF");
             const canMerge = (0, versioncontrol_1.canAutoMerge)(A, B, C);
             expect(canMerge).toBe(false);
+            expect((0, versioncontrol_1.getMergeSequence)(A, B, C, "theirs").join("")).toEqual("DXTPF");
         });
     });
 });

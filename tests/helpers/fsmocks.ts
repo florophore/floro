@@ -1,7 +1,8 @@
 import { Session } from "inspector";
-import { writeUserSession, writeUser, vReposPath } from "../../src/filestructure";
+import { writeUserSession, writeUser, vReposPath, userHome, vDEVPath, vPluginsPath } from "../../src/filestructure";
 import path from 'path';
 import fs from 'fs';
+import { Manifest } from "../../src/plugins";
 
 const USER_SESSION = JSON.parse(`
 {
@@ -29,8 +30,8 @@ const USER_SESSION = JSON.parse(`
         "thumbnailPath": "/users/3edbc450-7e78-40db-895e-5eed8de73fcf/photos/754e4f180522390c003ff9f3add7236cb7001758dd4f8e041f261b8ed02c55fe.png",
         "mimeType": "png",
         "uploadedByUserId": "3edbc450-7e78-40db-895e-5eed8de73fcf",
-        "url": "http://localhost:9000/cdn//users/3edbc450-7e78-40db-895e-5eed8de73fcf/photos/ebc4833518254cbdbedd4b7d71d06c67e4c3787468c597f1c30c3a4df7c07737.png",
-        "thumbnailUrl": "http://localhost:9000/cdn//users/3edbc450-7e78-40db-895e-5eed8de73fcf/photos/754e4f180522390c003ff9f3add7236cb7001758dd4f8e041f261b8ed02c55fe.png"
+        "url": "http://localhost:9000/cdn/users/3edbc450-7e78-40db-895e-5eed8de73fcf/photos/ebc4833518254cbdbedd4b7d71d06c67e4c3787468c597f1c30c3a4df7c07737.png",
+        "thumbnailUrl": "http://localhost:9000/cdn/users/3edbc450-7e78-40db-895e-5eed8de73fcf/photos/754e4f180522390c003ff9f3add7236cb7001758dd4f8e041f261b8ed02c55fe.png"
       }
     },
     "authenticationCredentials": [
@@ -40,8 +41,8 @@ const USER_SESSION = JSON.parse(`
         "updatedAt": "2022-12-30T17:44:00.220Z",
         "credentialType": "email_pass",
         "isSignupCredential": false,
-        "email": "james.rainer.sunderland@gmail.com",
-        "normalizedEmail": "jamesrainersunderland@gmail.com",
+        "email": "test@gmail.com",
+        "normalizedEmail": "test@gmail.com",
         "emailHash": "5BqJH9ef6kkcV2vdTmcV6A==",
         "isVerified": true,
         "isThirdPartyVerified": false,
@@ -64,30 +65,6 @@ const USER_SESSION = JSON.parse(`
     "createdAt": "2022-12-30T20:45:35.058Z",
     "exchangedAt": "2023-01-06T20:00:00.995Z",
     "exchangeHistory": [
-      "GvU6JkmsnQNtFe2HHjKbvNU1ub1Uh68zt1rFqBNc7Ao=",
-      "C6vWVNbzvqpiyjN1OwFoUjtYCH+L9Im9TnW2oOo9yqk=",
-      "C232nvJULazDfdK+LQbJdwMGD31S6tzyg2D9tt1yzRE=",
-      "vEgOFODZepqjRNUcPCO0nsZAgEfNtvrh3+WfHp+D9/M=",
-      "ei1Eb2VQ0IUZzapBmBLy52HEGO8yYOCnlPxCQvjIDEw=",
-      "LK3gDT9HSrQuedzkDnuMnxMkGAgdrhhbCey2HtjnRzA=",
-      "Rg0TM0JPFmojiDW8IlDYQtNGB/bqc+vX+P3o9OOTju0=",
-      "PkJo1hDNmPlfQvguIa/aW7w0ekKpOe2FgOEIUiZtmQg=",
-      "9ciVxT6+oKlh6p+B1nhCE1+/E8SJ0tGklDPKdFwGkD8=",
-      "1iPDY4JT2oi28I8MpXHqXYjyI0szlTLEPW0treu9UzI=",
-      "QHoQekgYWHEk3BPRI0/H8+bluCh96OY9hL99WSMBPAo=",
-      "V8vZGgYocYCft4oCuEFGm+XRfDrfYvkCbeJmmK7WZBo=",
-      "f1xIBjkB8z0YO93C97UHmHTuzLovor6tcFPWUFllkwg=",
-      "I/Dosm0Zp5I2rzyk1+M7ZU8OVdYf+Bufm3ORJNZGPaA=",
-      "w/RccIHvVN3zwfd4T9sPvZvCh12ZkMBmDChkURimhxk=",
-      "4BYNwD+Mbc0MerusIDru4d7XR/gtHNGMFV9+EX59wjQ=",
-      "D/6fh1BaE/AMtu1evt7mhE1HQuAkzk7gv9lLLIIhQ3Q=",
-      "2YGuOo/KXpcgNxogfMGU6NjzoSjCBQ5EwttoJBFVZk0=",
-      "hZ+XFqaXnAvnB7acwgghC+Ka1sPfkhgYo5Z2N2kuIK8=",
-      "pdCOSbmR7VUZN0wnHJTrnCY8YLJVQjzv5WEpqj1ZKhU=",
-      "p6NVNcaSvz04+zi/sjVBFRJhpCbT240Ba+s6F8YQJKA=",
-      "bZEwqV4Exfx/2RqtxSMDcj9PJ1W38AM2a7n6B3Vivgk=",
-      "wggkvTIkHfGp2qNBDNp9Bv4q52epW4TNF81Zn9Wlsj0=",
-      "8tGThvsfTjXkptKaHO44VE5jwN9iD0AcKNnpgoMqeWg="
     ]
   }
  `);
@@ -159,9 +136,70 @@ const MAIN_BRANCH = `
     "name": "main"
   }
 `
+
+const DIST_INDEX_HTML = (pluginName: string) => `
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script type="module" crossorigin src="/plugins/${pluginName}/assets/index.js"></script>
+  </head>
+  <body>
+    <div id="app"></div>
+  </body>
+</html>
+
+`
+
+const DIST_ASSETS_INDEX_JS = (pluginName: string) => `
+console.log("hello world from ${pluginName}");
+`
 export const makeSignedInUser = async () => {
     await writeUserSession(USER_SESSION);
     await writeUser(USER);
+}
+
+export const makePluginCreationDirectory = (name: string, manifest: Manifest) => {
+  const projectsPath = path.join(userHome, "projects");
+  const projectPath = path.join(projectsPath, name);
+  fs.mkdirSync(projectPath, { recursive: true });
+  const floroCreationPath = path.join(projectPath, "floro");
+  fs.mkdirSync(floroCreationPath, { recursive: true });
+  const floroManifestPath = path.join(floroCreationPath, "floro.manifest.json");
+  fs.writeFileSync(floroManifestPath, JSON.stringify(manifest));
+  const distPath = path.join(projectPath, "dist");
+  fs.mkdirSync(distPath, { recursive: true });
+  const assetsPath = path.join(distPath, "assets");
+  fs.mkdirSync(assetsPath, { recursive: true });
+  const indexHTMLPath = path.join(distPath, "index.html");
+  fs.writeFileSync(indexHTMLPath, DIST_INDEX_HTML(name));
+  const indexJSPath = path.join(assetsPath, "index.js");
+  fs.writeFileSync(indexJSPath, DIST_ASSETS_INDEX_JS(name));
+  return projectPath;
+}
+
+export const makeTestPlugin = (manifest: Manifest, isDev = false) => {
+  const pluginName = manifest.name;
+  const pluginVersion = manifest.version;
+  const pluginDir = path.join(isDev ? vDEVPath : vPluginsPath, `${pluginName}@${pluginVersion}`);
+  fs.mkdirSync(pluginDir, { recursive: true });
+  const floroCreationPath = path.join(pluginDir, "floro");
+  fs.mkdirSync(floroCreationPath, { recursive: true });
+  const floroManifestPath = path.join(floroCreationPath, "floro.manifest.json");
+  fs.writeFileSync(floroManifestPath, JSON.stringify(manifest));
+  const assetsPath = path.join(pluginDir, "assets");
+  fs.mkdirSync(assetsPath, { recursive: true });
+  const indexHTMLPath = path.join(pluginDir, "index.html");
+  fs.writeFileSync(indexHTMLPath, DIST_INDEX_HTML(pluginName));
+  const indexJSPath = path.join(assetsPath, "index.js");
+  fs.writeFileSync(indexJSPath, DIST_ASSETS_INDEX_JS(pluginName));
+  return pluginDir;
+}
+
+export const getPluginCreationDirectoryRoot = async (name: string) => {
+  const projectsPath = path.join(userHome, "projects");
+  return path.join(projectsPath, name);
 }
 
 export const createBlankRepo = (repoId: string) =>{

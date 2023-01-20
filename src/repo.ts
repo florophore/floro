@@ -576,6 +576,7 @@ export const buildStateStore = async (
   state: CommitState
 ): Promise<{ [key: string]: unknown }> => {
   let out = {};
+  // THIS IS WRONG, needs to map to schema not value
   const pluginsMap = state.plugins.reduce((acc, v) => ({...acc,[v.key]: v.value }), {});
   for (let pluginName in state.store) {
     if (pluginsMap[pluginName]) {

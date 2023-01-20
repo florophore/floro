@@ -37,6 +37,11 @@ buildFloroFilestructure();
     return;
   }
 
+  if (mainOptions.command == "plugin") {
+    console.log("test");
+    return;
+  }
+
   if (mainOptions.command == "config") {
     const response = await inquirer.prompt([
       {

@@ -1,5 +1,6 @@
 import { Branch } from "./repo";
 import { CommitData } from "./versioncontrol";
+import { PluginElement } from "./plugins";
 export declare const repoExists: (repoId?: string) => Promise<boolean>;
 export declare const writeRepoDescription: (repoId?: string, description?: string) => Promise<string[]>;
 export declare const writeRepoLicenses: (repoId?: string, licensesInput?: Array<{
@@ -81,7 +82,5 @@ export declare const readBranchState: (repoId?: string, branchName?: string) => 
 export declare const writeRepoCommit: (repoId?: string, message?: string) => Promise<CommitData>;
 export declare const checkoutBranch: (repoId?: string, branchName?: string) => Promise<import("./repo").State>;
 export declare const checkoutSha: (repoId?: string, sha?: string) => Promise<import("./repo").State>;
-export declare const updatePlugins: (repoId?: string, plugins?: any) => Promise<import("./repo").State>;
-export declare const updatePluginState: (repoId?: string, pluginName?: string, updateState?: unknown) => Promise<{
-    [x: string]: unknown;
-}>;
+export declare const updatePlugins: (repoId?: string, plugins?: Array<PluginElement>) => Promise<import("./repo").State>;
+export declare const updatePluginState: (repoId?: string, pluginName?: string, updateState?: unknown) => Promise<any>;

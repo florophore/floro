@@ -10,6 +10,10 @@ const getObjectStringValue = (obj) => {
     if (typeof obj == "string")
         return obj;
     return Object.keys(obj).reduce((s, key) => {
+        if (Array.isArray(obj[key])) {
+            const value = obj[key].join("-");
+            return `${s}/${key}:${value}`;
+        }
         return `${s}/${key}:${obj[key]}`;
     }, "");
 };
@@ -151,13 +155,13 @@ const applyDiff = (diffset, state) => {
     return assets;
 };
 exports.applyDiff = applyDiff;
-const getMergeSequence = (origin, from, into) => {
+const getMergeSequence = (origin, from, into, whose = "yours") => {
     if (from.length == 0 && into.length == 0) {
         return [];
     }
     const lcs = getGreatestCommonLCS(origin, from, into);
     if (lcs.length == 0) {
-        return getMergeSubSequence(from, into);
+        return getMergeSubSequence(from, into, whose);
     }
     const originOffsets = getLCSBoundaryOffsets(origin, lcs);
     const originSequences = getLCSOffsetMergeSeqments(origin, originOffsets);
@@ -174,7 +178,7 @@ const getMergeSequence = (origin, from, into) => {
             mergeSequences.push(fromReconciledSequences[mergeIndex]);
         }
         else {
-            mergeSequences.push(getMergeSubSequence(fromReconciledSequences[mergeIndex], intoReconciledSequences[mergeIndex]));
+            mergeSequences.push(getMergeSubSequence(fromReconciledSequences[mergeIndex], intoReconciledSequences[mergeIndex], whose));
         }
         if (mergeIndex != lcs.length) {
             mergeSequences.push([lcs[mergeIndex]]);
@@ -216,14 +220,18 @@ const canAutoMerge = (origin, from, into) => {
     return true;
 };
 exports.canAutoMerge = canAutoMerge;
-const getMergeSubSequence = (from, into) => {
+const getMergeSubSequence = (from, into, whose = "yours") => {
     if (from.length == 0 && into.length == 0) {
         return [];
     }
     const lcs = (0, exports.getLCS)(from, into);
     if (lcs.length == 0) {
-        // conflict case, just concat
-        return [...from, ...into];
+        if (whose == "yours") {
+            return [...from, ...into];
+        }
+        else {
+            return [...into, ...from];
+        }
     }
     const fromOffsets = getLCSBoundaryOffsets(from, lcs);
     const fromSequences = getLCSOffsetMergeSeqments(from, fromOffsets);
@@ -232,8 +240,14 @@ const getMergeSubSequence = (from, into) => {
     let mergeSequences = [];
     let mergeIndex = 0;
     while (mergeIndex <= lcs.length) {
-        mergeSequences.push(fromSequences[mergeIndex]);
-        mergeSequences.push(intoSequences[mergeIndex]);
+        if (whose == "yours") {
+            mergeSequences.push(fromSequences[mergeIndex]);
+            mergeSequences.push(intoSequences[mergeIndex]);
+        }
+        else {
+            mergeSequences.push(intoSequences[mergeIndex]);
+            mergeSequences.push(fromSequences[mergeIndex]);
+        }
         if (mergeIndex != lcs.length) {
             mergeSequences.push([lcs[mergeIndex]]);
         }
@@ -329,11 +343,11 @@ const sequencesAreEqual = (a, b) => {
  * B: {[], [T, E, N, P], []}
  * C: {[], [X], []}
  *
- * B IS reconciled to the following: {[], [T, P], []}
+ * B IS reconciled to the following: {[], [T, P], []} (when yours, not theirs, otherwise {[], [P, T], []})
  * C IS reconciled to the following: {[], [X], []}
  *
  * Because B and C both have uncommon values at IDX (1), this results in merge coflict where both values are concatenated
- * to [T, P, X]
+ * to [T, P, X], (if yours)
  */
 const getReconciledSequence = (originSequences, sequences) => {
     let out = [];

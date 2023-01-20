@@ -188,8 +188,8 @@ const canCommit = async (repoId, user, message) => {
     }
     const currentSha = await (0, exports.getCurrentCommitSha)(repoId);
     const commit = await (0, exports.readCommit)(repoId, currentSha);
-    if (!commit) {
-        return false;
+    if (commit) {
+        // ensure safe
     }
     const currentState = await (0, exports.getCurrentState)(repoId);
     if (!currentState) {
@@ -483,12 +483,13 @@ const updateCurrentBranch = async (repoId, branchName) => {
 exports.updateCurrentBranch = updateCurrentBranch;
 const buildStateStore = async (state) => {
     let out = {};
-    const plugins = new Set(state.plugins.map(v => v.key));
+    // THIS IS WRONG, needs to map to schema not value
+    const pluginsMap = state.plugins.reduce((acc, v) => ({ ...acc, [v.key]: v.value }), {});
     for (let pluginName in state.store) {
-        if (plugins.has(pluginName)) {
+        if (pluginsMap[pluginName]) {
             const kv = state?.store?.[pluginName] ?? [];
             const manifest = await (0, plugins_1.getPluginManifest)(pluginName, state?.plugins ?? []);
-            const pluginState = (0, plugins_1.generateStateFromKV)(manifest, kv, pluginName);
+            const pluginState = (0, plugins_1.getStateFromKVForPlugin)(pluginsMap, kv, pluginName);
             out[pluginName] = pluginState;
         }
     }

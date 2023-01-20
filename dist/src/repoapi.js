@@ -293,7 +293,7 @@ const readCurrentHistory = async (repoId) => {
     try {
         const sha = await (0, repo_1.getCurrentCommitSha)(repoId);
         if (!sha) {
-            return null;
+            return [];
         }
         const history = await (0, repo_1.getHistory)(repoId, sha);
         if (!history) {
@@ -446,7 +446,8 @@ const writeRepoCommit = async (repoId, message) => {
         if (!user.id) {
             return null;
         }
-        if (!(0, repo_1.canCommit)(repoId, user, message)) {
+        const commitIsValid = await (0, repo_1.canCommit)(repoId, user, message);
+        if (!commitIsValid) {
             return null;
         }
         const currentState = await (0, repo_1.getCurrentState)(repoId);
@@ -552,14 +553,22 @@ const updatePlugins = async (repoId, plugins) => {
         return null;
     }
     try {
-        // perform compat check
         // fetch upstream plugins
+        // TODO: check each plugin is present in floro
+        // TODO COME BACK HERE
         const unstagedState = await (0, repo_1.getUnstagedCommitState)(repoId);
         const pluginsDiff = (0, versioncontrol_1.getDiff)(unstagedState.plugins, plugins);
         const nextPluginState = (0, versioncontrol_1.applyDiff)(pluginsDiff, unstagedState.plugins);
+        // attempt download
+        const areCompatible = await (0, plugins_1.pluginManifestsAreCompatibleForUpdate)(unstagedState.plugins, nextPluginState);
+        if (!areCompatible) {
+            return null;
+        }
+        //const nextPluginSchemaMap = getPlugin 
         const pluginAdditions = [];
         for (let plugin of nextPluginState) {
             if (!(0, plugins_1.hasPlugin)(plugin.key, unstagedState.plugins)) {
+                //const initState = getKVStateForPlugin()
                 pluginAdditions.push({
                     namespace: "store",
                     pluginName: plugin.key,
@@ -614,26 +623,37 @@ const updatePluginState = async (repoId, pluginName, updateState) => {
         }
         const upstreamDependencies = await (0, plugins_1.getUpstreamDependencyList)(pluginName, manifest, current?.plugins ?? []);
         const upsteamSchema = await (0, plugins_1.constructDependencySchema)(upstreamDependencies);
-        const rootSchema = (0, plugins_1.getRootSchemaForPlugin)(upsteamSchema, manifest, pluginName);
-        const kvState = (0, plugins_1.getKVStateForPlugin)(upsteamSchema, manifest, pluginName, updateState ?? {});
-        const diff = (0, versioncontrol_1.getDiff)(unstagedState.store?.[pluginName] ?? [], kvState);
-        // needs to be looped through for each plugin in downstream deps
-        const nextState = (0, versioncontrol_1.applyDiff)(diff, unstagedState?.store?.[pluginName] ?? []);
-        // END TODO
-        const commitState = await (0, repo_1.saveDiffListToCurrent)(repoId, [
-            {
-                diff,
-                namespace: "store",
-                pluginName,
-            },
-        ]);
-        const state = (0, plugins_1.generateStateFromKV)(manifest, nextState, pluginName);
-        // run cascade next
-        // find downstream plugins
-        // run cascades on downstream schemas
-        // save all diffs against respective manifests
-        // return constructed kv state of plugin and upstreams
-        return { [pluginName]: state };
+        // TOOD: FIX THIS
+        // COME BACK
+        //const rootSchema = getRootSchemaForPlugin(
+        //  upsteamSchema,
+        //  manifest,
+        //  pluginName
+        //);
+        //const kvState = getKVStateForPlugin(
+        //  upsteamSchema,
+        //  manifest,
+        //  pluginName,
+        //  updateState ?? {}
+        //);
+        //const diff = getDiff(unstagedState.store?.[pluginName] ?? [], kvState);
+        //// needs to be looped through for each plugin in downstream deps
+        //const nextState = applyDiff(diff, unstagedState?.store?.[pluginName] ?? []);
+        //// END TODO
+        //const commitState = await saveDiffListToCurrent(repoId, [
+        //  {
+        //    diff,
+        //    namespace: "store",
+        //    pluginName,
+        //  },
+        //]);
+        //const state = generateStateFromKV(manifest, nextState, pluginName);
+        //// run cascade next
+        //// find downstream plugins
+        //// run cascades on downstream schemas
+        //// save all diffs against respective manifests
+        //// return constructed kv state of plugin and upstreams
+        //return { [pluginName]: state };
     }
     catch (e) {
         return null;

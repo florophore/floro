@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.createBlankRepo = exports.makeSignedInUser = void 0;
+exports.createBlankRepo = exports.getPluginCreationDirectoryRoot = exports.makeTestPlugin = exports.makePluginCreationDirectory = exports.makeSignedInUser = void 0;
 const filestructure_1 = require("../../src/filestructure");
 const path_1 = __importDefault(require("path"));
 const fs_1 = __importDefault(require("fs"));
@@ -33,8 +33,8 @@ const USER_SESSION = JSON.parse(`
         "thumbnailPath": "/users/3edbc450-7e78-40db-895e-5eed8de73fcf/photos/754e4f180522390c003ff9f3add7236cb7001758dd4f8e041f261b8ed02c55fe.png",
         "mimeType": "png",
         "uploadedByUserId": "3edbc450-7e78-40db-895e-5eed8de73fcf",
-        "url": "http://localhost:9000/cdn//users/3edbc450-7e78-40db-895e-5eed8de73fcf/photos/ebc4833518254cbdbedd4b7d71d06c67e4c3787468c597f1c30c3a4df7c07737.png",
-        "thumbnailUrl": "http://localhost:9000/cdn//users/3edbc450-7e78-40db-895e-5eed8de73fcf/photos/754e4f180522390c003ff9f3add7236cb7001758dd4f8e041f261b8ed02c55fe.png"
+        "url": "http://localhost:9000/cdn/users/3edbc450-7e78-40db-895e-5eed8de73fcf/photos/ebc4833518254cbdbedd4b7d71d06c67e4c3787468c597f1c30c3a4df7c07737.png",
+        "thumbnailUrl": "http://localhost:9000/cdn/users/3edbc450-7e78-40db-895e-5eed8de73fcf/photos/754e4f180522390c003ff9f3add7236cb7001758dd4f8e041f261b8ed02c55fe.png"
       }
     },
     "authenticationCredentials": [
@@ -44,8 +44,8 @@ const USER_SESSION = JSON.parse(`
         "updatedAt": "2022-12-30T17:44:00.220Z",
         "credentialType": "email_pass",
         "isSignupCredential": false,
-        "email": "james.rainer.sunderland@gmail.com",
-        "normalizedEmail": "jamesrainersunderland@gmail.com",
+        "email": "test@gmail.com",
+        "normalizedEmail": "test@gmail.com",
         "emailHash": "5BqJH9ef6kkcV2vdTmcV6A==",
         "isVerified": true,
         "isThirdPartyVerified": false,
@@ -68,30 +68,6 @@ const USER_SESSION = JSON.parse(`
     "createdAt": "2022-12-30T20:45:35.058Z",
     "exchangedAt": "2023-01-06T20:00:00.995Z",
     "exchangeHistory": [
-      "GvU6JkmsnQNtFe2HHjKbvNU1ub1Uh68zt1rFqBNc7Ao=",
-      "C6vWVNbzvqpiyjN1OwFoUjtYCH+L9Im9TnW2oOo9yqk=",
-      "C232nvJULazDfdK+LQbJdwMGD31S6tzyg2D9tt1yzRE=",
-      "vEgOFODZepqjRNUcPCO0nsZAgEfNtvrh3+WfHp+D9/M=",
-      "ei1Eb2VQ0IUZzapBmBLy52HEGO8yYOCnlPxCQvjIDEw=",
-      "LK3gDT9HSrQuedzkDnuMnxMkGAgdrhhbCey2HtjnRzA=",
-      "Rg0TM0JPFmojiDW8IlDYQtNGB/bqc+vX+P3o9OOTju0=",
-      "PkJo1hDNmPlfQvguIa/aW7w0ekKpOe2FgOEIUiZtmQg=",
-      "9ciVxT6+oKlh6p+B1nhCE1+/E8SJ0tGklDPKdFwGkD8=",
-      "1iPDY4JT2oi28I8MpXHqXYjyI0szlTLEPW0treu9UzI=",
-      "QHoQekgYWHEk3BPRI0/H8+bluCh96OY9hL99WSMBPAo=",
-      "V8vZGgYocYCft4oCuEFGm+XRfDrfYvkCbeJmmK7WZBo=",
-      "f1xIBjkB8z0YO93C97UHmHTuzLovor6tcFPWUFllkwg=",
-      "I/Dosm0Zp5I2rzyk1+M7ZU8OVdYf+Bufm3ORJNZGPaA=",
-      "w/RccIHvVN3zwfd4T9sPvZvCh12ZkMBmDChkURimhxk=",
-      "4BYNwD+Mbc0MerusIDru4d7XR/gtHNGMFV9+EX59wjQ=",
-      "D/6fh1BaE/AMtu1evt7mhE1HQuAkzk7gv9lLLIIhQ3Q=",
-      "2YGuOo/KXpcgNxogfMGU6NjzoSjCBQ5EwttoJBFVZk0=",
-      "hZ+XFqaXnAvnB7acwgghC+Ka1sPfkhgYo5Z2N2kuIK8=",
-      "pdCOSbmR7VUZN0wnHJTrnCY8YLJVQjzv5WEpqj1ZKhU=",
-      "p6NVNcaSvz04+zi/sjVBFRJhpCbT240Ba+s6F8YQJKA=",
-      "bZEwqV4Exfx/2RqtxSMDcj9PJ1W38AM2a7n6B3Vivgk=",
-      "wggkvTIkHfGp2qNBDNp9Bv4q52epW4TNF81Zn9Wlsj0=",
-      "8tGThvsfTjXkptKaHO44VE5jwN9iD0AcKNnpgoMqeWg="
     ]
   }
  `);
@@ -159,11 +135,70 @@ const MAIN_BRANCH = `
     "name": "main"
   }
 `;
+const DIST_INDEX_HTML = (pluginName) => `
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script type="module" crossorigin src="/plugins/${pluginName}/assets/index.js"></script>
+  </head>
+  <body>
+    <div id="app"></div>
+  </body>
+</html>
+
+`;
+const DIST_ASSETS_INDEX_JS = (pluginName) => `
+console.log("hello world from ${pluginName}");
+`;
 const makeSignedInUser = async () => {
     await (0, filestructure_1.writeUserSession)(USER_SESSION);
     await (0, filestructure_1.writeUser)(USER);
 };
 exports.makeSignedInUser = makeSignedInUser;
+const makePluginCreationDirectory = (name, manifest) => {
+    const projectsPath = path_1.default.join(filestructure_1.userHome, "projects");
+    const projectPath = path_1.default.join(projectsPath, name);
+    fs_1.default.mkdirSync(projectPath, { recursive: true });
+    const floroCreationPath = path_1.default.join(projectPath, "floro");
+    fs_1.default.mkdirSync(floroCreationPath, { recursive: true });
+    const floroManifestPath = path_1.default.join(floroCreationPath, "floro.manifest.json");
+    fs_1.default.writeFileSync(floroManifestPath, JSON.stringify(manifest));
+    const distPath = path_1.default.join(projectPath, "dist");
+    fs_1.default.mkdirSync(distPath, { recursive: true });
+    const assetsPath = path_1.default.join(distPath, "assets");
+    fs_1.default.mkdirSync(assetsPath, { recursive: true });
+    const indexHTMLPath = path_1.default.join(distPath, "index.html");
+    fs_1.default.writeFileSync(indexHTMLPath, DIST_INDEX_HTML(name));
+    const indexJSPath = path_1.default.join(assetsPath, "index.js");
+    fs_1.default.writeFileSync(indexJSPath, DIST_ASSETS_INDEX_JS(name));
+    return projectPath;
+};
+exports.makePluginCreationDirectory = makePluginCreationDirectory;
+const makeTestPlugin = (manifest, isDev = false) => {
+    const pluginName = manifest.name;
+    const pluginVersion = manifest.version;
+    const pluginDir = path_1.default.join(isDev ? filestructure_1.vDEVPath : filestructure_1.vPluginsPath, `${pluginName}@${pluginVersion}`);
+    fs_1.default.mkdirSync(pluginDir, { recursive: true });
+    const floroCreationPath = path_1.default.join(pluginDir, "floro");
+    fs_1.default.mkdirSync(floroCreationPath, { recursive: true });
+    const floroManifestPath = path_1.default.join(floroCreationPath, "floro.manifest.json");
+    fs_1.default.writeFileSync(floroManifestPath, JSON.stringify(manifest));
+    const assetsPath = path_1.default.join(pluginDir, "assets");
+    fs_1.default.mkdirSync(assetsPath, { recursive: true });
+    const indexHTMLPath = path_1.default.join(pluginDir, "index.html");
+    fs_1.default.writeFileSync(indexHTMLPath, DIST_INDEX_HTML(pluginName));
+    const indexJSPath = path_1.default.join(assetsPath, "index.js");
+    fs_1.default.writeFileSync(indexJSPath, DIST_ASSETS_INDEX_JS(pluginName));
+    return pluginDir;
+};
+exports.makeTestPlugin = makeTestPlugin;
+const getPluginCreationDirectoryRoot = async (name) => {
+    const projectsPath = path_1.default.join(filestructure_1.userHome, "projects");
+    return path_1.default.join(projectsPath, name);
+};
+exports.getPluginCreationDirectoryRoot = getPluginCreationDirectoryRoot;
 const createBlankRepo = (repoId) => {
     const repoPath = path_1.default.join(filestructure_1.vReposPath, repoId);
     if (!fs_1.default.existsSync(repoPath)) {

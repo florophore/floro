@@ -34,6 +34,10 @@ const argv = mainOptions._unknown || [];
         await (0, daemon_1.startDaemon)();
         return;
     }
+    if (mainOptions.command == "plugin") {
+        console.log("test");
+        return;
+    }
     if (mainOptions.command == "config") {
         const response = await inquirer_1.default.prompt([
             {

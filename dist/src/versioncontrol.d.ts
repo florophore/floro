@@ -31,7 +31,7 @@ export interface CommitData {
 export declare const getKVHashes: (obj: {
     key: string;
     value: {
-        [key: string]: string | number | boolean;
+        [key: string]: string | number | boolean | (string | number | boolean)[];
     };
 }) => {
     keyHash: string;
@@ -40,7 +40,7 @@ export declare const getKVHashes: (obj: {
 export declare const getRowHash: (obj: {
     key: string;
     value: {
-        [key: string]: string | number | boolean;
+        [key: string]: string | number | boolean | (string | number | boolean)[];
     };
 }) => string;
 export declare const getDiffHash: (commitData: CommitData) => string;
@@ -49,5 +49,5 @@ export declare const getDiff: (before: Array<DiffElement>, after: Array<DiffElem
 export declare const splitTextForDiff: (str: string) => Array<string>;
 export declare const getTextDiff: (before: string, after: string) => TextDiff;
 export declare const applyDiff: <T extends string | DiffElement>(diffset: Diff | TextDiff, state: T[]) => T[];
-export declare const getMergeSequence: (origin: Array<string>, from: Array<string>, into: Array<string>) => Array<string>;
+export declare const getMergeSequence: (origin: Array<string>, from: Array<string>, into: Array<string>, whose?: "theirs" | "yours") => Array<string>;
 export declare const canAutoMerge: (origin: Array<string>, from: Array<string>, into: Array<string>) => boolean;

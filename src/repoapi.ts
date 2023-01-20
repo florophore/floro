@@ -595,7 +595,7 @@ export const updatePlugins = async (repoId?: string, plugins?: Array<PluginEleme
   try {
     // fetch upstream plugins
     // TODO: check each plugin is present in floro
-
+    // TODO COME BACK HERE
     const unstagedState = await getUnstagedCommitState(repoId);
     const pluginsDiff = getDiff(unstagedState.plugins, plugins);
     const nextPluginState = applyDiff(pluginsDiff, unstagedState.plugins);

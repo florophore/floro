@@ -201,6 +201,23 @@ export const existsAsync = (file): Promise<boolean> => {
     .catch(() => false);
 }
 
+export const copyDirectory = async (src: string, dest: string): Promise<void> => {
+  const [entries] = await Promise.all([
+    fs.promises.readdir(src, { withFileTypes: true }),
+    fs.promises.mkdir(dest, { recursive: true }),
+  ])
+
+  await Promise.all(
+    entries.map((entry) => {
+      const srcPath = path.join(src, entry.name)
+      const destPath = path.join(dest, entry.name)
+      return entry.isDirectory()
+        ? copyDirectory(srcPath, destPath)
+        : fs.promises.copyFile(srcPath, destPath)
+    })
+  )
+}
+
 export const getPluginsJson = (): {plugins: {[key: string]: { proxy?: boolean, version?: string, host?: string}}} => {
   try {
     const remotePluginsJSON = fs.readFileSync(vConfigPluginsPath, { encoding: 'utf-8' });

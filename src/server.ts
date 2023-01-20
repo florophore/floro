@@ -557,6 +557,16 @@ for (let plugin in pluginsJSON.plugins) {
   }
 }
 
+app.get("/plugins/:pluginName*", async (req, res) => {
+  const pluginName = req?.params?.['pluginName'];
+  const version = req?.query?.['v'];
+  console.log("PN", pluginName);
+  console.log("V", version);
+  console.log("path", req.path);
+  // finsish this
+  res.send({ok: true});
+});
+
 server.listen(port, host, () =>
   console.log("floro server started on " + host + ":" + port)
 );
