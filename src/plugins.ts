@@ -120,19 +120,25 @@ export const pluginManifestsAreCompatibleForUpdate = async (
     if (!oldSchemaMap[newManifest.name]) {
       return true;
     }
-    return pluginManifestIsSubsetOfManifest(oldSchemaMap, newSchemaMap, newManifest.name);
-  }, true) 
+    return pluginManifestIsSubsetOfManifest(
+      oldSchemaMap,
+      newSchemaMap,
+      newManifest.name
+    );
+  }, true);
 };
 
 export const getPluginManifests = async (
   pluginList: Array<PluginElement>
 ): Promise<Array<Manifest>> => {
-  const manifests = await Promise.all(pluginList.map(({key: pluginName}) => {
-    return getPluginManifest(pluginName, pluginList) 
-  }));
-  return manifests?.filter(manifest => {
+  const manifests = await Promise.all(
+    pluginList.map(({ key: pluginName }) => {
+      return getPluginManifest(pluginName, pluginList);
+    })
+  );
+  return manifests?.filter((manifest) => {
     return !!manifest;
-  })
+  });
 };
 
 export const pluginListToMap = (
@@ -219,13 +225,17 @@ export const getUpstreamDependencyList = async (
   return deps;
 };
 
-const containsCyclicTypes = (
+export const containsCyclicTypes = (
   schema: Manifest,
   struct: TypeStruct,
   visited = {}
 ) => {
   for (const prop in struct) {
-    if ((struct[prop].type as string) == "set") {
+    if (
+      (struct[prop].type as string) == "set" ||
+      ((struct[prop].type as string) == "array" &&
+        !primitives.has(struct[prop].values as string))
+    ) {
       if (
         visited[struct[prop].values as string] ||
         containsCyclicTypes(
@@ -606,7 +616,7 @@ const sanitizePrimitivesWithSchema = (struct: TypeStruct, state: object) => {
       out[prop] = (state?.[prop] ?? [])?.map((value: object) => {
         return sanitizePrimitivesWithSchema(
           struct[prop]?.values as TypeStruct,
-          value 
+          value
         );
       });
       continue;
@@ -1010,7 +1020,8 @@ const generateKVFromStateWithRootSchema = (
 
 const iterateSchemaTypes = (
   types: Manifest["types"],
-  pluginName: string
+  pluginName: string,
+  importedTypes = {}
 ): object => {
   let out = {};
   for (const prop in types) {
@@ -1032,10 +1043,22 @@ const iterateSchemaTypes = (
         out[prop].values = `${pluginName}.${types[prop].values}`;
         continue;
       }
+      if (
+        typeof types[prop].values == "string" &&
+        typeof importedTypes[types[prop].values as string] == "object"
+      ) {
+        out[prop].values = iterateSchemaTypes(
+          importedTypes[types[prop].values as string] as TypeStruct,
+          pluginName,
+          importedTypes
+        );
+        continue;
+      }
       if (typeof types[prop].values == "object") {
         out[prop].values = iterateSchemaTypes(
           types[prop].values as TypeStruct,
-          pluginName
+          pluginName,
+          importedTypes
         );
         continue;
       }
@@ -1055,8 +1078,37 @@ const iterateSchemaTypes = (
       out[prop] = types[prop];
       continue;
     }
+
+    if (
+      typeof types[prop].type == "string" &&
+      importedTypes[types[prop]?.type as string]
+    ) {
+      out[prop] = iterateSchemaTypes(
+        importedTypes[types[prop]?.type as string],
+        pluginName,
+        importedTypes
+      );
+      continue;
+    }
+
+    if (
+      typeof types[prop].type == "string" &&
+      importedTypes[pluginName + "." + types[prop]?.type]
+    ) {
+      out[prop] = iterateSchemaTypes(
+        importedTypes[pluginName + "." + types[prop]?.type],
+        pluginName,
+        importedTypes
+      );
+      continue;
+    }
+
     if (!types[prop]?.type) {
-      out[prop] = iterateSchemaTypes(types[prop] as TypeStruct, pluginName);
+      out[prop] = iterateSchemaTypes(
+        types[prop] as TypeStruct,
+        pluginName,
+        importedTypes
+      );
     }
   }
   return out;
@@ -1064,7 +1116,8 @@ const iterateSchemaTypes = (
 
 const drawSchemaTypesFromImports = (
   schema: { [key: string]: Manifest },
-  pluginName: string
+  pluginName: string,
+  importedTypes = {}
 ): TypeStruct => {
   const types = Object.keys(schema[pluginName].types).reduce((types, key) => {
     if (key.startsWith(`${pluginName}.`)) {
@@ -1072,7 +1125,8 @@ const drawSchemaTypesFromImports = (
         ...types,
         [key]: iterateSchemaTypes(
           schema[pluginName].types[key] as TypeStruct,
-          pluginName
+          pluginName,
+          { ...importedTypes, ...schema[pluginName].types }
         ),
       };
     }
@@ -1080,14 +1134,19 @@ const drawSchemaTypesFromImports = (
       ...types,
       [`${pluginName}.${key}`]: iterateSchemaTypes(
         schema[pluginName].types[key] as TypeStruct,
-        pluginName
+        pluginName,
+        { ...importedTypes, ...schema[pluginName].types }
       ),
     };
   }, {});
 
   return Object.keys(schema[pluginName].imports).reduce(
     (acc, importPluginName) => {
-      const importTypes = drawSchemaTypesFromImports(schema, importPluginName);
+      const importTypes = drawSchemaTypesFromImports(
+        schema,
+        importPluginName,
+        importedTypes
+      );
       return {
         ...acc,
         ...importTypes,
@@ -1133,14 +1192,37 @@ export const getStateFromKVForPlugin = (
   return cleanArrayIDsFromState(out);
 };
 
+export const getExpandedTypesForPlugin = (
+  schemaMap: { [key: string]: Manifest },
+  pluginName: string
+): TypeStruct => {
+  const upstreamDeps = getUpstreamDepsInSchemaMap(schemaMap, pluginName);
+  const schemaWithTypes = [...upstreamDeps, pluginName].reduce(
+    (acc, pluginName) => {
+      return {
+        ...acc,
+        ...drawSchemaTypesFromImports(schemaMap, pluginName, acc),
+      };
+    },
+    {}
+  );
+  return Object.keys(schemaWithTypes).reduce((acc, type) => {
+    return {
+      ...acc,
+      [type]: iterateSchemaTypes(acc[type], type, schemaWithTypes),
+    };
+  }, schemaWithTypes);
+};
+
 export const getRootSchemaForPlugin = (
   schemaMap: { [key: string]: Manifest },
   pluginName: string
 ): TypeStruct => {
-  const schemaWithTypes = drawSchemaTypesFromImports(schemaMap, pluginName);
+  const schemaWithTypes = getExpandedTypesForPlugin(schemaMap, pluginName);
   const schemaWithStores = iterateSchemaTypes(
     schemaMap[pluginName].store,
-    pluginName
+    pluginName,
+    schemaWithTypes
   );
 
   return constructRootSchema(

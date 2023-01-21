@@ -12,7 +12,9 @@ import {
   checkDirectoryIsPluginWorkingDirectory,
   exportPluginToDev,
   getDependenciesForManifest,
+  getSchemaMapForCreationManifest,
   tarCreationPlugin,
+  validatePluginManifest,
   verifyPluginDependencyCompatability,
 } from "../src/plugincreator";
 import { Manifest } from "../src/plugins";
@@ -442,6 +444,195 @@ describe("plugincreator", () => {
         lastVersion: "0.0.0",
         nextVersion: "1.0.0",
       });
+    });
+  });
+
+  describe("get schema map for creation plugin", () => {
+    test("returns max versions when compatable", async () => {
+      const PLUGIN_A_0_MANIFEST: Manifest = {
+        name: "A",
+        version: "0.0.0",
+        displayName: "A",
+        publisher: "@jamiesunderland",
+        icon: "",
+        imports: {},
+        types: {},
+        store: {
+          someType: {
+            type: "string",
+          },
+        },
+      };
+
+      makeTestPlugin(PLUGIN_A_0_MANIFEST);
+
+      const PLUGIN_A_1_MANIFEST: Manifest = {
+        name: "A",
+        version: "1.0.0",
+        displayName: "A",
+        publisher: "@jamiesunderland",
+        icon: "",
+        imports: {
+          B: "0.0.0",
+        },
+        types: {},
+        store: {
+          someType: {
+            type: "string",
+          },
+          someOtherType: {
+            type: "int",
+          },
+        },
+      };
+
+      makeTestPlugin(PLUGIN_A_1_MANIFEST);
+
+      const PLUGIN_B_MANIFEST: Manifest = {
+        name: "B",
+        version: "0.0.0",
+        displayName: "B",
+        publisher: "@jamiesunderland",
+        icon: "",
+        imports: {},
+        types: {},
+        store: {
+          bType: {
+            type: "string",
+          },
+        },
+      };
+      makeTestPlugin(PLUGIN_B_MANIFEST);
+
+      const PLUGIN_C_MANIFEST: Manifest = {
+        name: "C",
+        version: "0.0.0",
+        displayName: "C",
+        publisher: "@jamiesunderland",
+        icon: "",
+        imports: {
+          A: "1.0.0",
+          B: "0.0.0",
+        },
+        types: {},
+        store: {
+          cType: {
+            type: "string",
+          },
+        },
+      };
+      makeTestPlugin(PLUGIN_C_MANIFEST);
+
+      const depListResponse = await getSchemaMapForCreationManifest(
+        PLUGIN_C_MANIFEST
+      );
+      expect(depListResponse).toEqual({
+        'A': PLUGIN_A_1_MANIFEST,
+        'B': PLUGIN_B_MANIFEST,
+        'C': PLUGIN_C_MANIFEST,
+      });
+    });
+  });
+
+  describe("validate schema", () => {
+    test("validates a valid schema", async () => {
+      const PLUGIN_A_0_MANIFEST: Manifest = {
+        name: "A",
+        version: "0.0.0",
+        displayName: "A",
+        publisher: "@jamiesunderland",
+        icon: "",
+        imports: {},
+        types: {
+          typeA0: {
+            something: {
+              type: "string",
+            },
+          },
+          typeA: {
+            name: {
+              type: "string",
+              isKey: true,
+            },
+            someProp: {
+              type: "int",
+            },
+            other: {
+              type: "typeA0"
+            }
+          },
+        },
+        store: {
+          aObjects: {
+            type: "set",
+            values: "typeA",
+          },
+        },
+      };
+
+      makeTestPlugin(PLUGIN_A_0_MANIFEST);
+
+      const PLUGIN_B_MANIFEST: Manifest = {
+        name: "B",
+        version: "0.0.0",
+        displayName: "B",
+        publisher: "@jamiesunderland",
+        icon: "",
+        imports: {
+          "A": "0.0.0"
+        },
+        types: {
+          randoType: {
+            name: {
+              type: "string"
+            },
+            aWeird: {
+              type: "A.typeA"
+            },
+            b: {
+              type: "bType"
+            },
+            bArray: {
+              type: "array",
+              values: "bType"
+            }
+          },
+          bType: {
+            name: {
+              type: "string",
+              isKey: true
+            },
+            a: {
+              type: "A.typeA"
+            },
+          }
+        },
+        store: {
+          bObjects: {
+            mainKey: {
+              type: "string",
+              isKey: true
+            },
+            aRef: {
+              type: "ref<$(A).aObjects.values>"
+            },
+            aTypeRef: {
+              type: "ref<bType>"
+            },
+            as: {
+              type: "set",
+              values: "A.typeA",
+            },
+            weird: {
+              type: "randoType"
+            }
+          },
+        },
+      };
+      makeTestPlugin(PLUGIN_B_MANIFEST);
+
+      const out = await validatePluginManifest(PLUGIN_B_MANIFEST);
+      console.log(out);
     });
   });
 });

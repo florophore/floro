@@ -1,7 +1,13 @@
-import { Session } from "inspector";
-import { writeUserSession, writeUser, vReposPath, userHome, vDEVPath, vPluginsPath } from "../../src/filestructure";
-import path from 'path';
-import fs from 'fs';
+import {
+  writeUserSession,
+  writeUser,
+  vReposPath,
+  userHome,
+  vDEVPath,
+  vPluginsPath,
+} from "../../src/filestructure";
+import path from "path";
+import fs from "fs";
 import { Manifest } from "../../src/plugins";
 
 const USER_SESSION = JSON.parse(`
@@ -19,47 +25,10 @@ const USER_SESSION = JSON.parse(`
       "freeDiskSpaceBytes": "37580963840",
       "diskSpaceLimitBytes": "21474836480",
       "utilizedDiskSpaceBytes": "0",
-      "profilePhotoId": "f02b59a9-2fb6-4477-89ef-98b36f82972d",
-      "profilePhoto": {
-        "id": "f02b59a9-2fb6-4477-89ef-98b36f82972d",
-        "createdAt": "2022-12-21T15:10:46.481Z",
-        "updatedAt": "2022-12-21T15:10:46.481Z",
-        "hash": "ebc4833518254cbdbedd4b7d71d06c67e4c3787468c597f1c30c3a4df7c07737",
-        "path": "/users/3edbc450-7e78-40db-895e-5eed8de73fcf/photos/ebc4833518254cbdbedd4b7d71d06c67e4c3787468c597f1c30c3a4df7c07737.png",
-        "thumbnailHash": "754e4f180522390c003ff9f3add7236cb7001758dd4f8e041f261b8ed02c55fe",
-        "thumbnailPath": "/users/3edbc450-7e78-40db-895e-5eed8de73fcf/photos/754e4f180522390c003ff9f3add7236cb7001758dd4f8e041f261b8ed02c55fe.png",
-        "mimeType": "png",
-        "uploadedByUserId": "3edbc450-7e78-40db-895e-5eed8de73fcf",
-        "url": "http://localhost:9000/cdn/users/3edbc450-7e78-40db-895e-5eed8de73fcf/photos/ebc4833518254cbdbedd4b7d71d06c67e4c3787468c597f1c30c3a4df7c07737.png",
-        "thumbnailUrl": "http://localhost:9000/cdn/users/3edbc450-7e78-40db-895e-5eed8de73fcf/photos/754e4f180522390c003ff9f3add7236cb7001758dd4f8e041f261b8ed02c55fe.png"
-      }
+      "profilePhotoId": null,
+      "profilePhoto": null
     },
     "authenticationCredentials": [
-      {
-        "id": "a57f501f-3295-4479-acb6-38aa5fb4f7b5",
-        "createdAt": "2022-11-30T22:14:48.679Z",
-        "updatedAt": "2022-12-30T17:44:00.220Z",
-        "credentialType": "email_pass",
-        "isSignupCredential": false,
-        "email": "test@gmail.com",
-        "normalizedEmail": "test@gmail.com",
-        "emailHash": "5BqJH9ef6kkcV2vdTmcV6A==",
-        "isVerified": true,
-        "isThirdPartyVerified": false,
-        "isDisabled": false,
-        "hasThirdPartyTwoFactorEnabled": null,
-        "accessToken": null,
-        "googleId": null,
-        "googleGivenName": null,
-        "googleFamilyName": null,
-        "googleLocale": null,
-        "githubId": null,
-        "githubNodeId": null,
-        "githubLogin": null,
-        "githubName": null,
-        "githubCompany": null,
-        "userId": "3edbc450-7e78-40db-895e-5eed8de73fcf"
-      }
     ],
     "expiresAt": "2023-01-20T20:00:00.000Z",
     "createdAt": "2022-12-30T20:45:35.058Z",
@@ -78,20 +47,8 @@ const USER = JSON.parse(`{
     "freeDiskSpaceBytes": "37580963840",
     "diskSpaceLimitBytes": "21474836480",
     "utilizedDiskSpaceBytes": "0",
-    "profilePhotoId": "f02b59a9-2fb6-4477-89ef-98b36f82972d",
-    "profilePhoto": {
-      "id": "f02b59a9-2fb6-4477-89ef-98b36f82972d",
-      "createdAt": "2022-12-21T15:10:46.481Z",
-      "updatedAt": "2022-12-21T15:10:46.481Z",
-      "hash": "ebc4833518254cbdbedd4b7d71d06c67e4c3787468c597f1c30c3a4df7c07737",
-      "path": "/users/3edbc450-7e78-40db-895e-5eed8de73fcf/photos/ebc4833518254cbdbedd4b7d71d06c67e4c3787468c597f1c30c3a4df7c07737.png",
-      "thumbnailHash": "754e4f180522390c003ff9f3add7236cb7001758dd4f8e041f261b8ed02c55fe",
-      "thumbnailPath": "/users/3edbc450-7e78-40db-895e-5eed8de73fcf/photos/754e4f180522390c003ff9f3add7236cb7001758dd4f8e041f261b8ed02c55fe.png",
-      "mimeType": "png",
-      "uploadedByUserId": "3edbc450-7e78-40db-895e-5eed8de73fcf",
-      "url": "http://localhost:9000/cdn//users/3edbc450-7e78-40db-895e-5eed8de73fcf/photos/ebc4833518254cbdbedd4b7d71d06c67e4c3787468c597f1c30c3a4df7c07737.png",
-      "thumbnailUrl": "http://localhost:9000/cdn//users/3edbc450-7e78-40db-895e-5eed8de73fcf/photos/754e4f180522390c003ff9f3add7236cb7001758dd4f8e041f261b8ed02c55fe.png"
-    }
+    "profilePhotoId": null,
+    "profilePhoto": null
   }
 `);
 
@@ -121,7 +78,6 @@ const REPO_CURRENT = `
   }
 `;
 
-
 const REPO_SETTINGS = `
     {"mainBranch":"main"}
 `;
@@ -135,7 +91,7 @@ const MAIN_BRANCH = `
     "createdAt": "Wed Dec 21 2022 15:59:50 GMT-0500 (Eastern Standard Time)",
     "name": "main"
   }
-`
+`;
 
 const DIST_INDEX_HTML = (pluginName: string) => `
 <!DOCTYPE html>
@@ -150,17 +106,20 @@ const DIST_INDEX_HTML = (pluginName: string) => `
   </body>
 </html>
 
-`
+`;
 
 const DIST_ASSETS_INDEX_JS = (pluginName: string) => `
 console.log("hello world from ${pluginName}");
-`
+`;
 export const makeSignedInUser = async () => {
-    await writeUserSession(USER_SESSION);
-    await writeUser(USER);
-}
+  await writeUserSession(USER_SESSION);
+  await writeUser(USER);
+};
 
-export const makePluginCreationDirectory = (name: string, manifest: Manifest) => {
+export const makePluginCreationDirectory = (
+  name: string,
+  manifest: Manifest
+) => {
   const projectsPath = path.join(userHome, "projects");
   const projectPath = path.join(projectsPath, name);
   fs.mkdirSync(projectPath, { recursive: true });
@@ -177,12 +136,15 @@ export const makePluginCreationDirectory = (name: string, manifest: Manifest) =>
   const indexJSPath = path.join(assetsPath, "index.js");
   fs.writeFileSync(indexJSPath, DIST_ASSETS_INDEX_JS(name));
   return projectPath;
-}
+};
 
 export const makeTestPlugin = (manifest: Manifest, isDev = false) => {
   const pluginName = manifest.name;
   const pluginVersion = manifest.version;
-  const pluginDir = path.join(isDev ? vDEVPath : vPluginsPath, `${pluginName}@${pluginVersion}`);
+  const pluginDir = path.join(
+    isDev ? vDEVPath : vPluginsPath,
+    `${pluginName}@${pluginVersion}`
+  );
   fs.mkdirSync(pluginDir, { recursive: true });
   const floroCreationPath = path.join(pluginDir, "floro");
   fs.mkdirSync(floroCreationPath, { recursive: true });
@@ -195,30 +157,30 @@ export const makeTestPlugin = (manifest: Manifest, isDev = false) => {
   const indexJSPath = path.join(assetsPath, "index.js");
   fs.writeFileSync(indexJSPath, DIST_ASSETS_INDEX_JS(pluginName));
   return pluginDir;
-}
+};
 
 export const getPluginCreationDirectoryRoot = async (name: string) => {
   const projectsPath = path.join(userHome, "projects");
   return path.join(projectsPath, name);
-}
+};
 
-export const createBlankRepo = (repoId: string) =>{
-    const repoPath = path.join(vReposPath, repoId);
-    if (!fs.existsSync(repoPath)) {
-        const binariesPath = path.join(repoPath, 'binaries');
-        const branchesPath = path.join(repoPath, 'branches');
-        const commitsPath = path.join(repoPath, 'commits');
-        const stashesPath = path.join(repoPath, 'stash');
-        fs.mkdirSync(repoPath)
-        fs.mkdirSync(binariesPath)
-        fs.mkdirSync(branchesPath)
-        fs.mkdirSync(commitsPath)
-        fs.mkdirSync(stashesPath)
-        const repoSettingsPath = path.join(repoPath, 'settings.json'); 
-        const currentPath = path.join(repoPath, 'current.json'); 
-        const mainBranchPath = path.join(branchesPath, 'main.json'); 
-        fs.writeFileSync(repoSettingsPath, REPO_SETTINGS, 'utf-8');
-        fs.writeFileSync(currentPath, REPO_CURRENT, 'utf-8');
-        fs.writeFileSync(mainBranchPath, MAIN_BRANCH, 'utf-8');
-    }
-}
+export const createBlankRepo = (repoId: string) => {
+  const repoPath = path.join(vReposPath, repoId);
+  if (!fs.existsSync(repoPath)) {
+    const binariesPath = path.join(repoPath, "binaries");
+    const branchesPath = path.join(repoPath, "branches");
+    const commitsPath = path.join(repoPath, "commits");
+    const stashesPath = path.join(repoPath, "stash");
+    fs.mkdirSync(repoPath);
+    fs.mkdirSync(binariesPath);
+    fs.mkdirSync(branchesPath);
+    fs.mkdirSync(commitsPath);
+    fs.mkdirSync(stashesPath);
+    const repoSettingsPath = path.join(repoPath, "settings.json");
+    const currentPath = path.join(repoPath, "current.json");
+    const mainBranchPath = path.join(branchesPath, "main.json");
+    fs.writeFileSync(repoSettingsPath, REPO_SETTINGS, "utf-8");
+    fs.writeFileSync(currentPath, REPO_CURRENT, "utf-8");
+    fs.writeFileSync(mainBranchPath, MAIN_BRANCH, "utf-8");
+  }
+};

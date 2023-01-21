@@ -13,6 +13,9 @@ import {
   manifestListToSchemaMap,
   pluginManifestIsSubsetOfManifest,
   pluginMapToList,
+  containsCyclicTypes,
+  getRootSchemaForPlugin,
+  getRootSchemaMap
 } from "./plugins";
 import semver from "semver";
 
@@ -140,6 +143,8 @@ export const tarCreationPlugin = async (cwd: string): Promise<boolean> => {
   }
 };
 
+export const uploadPluginTar = () => {};
+
 export interface DepFetch {
   status: "ok" | "error";
   reason?: string;
@@ -160,6 +165,10 @@ export const getDependenciesForManifest = async (
       };
     }
     try {
+      // check if is dev plug
+      // if dev do nothing
+      // if not dev, see if exists locally
+      // if not exists local, then download
       const pluginManifest = await getPluginManifest(pluginName, pluginList);
       const depResult = await getDependenciesForManifest(pluginManifest, {
         ...seen,
@@ -213,7 +222,7 @@ const coalesceDependencyVersions = (
   }
 };
 
-interface VerifyDepsResult {
+export interface VerifyDepsResult {
   isValid: boolean;
   status: "ok" | "error";
   reason?: string;
@@ -292,5 +301,68 @@ export const verifyPluginDependencyCompatability = async (
   return {
     isValid: true,
     status: "ok",
+  };
+};
+
+export const getSchemaMapForCreationManifest = async (
+  manifest: Manifest
+): Promise<{ [key: string]: Manifest } | null> => {
+  const depResult = await getDependenciesForManifest(manifest);
+  if (depResult.status == "error") {
+    return null;
+  }
+  const areValid = await verifyPluginDependencyCompatability(depResult.deps);
+  if (!areValid.isValid) {
+    return null;
+  }
+  const depsMap = coalesceDependencyVersions(depResult.deps);
+  let out = {};
+  for (let pluginName in depsMap) {
+    const maxVersion = depsMap[pluginName][depsMap[pluginName].length - 1];
+    const depManifest = depResult.deps.find((v) => v.version == maxVersion);
+    out[depManifest.name] = depManifest;
+  }
+  out[manifest.name] = manifest;
+  return out;
+};
+
+export const validatePluginManifest = async (manifest: Manifest) => {
+  if (containsCyclicTypes(manifest, manifest.store)) {
+    return {
+      status: "error",
+      message: `${manifest.name}'s schema contains cyclic types, consider using references`,
+    };
+  }
+  const depResult = await getDependenciesForManifest(manifest);
+  if (depResult.status == "error") {
+    return {
+      status: "error",
+      message: depResult.reason
+    };
+  }
+  const areValid = await verifyPluginDependencyCompatability(depResult.deps);
+  if (!areValid.isValid) {
+    if (areValid.reason == "dep_fetch") {
+        return {
+            status: "error",
+            message: `failed to fetch dependency ${areValid.pluginName}@${areValid.pluginVersion}`,
+        };
+    }
+    if (areValid.reason == "incompatible") {
+        return {
+            status: "error",
+            message: `incompatible dependency versions for ${areValid.pluginName} between version ${areValid.lastVersion} and ${areValid.nextVersion}`,
+        };
+    }
+  }
+
+  const schemaMap = await getSchemaMapForCreationManifest(manifest);
+  console.log("SM", JSON.stringify(schemaMap, null, 2));
+  const rootSchema = getRootSchemaForPlugin(schemaMap, manifest.name);
+  console.log("ROOT SCHEMA", JSON.stringify(rootSchema, null, 2));
+  const rsm = getRootSchemaMap(schemaMap);
+  console.log("ROOT SCHEMA MAP", JSON.stringify(rsm, null, 2));
+  return {
+    status: "ok"
   };
 };
