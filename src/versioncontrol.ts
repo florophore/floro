@@ -36,12 +36,12 @@ export interface CommitData {
 }
 
 const getObjectStringValue = (obj: {
-  [key: string]: number | string | boolean | Array<number|string|boolean>;
+  [key: string]: number | string | boolean | Array<number | string | boolean>;
 }): string => {
   if (typeof obj == "string") return obj;
   return Object.keys(obj).reduce((s, key) => {
     if (Array.isArray(obj[key])) {
-      const value = (obj[key] as Array<number|string|boolean>).join("-");
+      const value = (obj[key] as Array<number | string | boolean>).join("-");
       return `${s}/${key}:${value}`;
     }
     return `${s}/${key}:${obj[key]}`;
@@ -50,7 +50,9 @@ const getObjectStringValue = (obj: {
 
 export const getKVHashes = (obj: {
   key: string;
-  value: { [key: string]: number | string | boolean | Array<number|string|boolean> };
+  value: {
+    [key: string]: number | string | boolean | Array<number | string | boolean>;
+  };
 }): { keyHash: string; valueHash: string } => {
   const keyHash = Crypto.SHA256(obj.key);
   const valueHash = Crypto.SHA256(getObjectStringValue(obj.value));
@@ -62,7 +64,9 @@ export const getKVHashes = (obj: {
 
 export const getRowHash = (obj: {
   key: string;
-  value: { [key: string]: number | string | boolean | Array<number|string|boolean> };
+  value: {
+    [key: string]: number | string | boolean | Array<number | string | boolean>;
+  };
 }): string => {
   const { keyHash, valueHash } = getKVHashes(obj);
   return Crypto.SHA256(keyHash + valueHash);
@@ -206,7 +210,7 @@ export const getMergeSequence = (
   origin: Array<string>,
   from: Array<string>,
   into: Array<string>,
-  whose: "theirs"|"yours" = "yours"
+  whose: "theirs" | "yours" = "yours"
 ): Array<string> => {
   if (from.length == 0 && into.length == 0) {
     return [];
@@ -241,13 +245,13 @@ export const getMergeSequence = (
     ) {
       mergeSequences.push(fromReconciledSequences[mergeIndex]);
     } else {
-        mergeSequences.push(
-          getMergeSubSequence(
-            fromReconciledSequences[mergeIndex],
-            intoReconciledSequences[mergeIndex],
-            whose
-          )
-        );
+      mergeSequences.push(
+        getMergeSubSequence(
+          fromReconciledSequences[mergeIndex],
+          intoReconciledSequences[mergeIndex],
+          whose
+        )
+      );
     }
     if (mergeIndex != lcs.length) {
       mergeSequences.push([lcs[mergeIndex]]);
@@ -306,7 +310,11 @@ export const canAutoMerge = (
   return true;
 };
 
-const getMergeSubSequence = (from: Array<string>, into: Array<string>, whose: "theirs"|"yours" = "yours") => {
+const getMergeSubSequence = (
+  from: Array<string>,
+  into: Array<string>,
+  whose: "theirs" | "yours" = "yours"
+): Array<string> => {
   if (from.length == 0 && into.length == 0) {
     return [];
   }

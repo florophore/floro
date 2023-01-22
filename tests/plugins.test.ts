@@ -88,6 +88,112 @@ describe("plugins", () => {
       });
     });
 
+    test("can handle references that are key types", () => {
+      const PLUGIN_A_MANIFEST: Manifest = {
+        name: "A",
+        version: "0.0.0",
+        displayName: "A",
+        publisher: "@jamiesunderland",
+        icon: "",
+        imports: {},
+        types: {},
+        store: {
+          aObjects: {
+            type: "set",
+            values: {
+              name: {
+                isKey: true,
+                type: "string"
+              },
+            },
+          },
+          bObjects: {
+            type: "set",
+            values: {
+              mainKey: {
+                isKey: true,
+                type: "ref<$(A).aObjects.values>",
+              },
+            },
+          },
+          cObjects: {
+            type: "set",
+            values: {
+              cVal: {
+                isKey: true,
+                type: "ref<$(A).bObjects.values>",
+              },
+            },
+          },
+        },
+      };
+      const kvs = getKVStateForPlugin(
+        {
+          [PLUGIN_A_MANIFEST.name]: PLUGIN_A_MANIFEST,
+        },
+        PLUGIN_A_MANIFEST.name,
+        {
+          [PLUGIN_A_MANIFEST.name]: {
+            aObjects: [
+              {
+                name: "abc",
+              },
+              {
+                name: "def",
+              },
+            ],
+            bObjects: [
+              {
+                mainKey: "$(A).aObjects.name<abc>"
+              },
+              {
+                mainKey: "$(A).aObjects.name<def>"
+              },
+            ],
+            cObjects: [
+              {
+                cVal: "$(A).bObjects.mainKey<$(A).aObjects.name<abc>>"
+              },
+              {
+                cVal: "$(A).bObjects.mainKey<$(A).aObjects.name<def>>"
+              },
+            ],
+          },
+        }
+      );
+      const s1 = getStateFromKVForPlugin(
+        { [PLUGIN_A_MANIFEST.name]: PLUGIN_A_MANIFEST },
+        kvs,
+        PLUGIN_A_MANIFEST.name
+      );
+      expect(s1).toEqual({
+        aObjects: [
+          {
+            name: "abc",
+          },
+          {
+            name: "def",
+          },
+        ],
+        bObjects: [
+          {
+            mainKey: "$(A).aObjects.name<abc>",
+          },
+          {
+            mainKey: "$(A).aObjects.name<def>",
+          },
+        ],
+        cObjects: [
+          {
+            cVal: "$(A).bObjects.mainKey<$(A).aObjects.name<abc>>",
+          },
+          {
+            cVal: "$(A).bObjects.mainKey<$(A).aObjects.name<def>>",
+          },
+        ],
+      });
+    });
+
     test("can serialize array and set primitive array or set state", () => {
       const ARRAY_PLUGIN_MANIFEST = {
         version: "0.0.0",
@@ -1049,6 +1155,102 @@ describe("plugins", () => {
         },
       });
     });
+
+    test("can cascade multi chained references", () => {
+      const PLUGIN_A_MANIFEST: Manifest = {
+        name: "A",
+        version: "0.0.0",
+        displayName: "A",
+        publisher: "@jamiesunderland",
+        icon: "",
+        imports: {},
+        types: {},
+        store: {
+          aObjects: {
+            type: "set",
+            values: {
+              name: {
+                isKey: true,
+                type: "string"
+              },
+            },
+          },
+          bObjects: {
+            type: "set",
+            values: {
+              mainKey: {
+                isKey: true,
+                type: "ref<$(A).aObjects.values>",
+              },
+            },
+          },
+          cObjects: {
+            type: "set",
+            values: {
+              cVal: {
+                isKey: true,
+                type: "ref<$(A).bObjects.values>",
+              },
+            },
+          },
+        },
+      };
+
+      const schemaMap: { [key: string]: Manifest } = {
+        [PLUGIN_A_MANIFEST.name]: PLUGIN_A_MANIFEST as Manifest,
+      };
+
+      const stateMap = {
+        [PLUGIN_A_MANIFEST.name]: {
+          aObjects: [
+            {
+              name: "def",
+            },
+          ],
+          bObjects: [
+            {
+              mainKey: "$(A).aObjects.name<abc>"
+            },
+            {
+              mainKey: "$(A).aObjects.name<def>"
+            },
+          ],
+          cObjects: [
+            {
+              cVal: "$(A).bObjects.mainKey<$(A).aObjects.name<abc>>"
+            },
+            {
+              cVal: "$(A).bObjects.mainKey<$(A).aObjects.name<def>>"
+            },
+          ],
+        },
+      };
+
+      const cascadedAState = cascadePluginState(
+        schemaMap,
+        stateMap,
+        PLUGIN_A_MANIFEST.name
+      );
+      expect(cascadedAState).toEqual({
+        A: {
+          aObjects: [
+            {
+              name: "def",
+            },
+          ],
+          bObjects: [
+            {
+              mainKey: "$(A).aObjects.name<def>",
+            },
+          ],
+          cObjects: [
+            {
+              cVal: "$(A).bObjects.mainKey<$(A).aObjects.name<def>>",
+            },
+          ],
+        },
+      });
+    })
   });
 
   describe("state validation", () => {

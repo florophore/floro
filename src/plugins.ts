@@ -613,12 +613,13 @@ const sanitizePrimitivesWithSchema = (struct: TypeStruct, state: object) => {
       (struct[prop]?.type == "set" || struct[prop]?.type == "array") &&
       typeof struct[prop]?.values == "object"
     ) {
-      out[prop] = (state?.[prop] ?? [])?.map((value: object) => {
-        return sanitizePrimitivesWithSchema(
-          struct[prop]?.values as TypeStruct,
-          value
-        );
-      });
+      out[prop] =
+        (state?.[prop] ?? [])?.map((value: object) => {
+          return sanitizePrimitivesWithSchema(
+            struct[prop]?.values as TypeStruct,
+            value
+          );
+        }) ?? [];
       continue;
     }
     if (struct[prop]?.type == "int") {
@@ -682,12 +683,71 @@ export const writePathString = (
     .join(".");
 };
 
+const extractKeyValueFromRefString = (
+  str: string
+): { key: string; value: string } => {
+  let key = "";
+  let i = 0;
+  while (str[i] != "<") {
+    key += str[i++];
+  }
+  let value = "";
+  let counter = 1;
+  i++;
+  while (i < str.length) {
+    if (str[i] == "<") counter++;
+    if (str[i] == ">") counter--;
+    if (counter >= 1) {
+      value += str[i];
+    }
+    i++;
+  }
+  return {
+    key,
+    value,
+  };
+};
+
+const getCounterArrowBalanance = (str: string): number => {
+  let counter = 0;
+  for (let i = 0; i < str.length; ++i) {
+    if (str[i] == "<") counter++;
+    if (str[i] == ">") counter--;
+  }
+  return counter;
+};
+
+const splitPath = (str: string): Array<string> => {
+  let out = [];
+  let arrowBalance = 0;
+  let curr = "";
+  for (let i = 0; i <= str.length; ++i) {
+    if (i == str.length) {
+      out.push(curr);
+      continue;
+    }
+    if (arrowBalance == 0 && str[i] == ".") {
+      out.push(curr);
+      curr = "";
+      continue;
+    }
+    if (str[i] == "<") {
+      arrowBalance++;
+    }
+    if (str[i] == ">") {
+      arrowBalance--;
+    }
+    curr += str[i];
+  }
+  return out;
+};
+
 export const decodeSchemaPath = (
   pathString: string
 ): Array<DiffElement | string> => {
-  return pathString.split(".").map((part) => {
-    if (/^(.+)<(.+)>$/.test(part)) {
-      const [, key, value] = /^(.+)<(.+)>$/.exec(part);
+  return splitPath(pathString).map((part) => {
+    if (/^(.+)<(.+)>$/.test(part) && getCounterArrowBalanance(part) == 0) {
+      const { key, value } = extractKeyValueFromRefString(part);
       return {
         key,
         value,
@@ -853,7 +913,7 @@ export const indexArrayDuplicates = (
       }
     }
     let updatedKey = key;
-    let ids = concatenatedId.split(":").filter((v) => v != "");
+    let ids = concatenatedId.split(":").filter((v: string) => v != "");
     for (let i = 0; i < ids.length; ++i) {
       const id = ids[i];
       const subId = ids.slice(0, i + 1).join(":");
@@ -925,18 +985,38 @@ const getSchemaAtPath = (
   rootSchema: Manifest | TypeStruct,
   path: string
 ): object => {
+  try {
+    const [, ...decodedPath] = decodeSchemaPath(path);
+    let currentSchema = rootSchema;
+    for (const part of decodedPath) {
+      if (typeof part == "string" && currentSchema?.[part]?.type == "set") {
+        currentSchema = currentSchema[part].values;
+        continue;
+      }
+      if (typeof part == "string" && currentSchema?.[part]?.type == "array") {
+        currentSchema = currentSchema[part].values;
+        continue;
+      }
+      if (typeof part == "string") {
+        currentSchema = currentSchema[part];
+        continue;
+      }
+    }
+    return currentSchema;
+  } catch (e) {
+    return null;
+  }
+  // ignore $(store)
+};
+
+const getStaticSchemaAtPath = (
+  rootSchema: Manifest | TypeStruct,
+  path: string
+): object => {
   // ignore $(store)
   const [, ...decodedPath] = decodeSchemaPath(path);
   let currentSchema = rootSchema;
   for (const part of decodedPath) {
-    if (typeof part == "string" && currentSchema?.[part]?.type == "set") {
-      currentSchema = currentSchema[part].values;
-      continue;
-    }
-    if (typeof part == "string" && currentSchema?.[part]?.type == "array") {
-      currentSchema = currentSchema[part].values;
-      continue;
-    }
     if (typeof part == "string") {
       currentSchema = currentSchema[part];
       continue;
@@ -1008,14 +1088,19 @@ const generateKVFromStateWithRootSchema = (
   pluginName: string,
   state: object
 ): Array<DiffElement> => {
-  return flattenStateToSchemaPathKV(rootSchema as unknown as Manifest, state, [
-    `$(${pluginName})`,
-  ])?.map(({ key, value }) => {
-    return {
-      key: writePathString(key as unknown as Array<string | DiffElement>),
-      value,
-    };
-  });
+  const flattenedState = flattenStateToSchemaPathKV(
+    rootSchema as unknown as Manifest,
+    state,
+    [`$(${pluginName})`]
+  );
+  return (
+    flattenedState?.map?.(({ key, value }) => {
+      return {
+        key: writePathString(key as unknown as Array<string | DiffElement>),
+        value,
+      };
+    }) ?? []
+  );
 };
 
 const iterateSchemaTypes = (
@@ -1248,7 +1333,7 @@ const getKeyType = (
   keyPath: string,
   rootSchemaMap: { [key: string]: TypeStruct }
 ): string | null => {
-  const [pluginWrapper, ...path] = keyPath.split(".");
+  const [pluginWrapper, ...path] = splitPath(keyPath);
   let current = null;
   const typeGroup = /^\$\((.+)\)$/.exec(pluginWrapper as string)?.[1] ?? null;
   if (typeGroup && rootSchemaMap[typeGroup]) {
@@ -1365,9 +1450,10 @@ const getDownstreamDepsInSchemaMap = (
   }
   return out;
 };
+
 const refSetFromKey = (key: string): Array<string> => {
   const out = [];
-  const parts = key.split(".");
+  const parts = splitPath(key);
   const curr = [];
   for (const part of parts) {
     curr.push(part);
@@ -1587,15 +1673,16 @@ export const isTopologicalSubset = (
   ) {
     return false;
   }
-  const oldKVs = getKVStateForPlugin(oldSchemaMap, pluginName, oldStateMap)
-    .map(({ key }) => key)
-    ?.filter((key) => {
-      // remove array refs, since unstable
-      if (/\(id\)<.+>/.test(key)) {
-        return false;
-      }
-      return true;
-    });
+  const oldKVs =
+    getKVStateForPlugin(oldSchemaMap, pluginName, oldStateMap)
+      ?.map?.(({ key }) => key)
+      ?.filter?.((key) => {
+        // remove array refs, since unstable
+        if (/\(id\)<.+>/.test(key)) {
+          return false;
+        }
+        return true;
+      }) ?? [];
   const newKVs = getKVStateForPlugin(newSchemaMap, pluginName, newStateMap).map(
     ({ key }) => key
   );
@@ -1668,4 +1755,422 @@ export const isTopologicalSubsetValid = (
     }
   }
   return true;
+};
+
+export interface SchemaValidationResponse {
+  status: "ok" | "error";
+  message?: string;
+}
+
+export const isSchemaValid = (
+  typeStruct: TypeStruct,
+  schemaMap: { [key: string]: Manifest },
+  rootSchemaMap: { [key: string]: TypeStruct },
+  expandedTypes: TypeStruct,
+  isDirectParentSet = false,
+  isDirectParentArray = false,
+  isArrayDescendent = false,
+  path: Array<string> = []
+): SchemaValidationResponse => {
+  try {
+    let keyCount = 0;
+    const sets = [];
+    const arrays = [];
+    const nestedStructures = [];
+    const refs = [];
+    for (const prop in typeStruct) {
+      if (
+        typeof typeStruct[prop] == "object" &&
+        Object.keys(typeStruct[prop]).length == 0
+      ) {
+        const [root, ...rest] = path;
+        const formattedPath = [`$(${root})`, ...rest, prop].join(".");
+        const schemaMapValue = getSchemaAtPath?.(
+          schemaMap[root].store,
+          writePathString([`$(${root})`, ...rest])
+        );
+        const schemaMapValueProp = schemaMapValue?.[prop] as ManifestNode;
+        if (
+          schemaMapValue &&
+          schemaMapValueProp &&
+          schemaMapValueProp?.type &&
+          (schemaMapValueProp.type == "set" ||
+            schemaMapValueProp.type == "array") &&
+          !primitives.has((schemaMapValueProp?.values as string) ?? "")
+        ) {
+          return {
+            status: "error",
+            message: `Invalid value type for values '${schemaMapValueProp.values}'. Found at '${formattedPath}'.`,
+          };
+        }
+
+        if (
+          schemaMapValue &&
+          schemaMapValueProp &&
+          schemaMapValueProp?.type &&
+          !(
+            schemaMapValueProp.type == "set" ||
+            schemaMapValueProp.type == "array"
+          ) &&
+          !primitives.has((schemaMapValueProp?.type as string) ?? "")
+        ) {
+          return {
+            status: "error",
+            message: `Invalid value type '${schemaMapValueProp.type}. Found' at '${formattedPath}'.`,
+          };
+        }
+        return {
+          status: "error",
+          message: `Invalid value type for prop '${prop}'. Found at '${formattedPath}'.`,
+        };
+      }
+
+      if (typeof typeStruct[prop]?.type == "string" && typeStruct[prop].isKey) {
+        if (typeStruct[prop]?.nullable == true) {
+          const [root, ...rest] = path;
+          const formattedPath = [`$(${root})`, ...rest, prop].join(".");
+          return {
+            status: "error",
+            message: `Invalid key '${prop}'. Key types cannot be nullable. Found at '${formattedPath}'.`,
+          };
+        }
+        if (
+          typeStruct[prop]?.type == "ref" &&
+          typeStruct[prop].onDelete == "nullify"
+        ) {
+          const [root, ...rest] = path;
+          const formattedPath = [`$(${root})`, ...rest, prop].join(".");
+          return {
+            status: "error",
+            message: `Invalid key '${prop}'. Key types that are refs cannot have a cascaded onDelete values of nullify. Found at '${formattedPath}'.`,
+          };
+        }
+        keyCount++;
+      }
+
+      if (
+        typeof typeStruct[prop]?.type == "string" &&
+        typeof typeStruct[prop]?.values != "string" &&
+        typeStruct[prop].type == "set" &&
+        Object.keys(typeStruct[prop]?.values ?? {}).length != 0
+      ) {
+        sets.push(prop);
+        continue;
+      }
+
+      if (
+        typeof typeStruct[prop]?.type == "string" &&
+        typeof typeStruct[prop]?.values != "string" &&
+        typeStruct[prop].type == "array" &&
+        Object.keys(typeStruct[prop]?.values ?? {}).length != 0
+      ) {
+        arrays.push(prop);
+        continue;
+      }
+
+      if (
+        typeof typeStruct[prop]?.type == "string" &&
+        typeStruct[prop].type == "ref"
+      ) {
+        refs.push(prop);
+        continue;
+      }
+
+      if (
+        typeof typeStruct[prop]?.type == "string" &&
+        !(
+          typeStruct[prop]?.type == "set" ||
+          typeStruct[prop]?.type == "array" ||
+          typeStruct[prop]?.type == "ref"
+        ) &&
+        !primitives.has(typeStruct[prop].type as string)
+      ) {
+        const [root, ...rest] = path;
+        const formattedPath = [`$(${root})`, ...rest, prop].join(".");
+        const schemaMapValue = getSchemaAtPath?.(
+          schemaMap[root].store,
+          writePathString([`$(${root})`, ...rest])
+        );
+        const schemaMapValueProp = schemaMapValue?.[prop] as ManifestNode;
+        if (
+          schemaMapValue &&
+          schemaMapValueProp &&
+          schemaMapValueProp?.type &&
+          !primitives.has((schemaMapValueProp?.type as string) ?? "")
+        ) {
+          return {
+            status: "error",
+            message: `Invalid value type for type '${schemaMapValueProp.type}'. Found at '${formattedPath}'.`,
+          };
+        }
+        return {
+          status: "error",
+          message: `Invalid value type for prop '${prop}'. Found at '${formattedPath}'.`,
+        };
+      }
+
+      if (
+        typeof typeStruct[prop]?.type == "string" &&
+        (typeStruct[prop]?.type == "set" ||
+          typeStruct[prop]?.type == "array") &&
+        typeof typeStruct[prop]?.values == "string" &&
+        !primitives.has(typeStruct[prop].values as string)
+      ) {
+        const [root, ...rest] = path;
+        const formattedPath = [`$(${root})`, ...rest, prop].join(".");
+        return {
+          status: "error",
+          message: `Invalid type for values of '${typeStruct[prop]?.type}'. Found at '${formattedPath}'.`,
+        };
+      }
+
+      if (typeof typeStruct[prop] == "object" && !typeStruct[prop]?.type) {
+        nestedStructures.push(prop);
+        continue;
+      }
+    }
+
+    if (sets.length > 0 && isArrayDescendent) {
+      const [root, ...rest] = path;
+      const formattedPath = [`$(${root})`, ...rest].join(".");
+      return {
+        status: "error",
+        message: `Arrays cannot contain keyed set descendents. Found at '${formattedPath}'.`,
+      };
+    }
+
+    if (isDirectParentArray && keyCount > 1) {
+      const [root, ...rest] = path;
+      const formattedPath = [`$(${root})`, ...rest].join(".");
+      return {
+        status: "error",
+        message: `Arrays cannot contain keyed values. Found at '${formattedPath}'.`,
+      };
+    }
+
+    if (isDirectParentSet && keyCount > 1) {
+      const [root, ...rest] = path;
+      const formattedPath = [`$(${root})`, ...rest].join(".");
+      return {
+        status: "error",
+        message: `Sets cannot contain multiple key types. Multiple key types found at '${formattedPath}'.`,
+      };
+    }
+
+    if (isDirectParentSet && keyCount == 0) {
+      const [root, ...rest] = path;
+      const formattedPath = [`$(${root})`, ...rest].join(".");
+      return {
+        status: "error",
+        message: `Sets must contain one (and only one) key type. No key type found at '${formattedPath}'.`,
+      };
+    }
+
+    if (!isDirectParentArray && !isDirectParentSet && keyCount > 0) {
+      const [root, ...rest] = path;
+      const formattedPath = [`$(${root})`, ...rest].join(".");
+      return {
+        status: "error",
+        message: `Only sets may contain key types. Invalid key type found at '${formattedPath}'.`,
+      };
+    }
+
+    const refCheck = refs.reduce(
+      (response, refProp) => {
+        if (response.status != "ok") {
+          return response;
+        }
+        const refStruct = typeStruct[refProp] as ManifestNode;
+        if (refStruct?.refType?.startsWith("$")) {
+          const pluginName =
+            /^\$\((.+)\)$/.exec(
+              refStruct?.refType.split(".")[0] as string
+            )?.[1] ?? null;
+          const referencedType = getStaticSchemaAtPath(
+            rootSchemaMap[pluginName],
+            refStruct.refType as string
+          ) as TypeStruct | ManifestNode;
+          if (!referencedType) {
+            const [root, ...rest] = path;
+            const formattedPath = [`$(${root})`, ...rest, refProp].join(".");
+            return {
+              status: "error",
+              message: `Invalid reference pointer '${refStruct.refType}'. No reference value found for value at '${formattedPath}'.`,
+            };
+          }
+          if (refStruct.isKey && refStruct === referencedType[refProp]) {
+            const [root, ...rest] = path;
+            const formattedPath = [`$(${root})`, ...rest, refProp].join(".");
+            return {
+              status: "error",
+              message: `Invalid reference pointer '${refStruct.refType}'. Keys that are constrained ref types, cannot be self-referential. Found at '${formattedPath}'.`,
+            };
+          }
+          const containsKey = Object.keys(referencedType).reduce(
+            (contains, prop) => {
+              if (contains) {
+                return true;
+              }
+              return referencedType[prop]?.isKey;
+            },
+            false
+          );
+          if (!containsKey) {
+            const [root, ...rest] = path;
+            const formattedPath = [`$(${root})`, ...rest, refProp].join(".");
+            return {
+              status: "error",
+              message: `Invalid reference constrainted pointer '${refStruct.refType}'. Constrained references must point directly at the values of a set. Found at '${formattedPath}'.`,
+            };
+          }
+        } else {
+          const referencedType = expandedTypes[refStruct.refType];
+          if (!referencedType) {
+            const [root, ...rest] = path;
+            const formattedPath = [`$(${root})`, ...rest, refProp].join(".");
+            return {
+              status: "error",
+              message: `Invalid reference pointer '${refStruct.refType}'. No reference type found for reference at '${formattedPath}'.`,
+            };
+          }
+          const containsKey = Object.keys(referencedType).reduce(
+            (contains, prop) => {
+              if (contains) {
+                return true;
+              }
+              return referencedType[prop]?.isKey;
+            },
+            false
+          );
+          if (!containsKey) {
+            const [root, ...rest] = path;
+            const formattedPath = [`$(${root})`, ...rest, refProp].join(".");
+            return {
+              status: "error",
+              message: `Invalid reference pointer '${refStruct.refType}'. References type ${refStruct.refType} contains no key type. Found at '${formattedPath}'.`,
+            };
+          }
+        }
+        return { status: "ok" };
+      },
+      { status: "ok" }
+    );
+
+    if (refCheck.status != "ok") {
+      return refCheck;
+    }
+
+    const nestedStructureCheck = nestedStructures.reduce(
+      (response, nestedStructureProp) => {
+        if (response.status != "ok") {
+          return response;
+        }
+        return isSchemaValid(
+          typeStruct[nestedStructureProp] as TypeStruct,
+          schemaMap,
+          rootSchemaMap,
+          expandedTypes,
+          false,
+          false,
+          isArrayDescendent,
+          [...path, nestedStructureProp]
+        );
+      },
+      { status: "ok" }
+    );
+
+    if (nestedStructureCheck.status != "ok") {
+      return nestedStructureCheck;
+    }
+
+    const arrayCheck = arrays.reduce(
+      (response, arrayProp) => {
+        if (response.status != "ok") {
+          return response;
+        }
+        return isSchemaValid(
+          typeStruct[arrayProp].values as TypeStruct,
+          schemaMap,
+          rootSchemaMap,
+          expandedTypes,
+          false,
+          true,
+          true,
+          [...path, arrayProp]
+        );
+      },
+      { status: "ok" }
+    );
+
+    if (arrayCheck.status != "ok") {
+      return arrayCheck;
+    }
+
+    const setCheck = sets.reduce(
+      (response, setProp) => {
+        if (response.status != "ok") {
+          return response;
+        }
+        return isSchemaValid(
+          typeStruct[setProp].values as TypeStruct,
+          schemaMap,
+          rootSchemaMap,
+          expandedTypes,
+          true,
+          false,
+          isArrayDescendent,
+          [...path, setProp]
+        );
+      },
+      { status: "ok" }
+    );
+
+    if (setCheck.status != "ok") {
+      return setCheck;
+    }
+
+    return {
+      status: "ok",
+    };
+  } catch (e) {
+    const [root, ...rest] = path;
+    const formattedPath = [`$(${root})`, ...rest].join(".");
+    return {
+      status: "error",
+      message: `${
+        e?.toString?.() ?? "unknown error"
+      }. Found at '${formattedPath}'.`,
+    };
+  }
+};
+
+export const invalidSchemaPropsCheck = (
+  typeStruct: TypeStruct,
+  rootSchema: TypeStruct | object,
+  path: Array<string> = []
+): SchemaValidationResponse => {
+  for (let prop in typeStruct) {
+    if (!rootSchema[prop]) {
+      const formattedPath = [...path, prop].join(".");
+      return {
+        status: "error",
+        message: `Invalid prop in schema. Remove '${prop}' from '${path.join(
+          "."
+        )}'. Found at '${formattedPath}'.`,
+      };
+    }
+    if (typeof typeStruct[prop] == "object") {
+      const hasInvalidTypesResponse = invalidSchemaPropsCheck(
+        typeStruct[prop] as TypeStruct,
+        rootSchema[prop] ?? {},
+        [...path, prop]
+      );
+      if (hasInvalidTypesResponse.status == "error") {
+        return hasInvalidTypesResponse;
+      }
+    }
+  }
+  return {
+    status: "ok",
+  };
 };

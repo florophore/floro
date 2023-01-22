@@ -14,8 +14,10 @@ import {
   pluginManifestIsSubsetOfManifest,
   pluginMapToList,
   containsCyclicTypes,
-  getRootSchemaForPlugin,
-  getRootSchemaMap
+  getRootSchemaMap,
+  getExpandedTypesForPlugin,
+  isSchemaValid,
+  invalidSchemaPropsCheck,
 } from "./plugins";
 import semver from "semver";
 
@@ -327,42 +329,57 @@ export const getSchemaMapForCreationManifest = async (
 };
 
 export const validatePluginManifest = async (manifest: Manifest) => {
-  if (containsCyclicTypes(manifest, manifest.store)) {
-    return {
-      status: "error",
-      message: `${manifest.name}'s schema contains cyclic types, consider using references`,
-    };
-  }
-  const depResult = await getDependenciesForManifest(manifest);
-  if (depResult.status == "error") {
-    return {
-      status: "error",
-      message: depResult.reason
-    };
-  }
-  const areValid = await verifyPluginDependencyCompatability(depResult.deps);
-  if (!areValid.isValid) {
-    if (areValid.reason == "dep_fetch") {
-        return {
-            status: "error",
-            message: `failed to fetch dependency ${areValid.pluginName}@${areValid.pluginVersion}`,
-        };
+  try {
+    if (containsCyclicTypes(manifest, manifest.store)) {
+      return {
+        status: "error",
+        message: `${manifest.name}'s schema contains cyclic types, consider using references`,
+      };
     }
-    if (areValid.reason == "incompatible") {
-        return {
-            status: "error",
-            message: `incompatible dependency versions for ${areValid.pluginName} between version ${areValid.lastVersion} and ${areValid.nextVersion}`,
-        };
+    const depResult = await getDependenciesForManifest(manifest);
+    if (depResult.status == "error") {
+      return {
+        status: "error",
+        message: depResult.reason,
+      };
     }
-  }
+    const areValid = await verifyPluginDependencyCompatability(depResult.deps);
+    if (!areValid.isValid) {
+      if (areValid.reason == "dep_fetch") {
+        return {
+          status: "error",
+          message: `failed to fetch dependency ${areValid.pluginName}@${areValid.pluginVersion}`,
+        };
+      }
+      if (areValid.reason == "incompatible") {
+        return {
+          status: "error",
+          message: `incompatible dependency versions for ${areValid.pluginName} between version ${areValid.lastVersion} and ${areValid.nextVersion}`,
+        };
+      }
+    }
 
-  const schemaMap = await getSchemaMapForCreationManifest(manifest);
-  console.log("SM", JSON.stringify(schemaMap, null, 2));
-  const rootSchema = getRootSchemaForPlugin(schemaMap, manifest.name);
-  console.log("ROOT SCHEMA", JSON.stringify(rootSchema, null, 2));
-  const rsm = getRootSchemaMap(schemaMap);
-  console.log("ROOT SCHEMA MAP", JSON.stringify(rsm, null, 2));
-  return {
-    status: "ok"
-  };
+    const schemaMap = await getSchemaMapForCreationManifest(manifest);
+    const expandedTypes = getExpandedTypesForPlugin(schemaMap, manifest.name);
+    const rootSchemaMap = getRootSchemaMap(schemaMap);
+    const hasValidPropsType = invalidSchemaPropsCheck(
+      schemaMap[manifest.name].store,
+      rootSchemaMap[manifest.name],
+      [`$(${manifest.name})`]
+    );
+    if (hasValidPropsType.status == "error") {
+      return hasValidPropsType;
+    }
+    return isSchemaValid(
+      rootSchemaMap,
+      schemaMap,
+      rootSchemaMap,
+      expandedTypes
+    );
+  } catch (e) {
+    return {
+      status: "error",
+      message: e?.toString?.() ?? "unknown error",
+    };
+  }
 };

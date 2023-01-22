@@ -544,22 +544,11 @@ describe("plugincreator", () => {
         icon: "",
         imports: {},
         types: {
-          typeA0: {
-            something: {
-              type: "string",
-            },
-          },
           typeA: {
-            name: {
+            aKey: {
               type: "string",
-              isKey: true,
+              isKey: true
             },
-            someProp: {
-              type: "int",
-            },
-            other: {
-              type: "typeA0"
-            }
           },
         },
         store: {
@@ -581,58 +570,327 @@ describe("plugincreator", () => {
         imports: {
           "A": "0.0.0"
         },
-        types: {
-          randoType: {
-            name: {
-              type: "string"
-            },
-            aWeird: {
-              type: "A.typeA"
-            },
-            b: {
-              type: "bType"
-            },
-            bArray: {
-              type: "array",
-              values: "bType"
-            }
-          },
-          bType: {
-            name: {
-              type: "string",
-              isKey: true
-            },
-            a: {
-              type: "A.typeA"
-            },
-          }
-        },
+        types: {},
         store: {
           bObjects: {
-            mainKey: {
-              type: "string",
-              isKey: true
+            type: "set",
+            values: {
+              mainKey: {
+                type: "string",
+                isKey: true
+              },
+              aRef: {
+                type: "ref<A.typeA>"
+              }
             },
-            aRef: {
-              type: "ref<$(A).aObjects.values>"
-            },
-            aTypeRef: {
-              type: "ref<bType>"
-            },
-            as: {
-              type: "set",
-              values: "A.typeA",
-            },
-            weird: {
-              type: "randoType"
-            }
           },
         },
       };
       makeTestPlugin(PLUGIN_B_MANIFEST);
 
-      const out = await validatePluginManifest(PLUGIN_B_MANIFEST);
-      console.log(out);
+      const result = await validatePluginManifest(PLUGIN_B_MANIFEST);
+      expect(result).toEqual({status: "ok"})
+    });
+
+    test("throws multi key exception on sets", async () => {
+      const PLUGIN_A_MANIFEST: Manifest = {
+        name: "A",
+        version: "0.0.0",
+        displayName: "A",
+        publisher: "@jamiesunderland",
+        icon: "",
+        imports: {
+        },
+        types: {},
+        store: {
+          aObjects: {
+            type: "set",
+            values: {
+              mainKey: {
+                isKey: true,
+                type: "string",
+              },
+              secondKey: {
+                isKey: true,
+                type: "string",
+              }
+            },
+          },
+        },
+      };
+      makeTestPlugin(PLUGIN_A_MANIFEST);
+      const result = await validatePluginManifest(PLUGIN_A_MANIFEST);
+      expect(result).toEqual({
+        status: "error",
+        message:
+          "Sets cannot contain multiple key types. Multiple key types found at '$(A).aObjects'.",
+      });
+    });
+
+    test("throws no key exception on sets", async () => {
+      const PLUGIN_A_MANIFEST: Manifest = {
+        name: "A",
+        version: "0.0.0",
+        displayName: "A",
+        publisher: "@jamiesunderland",
+        icon: "",
+        imports: {
+        },
+        types: {},
+        store: {
+          aObjects: {
+            type: "set",
+            values: {
+              mainKey: {
+                type: "string",
+              },
+              secondKey: {
+                type: "string",
+              }
+            },
+          },
+        },
+      };
+      makeTestPlugin(PLUGIN_A_MANIFEST);
+      const result = await validatePluginManifest(PLUGIN_A_MANIFEST);
+      expect(result).toEqual({
+        status: "error",
+        message:
+          "Sets must contain one (and only one) key type. No key type found at '$(A).aObjects'.",
+      });
+    });
+
+    test("throws no nested sets exception on arrays", async () => {
+      const PLUGIN_A_MANIFEST: Manifest = {
+        name: "A",
+        version: "0.0.0",
+        displayName: "A",
+        publisher: "@jamiesunderland",
+        icon: "",
+        imports: {},
+        types: {},
+        store: {
+          aArray: {
+            type: "array",
+            values: {
+              aObjects: {
+                type: "set",
+                values: {
+                  mainKey: {
+                    isKey: true,
+                    type: "string",
+                  },
+                  secondKey: {
+                    type: "string",
+                  },
+                },
+              },
+            },
+          },
+        },
+      };
+      makeTestPlugin(PLUGIN_A_MANIFEST);
+      const result = await validatePluginManifest(PLUGIN_A_MANIFEST);
+      expect(result).toEqual({
+        status: "error",
+        message:
+        "Arrays cannot contain keyed set descendents. Found at '$(A).aArray'."
+      });
+    });
+
+    test("throws no keyed values exception on arrays", async () => {
+      const PLUGIN_A_MANIFEST: Manifest = {
+        name: "A",
+        version: "0.0.0",
+        displayName: "A",
+        publisher: "@jamiesunderland",
+        icon: "",
+        imports: {},
+        types: {},
+        store: {
+          aArray: {
+            type: "array",
+            values: {
+              mainKey: {
+                isKey: true,
+                type: "string",
+              },
+              secondKey: {
+                type: "string",
+              },
+            },
+          },
+        },
+      };
+      makeTestPlugin(PLUGIN_A_MANIFEST);
+      const result = await validatePluginManifest(PLUGIN_A_MANIFEST);
+      expect(result).toEqual({
+        status: "error",
+        message:
+        "Arrays cannot contain keyed values. Found at '$(A).aArray'."
+      });
+    });
+
+
+    test("throws no keys on non-sets exception", async () => {
+      const PLUGIN_A_MANIFEST: Manifest = {
+        name: "A",
+        version: "0.0.0",
+        displayName: "A",
+        publisher: "@jamiesunderland",
+        icon: "",
+        imports: {},
+        types: {},
+        store: {
+          mainKey: {
+            isKey: true,
+            type: "string",
+          },
+          secondKey: {
+            type: "string",
+          },
+        },
+      };
+      makeTestPlugin(PLUGIN_A_MANIFEST);
+      const result = await validatePluginManifest(PLUGIN_A_MANIFEST);
+      expect(result).toEqual({
+        status: "error",
+        message:
+        "Only sets may contain key types. Invalid key type found at '$(A)'."
+      });
+    });
+
+    test("throws keys cannot be nullable if key is marked nullable ", async () => {
+      const PLUGIN_A_MANIFEST: Manifest = {
+        name: "A",
+        version: "0.0.0",
+        displayName: "A",
+        publisher: "@jamiesunderland",
+        icon: "",
+        imports: {},
+        types: {},
+        store: {
+          aObjects: {
+            type: "set",
+            values: {
+              mainKey: {
+                isKey: true,
+                type: "string",
+                nullable: true,
+              },
+            },
+          },
+        },
+      };
+      makeTestPlugin(PLUGIN_A_MANIFEST);
+      const result = await validatePluginManifest(PLUGIN_A_MANIFEST);
+      expect(result).toEqual({
+        status: "error",
+        message:
+          "Invalid key 'mainKey'. Key types cannot be nullable. Found at '$(A).aObjects.mainKey'.",
+      });
+    });
+
+    test("throws ref keys cannot be nullify onDelete ", async () => {
+      const PLUGIN_A_MANIFEST: Manifest = {
+        name: "A",
+        version: "0.0.0",
+        displayName: "A",
+        publisher: "@jamiesunderland",
+        icon: "",
+        imports: {},
+        types: {},
+        store: {
+          aObjects: {
+            type: "set",
+            values: {
+              mainKey: {
+                isKey: true,
+                type: "ref<$(A).aSetObjects.values>",
+                onDelete: "nullify"
+              },
+            },
+          },
+          aSetObjects: {
+            type: "set",
+            values: {
+              mainKey: {
+                isKey: true,
+                type: "string"
+              },
+            },
+          },
+        },
+      };
+      makeTestPlugin(PLUGIN_A_MANIFEST);
+      const result = await validatePluginManifest(PLUGIN_A_MANIFEST);
+      expect(result).toEqual({
+        status: "error",
+        message:
+          "Invalid key 'mainKey'. Key types that are refs cannot have a cascaded onDelete values of nullify. Found at '$(A).aObjects.mainKey'.",
+      });
+    });
+
+    test("throws constrained ref keys cannot be self referential", async () => {
+      const PLUGIN_A_MANIFEST: Manifest = {
+        name: "A",
+        version: "0.0.0",
+        displayName: "A",
+        publisher: "@jamiesunderland",
+        icon: "",
+        imports: {},
+        types: {},
+        store: {
+          aObjects: {
+            type: "set",
+            values: {
+              mainKey: {
+                isKey: true,
+                type: "ref<$(A).aObjects.values>",
+              },
+            },
+          },
+        },
+      };
+      makeTestPlugin(PLUGIN_A_MANIFEST);
+      const result = await validatePluginManifest(PLUGIN_A_MANIFEST);
+      expect(result).toEqual({
+        status: "error",
+        message:
+          "Invalid reference pointer '$(A).aObjects.values'. Keys that are constrained ref types, cannot be self-referential. Found at '$(A).aObjects.mainKey'.",
+      });
+    });
+
+    test("throws no invalid property type when prop type isn't supported", async () => {
+      const PLUGIN_A_MANIFEST: Manifest = {
+        name: "A",
+        version: "0.0.0",
+        displayName: "A",
+        publisher: "@jamiesunderland",
+        icon: "",
+        imports: {
+        },
+        types: {},
+        store: {
+          aObjects: {
+            type: "set",
+            values: {
+              mainKey: {
+                type: "string",
+                isKey: true
+              },
+            },
+            nullable: true
+          },
+        },
+      };
+      makeTestPlugin(PLUGIN_A_MANIFEST);
+      const result = await validatePluginManifest(PLUGIN_A_MANIFEST);
+      expect(result).toEqual({
+        status: "error",
+        message:
+          "Invalid prop in schema. Remove 'nullable' from '$(A).aObjects'. Found at '$(A).aObjects.nullable'.",
+      });
     });
   });
 });
