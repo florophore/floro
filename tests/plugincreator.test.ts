@@ -1,5 +1,5 @@
-import { fs, vol } from "memfs";
 import path from "path";
+import { fs, vol } from "memfs";
 import tar from "tar";
 import {
   buildFloroFilestructure,
@@ -25,6 +25,9 @@ import {
   makeTestPlugin,
 } from "./helpers/fsmocks";
 import { SIMPLE_PLUGIN_MANIFEST } from "./helpers/pluginmocks";
+
+const realFS = jest.requireActual('fs');
+const SNAPSHOT_1_WITH_REACT = realFS.readFileSync(path.join(__dirname, 'snapshots', 'codegen.1.with_react.snapshot'), 'utf-8')
 
 jest.mock("fs");
 jest.mock("fs/promises");
@@ -896,7 +899,7 @@ describe("plugincreator", () => {
   });
 
   describe("collect key pointers", () => {
-    test.skip("collects pointers in import maps", async () => {
+    test("collects pointers in import maps", async () => {
       const PLUGIN_A_MANIFEST: Manifest = {
         name: "A",
         version: "0.0.0",
@@ -967,14 +970,13 @@ describe("plugincreator", () => {
                 type: "ref<$(A).aObjects.values.nestedValue.nestedSet.values>"
               },
             },
-          }
+          },
         },
       };
       makeTestPlugin(PLUGIN_B_MANIFEST);
 
       const code = await generateTypeScriptAPI(PLUGIN_B_MANIFEST, true);
-      console.log(code);
-
+      expect(code).toEqual(SNAPSHOT_1_WITH_REACT);
     });
   });
 });

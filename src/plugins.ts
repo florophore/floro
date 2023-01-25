@@ -3,7 +3,7 @@ import { getPluginsJsonAsync, vDEVPath, vPluginsPath } from "./filestructure";
 import axios from "axios";
 import path from "path";
 import { DiffElement } from "./versioncontrol";
-import { fs } from "memfs";
+import fs from 'fs';
 import { Crypto } from "cryptojs";
 
 export interface PluginElement {
