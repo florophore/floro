@@ -2174,3 +2174,713 @@ export const invalidSchemaPropsCheck = (
     status: "ok",
   };
 };
+
+export const collectKeyRefs = (
+  typeStruct: TypeStruct,
+  path = []
+): Array<string> => {
+  let out = [];
+  for (let prop in typeStruct) {
+    if (typeStruct[prop]?.isKey) {
+      if (typeStruct[prop].type == "ref") {
+        path.push({ key: prop, value: `ref<${typeStruct[prop].refType}>` });
+      } else {
+        path.push({ key: prop, value: typeStruct[prop].type });
+      }
+      out.push(writePathString(path));
+    }
+    if (
+      typeStruct[prop]?.type == "set" &&
+      typeof typeStruct[prop]?.values == "object"
+    ) {
+      out.push(
+        ...collectKeyRefs(typeStruct[prop].values as TypeStruct, [
+          ...path,
+          path.length == 0 ? `$(${prop})` : prop,
+        ])
+      );
+      continue;
+    }
+    if (!typeStruct[prop]?.type && typeof typeStruct[prop] == "object") {
+      out.push(
+        ...collectKeyRefs(typeStruct[prop] as TypeStruct, [
+          ...path,
+          path.length == 0 ? `$(${prop})` : prop,
+        ])
+      );
+      continue;
+    }
+  }
+  return out;
+};
+
+const replaceRefVarsWithValues = (pathString: string): string => {
+  const path = splitPath(pathString);
+  return path
+    .map((part) => {
+      if (/^(.+)<(.+)>$/.test(part)) {
+        return "values";
+      }
+      return part;
+    })
+    .join(".");
+};
+
+export const replaceRefVarsWithWildcards = (pathString: string): string => {
+  const path = splitPath(pathString);
+  return path
+    .map((part) => {
+      if (/^(.+)<(.+)>$/.test(part)) {
+        const { key } = extractKeyValueFromRefString(part);
+        return `${key}<?>`;
+      }
+      return part;
+    })
+    .join(".");
+};
+
+export const replaceRawRefsInExpandedType = (
+  typeStruct: TypeStruct,
+  expandedTypes: TypeStruct,
+  rootSchemaMap: { [key: string]: TypeStruct }
+): TypeStruct => {
+  let out = {};
+  for (let prop in typeStruct) {
+    if (
+      typeof typeStruct[prop]?.type == "string" &&
+      /^ref<(.+)>$/.test(typeStruct[prop]?.type as string)
+    ) {
+      const { value: refType } = extractKeyValueFromRefString(
+        typeStruct[prop]?.type as string
+      );
+      out[prop] = { ...typeStruct[prop] };
+      out[prop].type = "ref";
+      out[prop].refType = refType;
+      out[prop].onDelete = typeStruct[prop]?.onDelete ?? "delete";
+      out[prop].nullable = typeStruct[prop]?.nullable ?? false;
+      if (/^\$\(.+\)/.test(refType)) {
+        const pluginName =
+          /^\$\((.+)\)$/.exec(refType.split(".")[0] as string)?.[1] ?? null;
+        const staticSchema = getStaticSchemaAtPath(
+          rootSchemaMap[pluginName],
+          refType
+        );
+        const keyProp = Object.keys(staticSchema).find(
+          (p) => staticSchema[p].isKey
+        );
+        const refKeyType = staticSchema[keyProp].type;
+        out[prop].refKeyType = refKeyType;
+      } else {
+        const staticSchema = expandedTypes[refType];
+        const keyProp = Object.keys(staticSchema).find(
+          (p) => staticSchema[p].isKey
+        );
+        const refKeyType = staticSchema[keyProp].type;
+        out[prop].refKeyType = refKeyType;
+      }
+      continue;
+    }
+    if (typeof typeStruct[prop] == "object") {
+      out[prop] = replaceRawRefsInExpandedType(
+        typeStruct[prop] as TypeStruct,
+        expandedTypes,
+        rootSchemaMap
+      );
+      continue;
+    }
+    out[prop] = typeStruct[prop];
+  }
+  return out;
+};
+
+export const typestructsAreEquivalent = (
+  typestructA: TypeStruct | object,
+  typestructB: TypeStruct | object
+) => {
+  if (
+    Object.keys(typestructA ?? {}).length !=
+    Object.keys(typestructB ?? {}).length
+  ) {
+    return false;
+  }
+  for (let prop in typestructA) {
+    if (typeof typestructA[prop] == "object" && typeof typestructB[prop]) {
+      const areEquivalent = typestructsAreEquivalent(
+        typestructA[prop],
+        typestructB[prop]
+      );
+      if (!areEquivalent) {
+        return false;
+      }
+      continue;
+    }
+    if (typestructA[prop] != typestructB[prop]) {
+      return false;
+    }
+  }
+  return true;
+};
+
+export const buildPointerReturnTypeMap = (
+  rootSchemaMap: { [key: string]: TypeStruct },
+  expandedTypes: TypeStruct,
+  referenceKeys: Array<string>
+): { [key: string]: Array<string> } => {
+  const expandedTypesWithRefs = replaceRawRefsInExpandedType(
+    expandedTypes,
+    expandedTypes,
+    rootSchemaMap
+  );
+  let out = {};
+  for (let key of referenceKeys) {
+    const pluginName =
+      /^\$\((.+)\)$/.exec(key.split(".")[0] as string)?.[1] ?? null;
+    const staticPath = replaceRefVarsWithValues(key);
+    const staticSchema = getStaticSchemaAtPath(
+      rootSchemaMap[pluginName],
+      staticPath
+    );
+    const types = Object.keys(expandedTypesWithRefs).filter((type) => {
+      return typestructsAreEquivalent(
+        expandedTypesWithRefs[type],
+        staticSchema
+      );
+    });
+    out[key] = [staticPath, ...types];
+  }
+  return out;
+};
+
+export const buildPointerArgsMap = (referenceReturnTypeMap: {
+  [key: string]: Array<string>;
+}): { [key: string]: Array<Array<string>> } => {
+  let out = {};
+  for (let key in referenceReturnTypeMap) {
+    const path = decodeSchemaPath(key);
+    const argsPath = path.filter(
+      (part) => typeof part != "string"
+    ) as Array<DiffElement>;
+    let args = argsPath.map((arg) => {
+      if (primitives.has(arg.value)) {
+        if (arg.value == "int" || arg.value == "float") {
+          return ["number"];
+        }
+        return [arg.value];
+      }
+      const { value: argValue } = extractKeyValueFromRefString(arg.value);
+      let refArgs = getPointersForRefType(argValue, referenceReturnTypeMap);
+      return refArgs;
+    });
+    out[key] = args;
+  }
+  return out;
+};
+
+export const getPointersForRefType = (
+  refType: string,
+  referenceReturnTypeMap: { [key: string]: Array<string> }
+): Array<string> => {
+  return Object.keys(referenceReturnTypeMap).filter((path) => {
+    return referenceReturnTypeMap[path].includes(refType);
+  });
+};
+
+export const getStaticPointersForRefType = (
+  staticRefType: string,
+  referenceReturnTypeMap: { [key: string]: Array<string> }
+): Array<string> => {
+  const staticReferenceReturnTypeMap = {};
+  const staticPathMap = {};
+  for (let path in referenceReturnTypeMap) {
+    const staticPath = replaceRefVarsWithValues(path);
+    staticReferenceReturnTypeMap[staticPath] = referenceReturnTypeMap[path];
+    staticPathMap[staticPath] = path;
+  }
+  return Object.keys(staticReferenceReturnTypeMap)
+    .filter((staticPath) => {
+      return staticReferenceReturnTypeMap[staticPath].includes(staticRefType);
+    })
+    ?.map((staticPath) => staticPathMap[staticPath]);
+};
+
+const drawQueryTypes = (argMap: { [key: string]: Array<Array<string>> }) => {
+  let code = "export type QueryTypes = {\n";
+  for (let path in argMap) {
+    const wildcard = replaceRefVarsWithWildcards(path);
+    const argStr = argMap[path].reduce((s, argPossibilities) => {
+      if (
+        argPossibilities[0] == "string" ||
+        argPossibilities[0] == "boolean" ||
+        argPossibilities[0] == "number"
+      ) {
+        return s.replace("<?>", `<\$\{${argPossibilities[0]}\}>`);
+      }
+      const line = argPossibilities
+        .map(replaceRefVarsWithWildcards)
+        .map((wcq) => `QueryTypes['${wcq}']`)
+        .join("|");
+      return s.replace("<?>", `<\$\{${line}\}>`);
+    }, wildcard);
+    code += `  ['${wildcard}']: \`${argStr}\`;\n`;
+  }
+  code += "};\n";
+  return code;
+};
+
+export const drawMakeQueryRef = (
+  argMap: { [key: string]: Array<Array<string>> },
+  useReact = false
+) => {
+  let code = drawQueryTypes(argMap) + "\n";
+  let globalArgs = [];
+  const globalQueryParam = Object.keys(argMap)
+    .map(replaceRefVarsWithWildcards)
+    .map((query) => `'${query}'`)
+    .join("|");
+  const globalQueryReturn = Object.keys(argMap)
+    .map(replaceRefVarsWithWildcards)
+    .map((query) => `QueryTypes['${query}']`)
+    .join("|");
+  for (let query in argMap) {
+    const args = argMap[query];
+    for (let i = 0; i < args.length; ++i) {
+      if (globalArgs[i] == undefined) {
+        globalArgs.push([]);
+      }
+      for (let j = 0; j < args[i].length; ++j) {
+        if (!globalArgs[i].includes(args[i][j])) {
+          globalArgs[i].push(args[i][j]);
+        }
+      }
+    }
+
+    const params = args.reduce((s, possibleArgs, index) => {
+      const argType = possibleArgs
+        .map((possibleArg) => {
+          if (
+            possibleArg == "string" ||
+            possibleArg == "boolean" ||
+            possibleArg == "number"
+          ) {
+            return possibleArg;
+          }
+          return `QueryTypes['${replaceRefVarsWithWildcards(possibleArg)}']`;
+        })
+        .join("|");
+      return s + `, arg${index}: ${argType}`;
+    }, `query: '${replaceRefVarsWithWildcards(query)}'`);
+
+    code += `export function makeQueryRef(${params}): QueryTypes['${replaceRefVarsWithWildcards(
+      query
+    )}'];\n`;
+  }
+  let globalParams = [];
+  for (let i = 0; i < globalArgs.length; ++i) {
+    const args = globalArgs[i];
+    const isOptional = i > 0;
+    const argType = args
+      .map((possibleArg) => {
+        if (
+          possibleArg == "string" ||
+          possibleArg == "boolean" ||
+          possibleArg == "number"
+        ) {
+          return possibleArg;
+        }
+        return `QueryTypes['${replaceRefVarsWithWildcards(possibleArg)}']`;
+      })
+      .join("|");
+    const params = `arg${i}${isOptional ? "?" : ""}: ${argType}`;
+    globalParams.push(params);
+  }
+
+  code += `export function makeQueryRef(query: ${globalQueryParam}, ${globalParams.join(
+    ", "
+  )}): ${globalQueryReturn}|null {\n`;
+
+  for (let query in argMap) {
+    const args = argMap[query];
+    const returnType = args.reduce((s, argType, i) => {
+      if (
+        argType[0] == "string" ||
+        argType[0] == "boolean" ||
+        argType[0] == "number"
+      ) {
+        return s.replace("<?>", `<\$\{arg${i} as ${argType[0]}\}>`);
+      }
+      return s.replace(
+        "<?>",
+        `<\$\{arg${i} as ${argType
+          .map(replaceRefVarsWithWildcards)
+          .map((v) => `QueryTypes['${v}']`)
+          .join("|")}\}>`
+      );
+    }, `return \`${replaceRefVarsWithWildcards(query)}\`;`);
+    code += `  if (query == '${replaceRefVarsWithWildcards(query)}') {\n`;
+    code += `    ${returnType}\n`;
+    code += `  }\n`;
+  }
+  code += `  return null;\n`;
+  code += `};\n`;
+  if (useReact) {
+    code += `\n`;
+    for (let query in argMap) {
+      const args = argMap[query];
+      const params = args.reduce((s, possibleArgs, index) => {
+        const argType = possibleArgs
+          .map((possibleArg) => {
+            if (
+              possibleArg == "string" ||
+              possibleArg == "boolean" ||
+              possibleArg == "number"
+            ) {
+              return possibleArg;
+            }
+            return `QueryTypes['${replaceRefVarsWithWildcards(possibleArg)}']`;
+          })
+          .join("|");
+        return s + `, arg${index}: ${argType}`;
+      }, `query: '${replaceRefVarsWithWildcards(query)}'`);
+
+      code += `export function useMakeQueryRef(${params}): QueryTypes['${replaceRefVarsWithWildcards(
+        query
+      )}'];\n`;
+    }
+
+    code += `export function useMakeQueryRef(query: ${globalQueryParam}, ${globalParams.join(
+      ", "
+    )}): ${globalQueryReturn}|null {\n`;
+    code += `  return useMemo(() => {\n`;
+
+    for (let query in argMap) {
+      const args = argMap[query];
+      const argsCasts = args
+        .map((argType, i) => {
+          if (
+            argType[0] == "string" ||
+            argType[0] == "boolean" ||
+            argType[0] == "number"
+          ) {
+            return `arg${i} as ${argType[0]}`;
+          }
+          return `arg${i} as ${argType
+            .map(replaceRefVarsWithWildcards)
+            .map((v) => `QueryTypes['${v}']`)
+            .join("|")}`;
+        })
+        .join(", ");
+      code += `    if (query == '${replaceRefVarsWithWildcards(query)}') {\n`;
+      code += `      return makeQueryRef(query, ${argsCasts});\n`;
+      code += `    }\n`;
+    }
+    code += `    return null;\n`;
+    code += `  }, [query, ${globalArgs
+      .map((_, i) => `arg${i}`)
+      .join(", ")}]);\n`;
+    code += `};`;
+  }
+  return code;
+};
+
+export const drawSchemaRoot = (
+  rootSchemaMap: TypeStruct,
+  referenceReturnTypeMap: { [key: string]: Array<string> }
+) => {
+  return `export type SchemaRoot = ${drawTypestruct(
+    rootSchemaMap,
+    referenceReturnTypeMap
+  )}`;
+};
+
+export const drawRefReturnTypes = (
+  rootSchemaMap: TypeStruct,
+  referenceReturnTypeMap: { [key: string]: Array<string> }
+) => {
+  let code = `export type RefReturnTypes = {\n`;
+  for (let path in referenceReturnTypeMap) {
+    const [staticPath] = referenceReturnTypeMap[path];
+    const pluginName =
+      /^\$\((.+)\)$/.exec(staticPath.split(".")[0] as string)?.[1] ?? null;
+    const staticSchema = getStaticSchemaAtPath(
+      rootSchemaMap[pluginName] as TypeStruct,
+      staticPath
+    );
+    const typestructCode = drawTypestruct(
+      staticSchema as TypeStruct,
+      referenceReturnTypeMap,
+      "  "
+    );
+    const wildcard = replaceRefVarsWithWildcards(path);
+    code += `  ['${wildcard}']: ${typestructCode}\n`;
+  }
+  code += "};\n";
+  return code;
+};
+
+export const drawTypestruct = (
+  typeStruct: TypeStruct,
+  referenceReturnTypeMap: { [key: string]: Array<string> },
+  indentation = "",
+  semicolonLastLine = true,
+  identTop = true,
+  breakLastLine = true
+) => {
+  let code = `${identTop ? indentation : ""}{\n`;
+  for (const prop in typeStruct) {
+    if (prop == "(id)") {
+      continue;
+    }
+    if (
+      typeof typeStruct[prop]?.type == "string" &&
+      primitives.has(typeStruct[prop]?.type as string)
+    ) {
+      const propName = typeStruct[prop].nullable
+        ? `['${prop}']?`
+        : `['${prop}']`;
+      const type =
+        typeStruct[prop]?.type == "int" || typeStruct[prop]?.type == "float"
+          ? "number"
+          : typeStruct[prop]?.type;
+      code += `  ${indentation}${propName}: ${type};\n`;
+      continue;
+    }
+
+    if (
+      typeof typeStruct[prop]?.type == "string" &&
+      typeStruct[prop]?.type == "ref"
+    ) {
+      const propName = typeStruct[prop].nullable
+        ? `['${prop}']?`
+        : `['${prop}']`;
+      const returnTypes = Object.keys(referenceReturnTypeMap)
+        .filter((query) => {
+          return referenceReturnTypeMap[query].includes(
+            typeStruct[prop]?.refType as string
+          );
+        })
+        .map(replaceRefVarsWithWildcards)
+        .map((query) => `QueryTypes['${query}']`)
+        .join("|");
+      code += `  ${indentation}${propName}: ${returnTypes};\n`;
+      continue;
+    }
+
+    if (
+      typeof typeStruct[prop]?.type == "string" &&
+      (typeStruct[prop]?.type == "array" || typeStruct[prop]?.type == "set") &&
+      typeof typeStruct[prop]?.values == "string" &&
+      primitives.has(typeStruct[prop]?.values as string)
+    ) {
+      const type =
+        typeStruct[prop]?.values == "int" || typeStruct[prop]?.values == "float"
+          ? "number"
+          : typeStruct[prop]?.type;
+      const propName = `['${prop}']`;
+      code += `  ${indentation}${propName}: Array<${type}>;\n`;
+      continue;
+    }
+
+    if (
+      typeof typeStruct[prop]?.type == "string" &&
+      (typeStruct[prop]?.type == "array" || typeStruct[prop]?.type == "set") &&
+      typeof typeStruct[prop]?.values == "object"
+    ) {
+      const type = drawTypestruct(
+        typeStruct[prop]?.values as TypeStruct,
+        referenceReturnTypeMap,
+        `${indentation}  `,
+        false,
+        false,
+        false
+      );
+      const propName = `['${prop}']`;
+      code += `  ${indentation}${propName}: Array<${type}>;\n`;
+      continue;
+    }
+
+    if (!typeStruct[prop]?.type && typeof typeStruct[prop] == "object") {
+      const type = drawTypestruct(
+        typeStruct[prop] as TypeStruct,
+        referenceReturnTypeMap,
+        `${indentation}  `,
+        false,
+        false,
+        false
+      );
+      const propName = `['${prop}']`;
+      code += `  ${indentation}${propName}: ${type};\n`;
+      continue;
+    }
+  }
+  code += `${indentation}}${semicolonLastLine ? ";" : ""}${
+    breakLastLine ? "\n" : ""
+  }`;
+  return code;
+};
+
+const GENERATED_CODE_FUNCTIONS = `
+const getCounterArrowBalanance = (str: string): number => {
+  let counter = 0;
+  for (let i = 0; i < str.length; ++i) {
+    if (str[i] == "<") counter++;
+    if (str[i] == ">") counter--;
+  }
+  return counter;
+};
+
+const extractKeyValueFromRefString = (
+  str: string
+): { key: string; value: string } => {
+  let key = "";
+  let i = 0;
+  while (str[i] != "<") {
+    key += str[i++];
+  }
+  let value = "";
+  let counter = 1;
+  i++;
+  while (i < str.length) {
+    if (str[i] == "<") counter++;
+    if (str[i] == ">") counter--;
+    if (counter >= 1) {
+      value += str[i];
+    }
+    i++;
+  }
+  return {
+    key,
+    value,
+  };
+};
+
+const splitPath = (str: string): Array<string> => {
+  let out: Array<string> = [];
+  let arrowBalance = 0;
+  let curr = "";
+  for (let i = 0; i <= str.length; ++i) {
+    if (i == str.length) {
+      out.push(curr);
+      continue;
+    }
+    if (arrowBalance == 0 && str[i] == ".") {
+      out.push(curr);
+      curr = "";
+      continue;
+    }
+    if (str[i] == "<") {
+      arrowBalance++;
+    }
+    if (str[i] == ">") {
+      arrowBalance--;
+    }
+    curr += str[i];
+  }
+  return out;
+};
+
+export const decodeSchemaPath = (
+  pathString: string
+): Array<{ key: string; value: string } | string> => {
+  return splitPath(pathString).map((part) => {
+    if (/^(.+)<(.+)>$/.test(part) && getCounterArrowBalanance(part) == 0) {
+      const { key, value } = extractKeyValueFromRefString(part);
+      return {
+        key,
+        value,
+      };
+    }
+    return part;
+  });
+};
+
+const getObjectInStateMap = (stateMap: object, path: string): object | null => {
+  let current: null | undefined | object = null;
+  const [pluginWrapper, ...decodedPath] = decodeSchemaPath(path);
+  const pluginName = /^\$\((.+)\)$/.exec(pluginWrapper as string)?.[1] ?? null;
+  if (!pluginName) {
+    return null;
+  }
+  current = stateMap[pluginName];
+  for (let part of decodedPath) {
+    if (!current) {
+      return null;
+    }
+    if (typeof part != "string") {
+      const { key, value } = part as { key: string; value: string };
+      if (Array.isArray(current)) {
+        const element = current.find?.((v) => v?.[key] == value);
+        current = element;
+      } else {
+        return null;
+      }
+    } else {
+      current = current[part];
+    }
+  }
+  return current ?? null;
+};
+
+const replaceRefVarsWithWildcards = (pathString: string): string => {
+  const path = splitPath(pathString);
+  return path
+    .map((part) => {
+      if (/^(.+)<(.+)>$/.test(part)) {
+        const { key } = extractKeyValueFromRefString(part);
+        return \`\$\{key\}<?>\`;
+      }
+      return part;
+    })
+    .join(".");
+};
+`;
+
+export const drawGetReferencedObject = (
+  argMap: { [key: string]: Array<Array<string>> },
+  useReact = false
+) => {
+  const wildcards = Object.keys(argMap).map(replaceRefVarsWithWildcards);
+  let code = "";
+  code += GENERATED_CODE_FUNCTIONS;
+  code += "\n";
+  for (let wildcard of wildcards) {
+    code += `export function getReferencedObject(root: SchemaRoot, query: QueryTypes['${wildcard}']): RefReturnTypes['${wildcard}'];\n`;
+  }
+  const globalQueryTypes = wildcards
+    .map((wildcard) => `QueryTypes['${wildcard}']`)
+    .join("|");
+  const globalReturnTypes = wildcards
+    .map((wildcard) => `RefReturnTypes['${wildcard}']`)
+    .join("|");
+  code += `export function getReferencedObject(root: SchemaRoot, query: ${globalQueryTypes}): ${globalReturnTypes}|null {\n`;
+  for (let wildcard of wildcards) {
+    code += `  if (replaceRefVarsWithWildcards(query) == '${wildcard}') {\n`;
+    code += `    return getObjectInStateMap(root, query) as RefReturnTypes['${wildcard}'];\n`;
+    code += `  }\n`;
+  }
+  code += `  return null;\n`;
+  code += `}`;
+  if (useReact) {
+    code += `\n`;
+    for (let wildcard of wildcards) {
+      code += `export function useReferencedObject(root: SchemaRoot, query: QueryTypes['${wildcard}']): RefReturnTypes['${wildcard}'];\n`;
+    }
+    const globalQueryTypes = wildcards
+      .map((wildcard) => `QueryTypes['${wildcard}']`)
+      .join("|");
+    const globalReturnTypes = wildcards
+      .map((wildcard) => `RefReturnTypes['${wildcard}']`)
+      .join("|");
+    code += `export function useReferencedObject(root: SchemaRoot, query: ${globalQueryTypes}): ${globalReturnTypes}|null {\n`;
+    code += `  return useMemo(() => {\n`;
+    for (let wildcard of wildcards) {
+      code += `    if (replaceRefVarsWithWildcards(query) == '${wildcard}') {\n`;
+      code += `      return getObjectInStateMap(root, query) as RefReturnTypes['${wildcard}'];\n`;
+      code += `    }\n`;
+    }
+    code += `    return null;\n`;
+
+    code += `  }, [root, query]);\n`;
+    code += `}`;
+  }
+  return code;
+};

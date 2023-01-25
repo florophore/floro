@@ -16,6 +16,7 @@ import {
   tarCreationPlugin,
   validatePluginManifest,
   verifyPluginDependencyCompatability,
+  generateTypeScriptAPI,
 } from "../src/plugincreator";
 import { Manifest } from "../src/plugins";
 import {
@@ -891,6 +892,89 @@ describe("plugincreator", () => {
         message:
           "Invalid prop in schema. Remove 'nullable' from '$(A).aObjects'. Found at '$(A).aObjects.nullable'.",
       });
+    });
+  });
+
+  describe("collect key pointers", () => {
+    test.skip("collects pointers in import maps", async () => {
+      const PLUGIN_A_MANIFEST: Manifest = {
+        name: "A",
+        version: "0.0.0",
+        displayName: "A",
+        publisher: "@jamiesunderland",
+        icon: "",
+        imports: {},
+        types: {
+          subA: {
+            someRef: {
+              type: "ref<typeA>"
+            },
+          },
+          typeA: {
+            aKey: {
+              type: "int",
+              isKey: true
+            },
+            something: {
+              type: "subA"
+            },
+            nestedValue: {
+              nestedSet: {
+                type: "set",
+                values: {
+                  nestedSetKey: {
+                    type: "ref<typeA>",
+                    isKey: true,
+                    onDelete: "nullify"
+                  }
+                }
+              }
+            }
+          },
+        },
+        store: {
+          aObjects: {
+            type: "set",
+            values: "typeA",
+          },
+        },
+      };
+
+      makeTestPlugin(PLUGIN_A_MANIFEST);
+
+      const PLUGIN_B_MANIFEST: Manifest = {
+        name: "B",
+        version: "0.0.0",
+        displayName: "B",
+        publisher: "@jamiesunderland",
+        icon: "",
+        imports: {
+          "A": "0.0.0"
+        },
+        types: {},
+        store: {
+          bObjects: {
+            type: "set",
+            values: {
+              mainKey: {
+                type: "string",
+                isKey: true
+              },
+              aRef: {
+                type: "ref<A.typeA>"
+              },
+              aConstrainedRef: {
+                type: "ref<$(A).aObjects.values.nestedValue.nestedSet.values>"
+              },
+            },
+          }
+        },
+      };
+      makeTestPlugin(PLUGIN_B_MANIFEST);
+
+      const code = await generateTypeScriptAPI(PLUGIN_B_MANIFEST, true);
+      console.log(code);
+
     });
   });
 });

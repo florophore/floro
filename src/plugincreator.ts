@@ -18,6 +18,17 @@ import {
   getExpandedTypesForPlugin,
   isSchemaValid,
   invalidSchemaPropsCheck,
+  collectKeyRefs,
+  decodeSchemaPath,
+  buildPointerReturnTypeMap,
+  buildPointerArgsMap,
+  TypeStruct,
+  replaceRefVarsWithWildcards,
+  drawMakeQueryRef,
+  drawTypestruct,
+  drawSchemaRoot,
+  drawRefReturnTypes,
+  drawGetReferencedObject,
 } from "./plugins";
 import semver from "semver";
 
@@ -383,3 +394,27 @@ export const validatePluginManifest = async (manifest: Manifest) => {
     };
   }
 };
+
+export const generateTypeScriptAPI = async (manifest: Manifest, useReact = true) => {
+    const schemaMap = await getSchemaMapForCreationManifest(manifest);
+    const rootSchemaMap = getRootSchemaMap(schemaMap);
+    const referenceKeys = collectKeyRefs(rootSchemaMap);
+    const expandedTypes = getExpandedTypesForPlugin(schemaMap, manifest.name);
+    const referenceReturnTypeMap = buildPointerReturnTypeMap(
+      rootSchemaMap,
+      expandedTypes,
+      referenceKeys
+    );
+    const referenceArgsMap = buildPointerArgsMap(referenceReturnTypeMap);
+
+    let code = useReact ? "import { useMemo } from 'react';\n\n" : "";
+    const queryTypesCode = drawMakeQueryRef(referenceArgsMap, useReact);
+    code += queryTypesCode + "\n\n"; 
+    const schemaRootCode = drawSchemaRoot(rootSchemaMap, referenceReturnTypeMap);
+    code += schemaRootCode + "\n\n";
+    const refReturnTypesCode = drawRefReturnTypes(rootSchemaMap, referenceReturnTypeMap);
+    code += refReturnTypesCode;
+    const getReferenceObjectCode = drawGetReferencedObject(referenceArgsMap, useReact)
+    code += getReferenceObjectCode + "\n\n"; 
+    return code;
+}
