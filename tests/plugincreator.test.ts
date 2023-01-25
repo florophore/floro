@@ -898,8 +898,8 @@ describe("plugincreator", () => {
     });
   });
 
-  describe("collect key pointers", () => {
-    test("collects pointers in import maps", async () => {
+  describe("codegen", () => {
+    test("generates react snapshot", async () => {
       const PLUGIN_A_MANIFEST: Manifest = {
         name: "A",
         version: "0.0.0",

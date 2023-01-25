@@ -2778,7 +2778,7 @@ const splitPath = (str: string): Array<string> => {
   return out;
 };
 
-export const decodeSchemaPath = (
+const decodeSchemaPath = (
   pathString: string
 ): Array<{ key: string; value: string } | string> => {
   return splitPath(pathString).map((part) => {
@@ -2793,7 +2793,7 @@ export const decodeSchemaPath = (
   });
 };
 
-const getObjectInStateMap = (stateMap: object, path: string): object | null => {
+export const getObjectInStateMap = (stateMap: object, path: string): object | null => {
   let current: null | undefined | object = null;
   const [pluginWrapper, ...decodedPath] = decodeSchemaPath(path);
   const pluginName = /^\$\((.+)\)$/.exec(pluginWrapper as string)?.[1] ?? null;
@@ -2820,7 +2820,7 @@ const getObjectInStateMap = (stateMap: object, path: string): object | null => {
   return current ?? null;
 };
 
-const replaceRefVarsWithWildcards = (pathString: string): string => {
+export const replaceRefVarsWithWildcards = (pathString: string): string => {
   const path = splitPath(pathString);
   return path
     .map((part) => {
