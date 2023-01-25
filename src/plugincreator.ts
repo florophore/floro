@@ -29,6 +29,7 @@ import {
   drawSchemaRoot,
   drawRefReturnTypes,
   drawGetReferencedObject,
+  drawGetPluginStore,
 } from "./plugins";
 import semver from "semver";
 
@@ -416,5 +417,7 @@ export const generateTypeScriptAPI = async (manifest: Manifest, useReact = true)
     code += refReturnTypesCode;
     const getReferenceObjectCode = drawGetReferencedObject(referenceArgsMap, useReact)
     code += getReferenceObjectCode + "\n\n"; 
+    const getReferencePluginStoreCode = drawGetPluginStore(rootSchemaMap, useReact)
+    code += getReferencePluginStoreCode; 
     return code;
 }

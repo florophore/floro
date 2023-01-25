@@ -236,3 +236,17 @@ export function useReferencedObject(root: SchemaRoot, query: QueryTypes['$(A).aO
   }, [root, query]);
 }
 
+
+export function getPluginStore(root: SchemaRoot, plugin: 'A'): SchemaRoot['A'];
+export function getPluginStore(root: SchemaRoot, plugin: 'B'): SchemaRoot['B'];
+export function getPluginStore(root: SchemaRoot, plugin: 'A'|'B'): SchemaRoot['A']|SchemaRoot['B'] {
+  return root[plugin];
+}
+
+export function usePluginStore(root: SchemaRoot, plugin: 'A'): SchemaRoot['A'];
+export function usePluginStore(root: SchemaRoot, plugin: 'B'): SchemaRoot['B'];
+export function usePluginStore(root: SchemaRoot, plugin: 'A'|'B'): SchemaRoot['A']|SchemaRoot['B'] {
+  return useMemo(() => {
+    return root[plugin];
+  }, [root, plugin]);
+}

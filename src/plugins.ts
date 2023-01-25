@@ -2884,3 +2884,32 @@ export const drawGetReferencedObject = (
   }
   return code;
 };
+
+export const drawGetPluginStore = (
+  rootSchemaMap: { [key: string]: TypeStruct },
+  useReact = false
+) => {
+  let code = "";
+  code += "\n";
+  const plugins = Object.keys(rootSchemaMap);
+  for (let plugin of plugins) {
+    code += `export function getPluginStore(root: SchemaRoot, plugin: '${plugin}'): SchemaRoot['${plugin}'];\n`;
+  }
+  const globalPluginArgs = plugins.map(p => `'${p}'`).join('|');
+  const globalPluginReturn = plugins.map(p => `SchemaRoot['${p}']`).join('|');
+  code += `export function getPluginStore(root: SchemaRoot, plugin: ${globalPluginArgs}): ${globalPluginReturn} {\n`;
+  code += `  return root[plugin];\n`;
+  code += `}\n`;
+  if (useReact) {
+    code += "\n";
+    for (let plugin of plugins) {
+      code += `export function usePluginStore(root: SchemaRoot, plugin: '${plugin}'): SchemaRoot['${plugin}'];\n`;
+    }
+    code += `export function usePluginStore(root: SchemaRoot, plugin: ${globalPluginArgs}): ${globalPluginReturn} {\n`;
+    code += `  return useMemo(() => {\n`;
+    code += `    return root[plugin];\n`;
+    code += `  }, [root, plugin]);\n`;
+    code += `}\n`;
+  }
+  return code;
+}
