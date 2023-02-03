@@ -11,7 +11,7 @@ import {
   vTMPPath,
 } from "./filestructure";
 import { broadcastAllDevices } from "./multiplexer";
-import { getPluginManifest, getStateFromKVForPlugin } from "./plugins";
+import { getPluginManifest, getStateFromKVForPlugin, PluginElement } from "./plugins";
 import { applyDiff, CommitData, Diff, TextDiff } from "./versioncontrol";
 
 export interface RawStore {
@@ -571,6 +571,25 @@ export const updateCurrentBranch = async (repoId: string, branchName: string): P
     return null;
   }
 };
+
+export const getPluginsToRunUpdatesOn = (
+  pastPlugins: Array<PluginElement>,
+  nextPlugins: Array<PluginElement>
+) => {
+  console.log("PP", pastPlugins);
+  console.log("NP", nextPlugins);
+  return nextPlugins.filter(({key, value}) => {
+    const lastPlugin = pastPlugins.find(p => p.key == key);
+    console.log("LP", lastPlugin, !lastPlugin)
+    if (!lastPlugin) {
+      return true;
+    }
+    if (lastPlugin.value != value) {
+      return true;
+    }
+    return false;
+  });
+}
 
 export const buildStateStore = async (
   state: CommitState

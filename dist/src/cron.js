@@ -29,8 +29,8 @@ const startSessionJob = () => {
                     }
                 });
                 if (response.status == 200) {
-                    await (0, filestructure_1.writeUserSession)(response.data.session);
-                    await (0, filestructure_1.writeUser)(response.data.user);
+                    await (0, filestructure_1.writeUserSession)(response.data.exchangeSession);
+                    await (0, filestructure_1.writeUser)(response.data.exchangeSession.user);
                     (0, multiplexer_1.broadcastAllDevices)("session_updated", response.data);
                 }
             }

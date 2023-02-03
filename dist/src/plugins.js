@@ -3,11 +3,11 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.isTopologicalSubsetValid = exports.isTopologicalSubset = exports.pluginManifestIsSubsetOfManifest = exports.validatePluginState = exports.cascadePluginState = exports.getKVStateForPlugin = exports.getRootSchemaMap = exports.getRootSchemaForPlugin = exports.getStateFromKVForPlugin = exports.constructDependencySchema = exports.buildObjectsAtPath = exports.indexArrayDuplicates = exports.flattenStateToSchemaPathKV = exports.getStateId = exports.decodeSchemaPath = exports.writePathString = exports.defaultVoidedState = exports.getUpstreamDependencyList = exports.hasPlugin = exports.manifestListToSchemaMap = exports.pluginMapToList = exports.pluginListToMap = exports.getPluginManifests = exports.pluginManifestsAreCompatibleForUpdate = exports.getPluginManifest = exports.readDevPluginManifest = void 0;
+exports.drawGetPluginStore = exports.drawGetReferencedObject = exports.drawRefReturnTypes = exports.drawSchemaRoot = exports.drawMakeQueryRef = exports.buildPointerArgsMap = exports.buildPointerReturnTypeMap = exports.typestructsAreEquivalent = exports.replaceRawRefsInExpandedType = exports.replaceRefVarsWithWildcards = exports.collectKeyRefs = exports.invalidSchemaPropsCheck = exports.isSchemaValid = exports.isTopologicalSubsetValid = exports.isTopologicalSubset = exports.pluginManifestIsSubsetOfManifest = exports.validatePluginState = exports.cascadePluginState = exports.getKVStateForPlugin = exports.getRootSchemaMap = exports.getRootSchemaForPlugin = exports.getExpandedTypesForPlugin = exports.getStateFromKVForPlugin = exports.constructDependencySchema = exports.buildObjectsAtPath = exports.indexArrayDuplicates = exports.flattenStateToSchemaPathKV = exports.getStateId = exports.decodeSchemaPath = exports.writePathString = exports.defaultVoidedState = exports.containsCyclicTypes = exports.getUpstreamDependencyList = exports.getMissingUpstreamDependencies = exports.hasPlugin = exports.manifestListToSchemaMap = exports.pluginMapToList = exports.pluginListToMap = exports.getPluginManifests = exports.pluginManifestsAreCompatibleForUpdate = exports.getPluginManifest = exports.readDevPluginManifest = void 0;
 const filestructure_1 = require("./filestructure");
 const axios_1 = __importDefault(require("axios"));
 const path_1 = __importDefault(require("path"));
-const memfs_1 = require("memfs");
+const fs_1 = __importDefault(require("fs"));
 const cryptojs_1 = require("cryptojs");
 const primitives = new Set(["int", "float", "boolean", "string"]);
 const readDevPluginManifest = async (pluginName, pluginVersion) => {
@@ -15,9 +15,10 @@ const readDevPluginManifest = async (pluginName, pluginVersion) => {
     if (!pluginsJSON) {
         return null;
     }
-    if (pluginsJSON.plugins?.[pluginName]?.proxy) {
+    if (pluginsJSON.plugins?.[pluginName]?.proxy &&
+        !pluginVersion.startsWith("dev@")) {
         try {
-            const uri = `http://127.0.0.1:63403/plugins/${pluginName}/floro/floro.manifest.json`;
+            const uri = `http://127.0.0.1:63403/plugins/${pluginName}/dev/floro/floro.manifest.json`;
             const res = await axios_1.default.get(uri);
             return res.data;
         }
@@ -26,8 +27,8 @@ const readDevPluginManifest = async (pluginName, pluginVersion) => {
         }
     }
     try {
-        const pluginManifestPath = path_1.default.join(filestructure_1.vDEVPath, `${pluginName}@${pluginVersion}`, "floro", "floro.manifest.json");
-        const manifestString = await memfs_1.fs.promises.readFile(pluginManifestPath);
+        const pluginManifestPath = path_1.default.join(filestructure_1.vDEVPath, pluginName, pluginVersion.split("@")?.[1] ?? "none", "floro", "floro.manifest.json");
+        const manifestString = await fs_1.default.promises.readFile(pluginManifestPath);
         return JSON.parse(manifestString.toString());
     }
     catch (e) {
@@ -41,14 +42,13 @@ const getPluginManifest = async (pluginName, plugins) => {
         return;
     }
     if (pluginInfo.value.startsWith("dev")) {
-        const [, v] = pluginInfo.value.split("@");
-        return await (0, exports.readDevPluginManifest)(pluginName, v ?? "");
+        return await (0, exports.readDevPluginManifest)(pluginName, pluginInfo.value);
     }
     if (!pluginInfo.value) {
         return null;
     }
-    const pluginManifestPath = path_1.default.join(filestructure_1.vPluginsPath, `${pluginName}@${pluginInfo.value}`, "floro", "floro.manifest.json");
-    const manifestString = await memfs_1.fs.promises.readFile(pluginManifestPath);
+    const pluginManifestPath = path_1.default.join(filestructure_1.vPluginsPath, pluginName, pluginInfo.value, "floro", "floro.manifest.json");
+    const manifestString = await fs_1.default.promises.readFile(pluginManifestPath);
     return JSON.parse(manifestString.toString());
 };
 exports.getPluginManifest = getPluginManifest;
@@ -72,7 +72,7 @@ const getPluginManifests = async (pluginList) => {
     const manifests = await Promise.all(pluginList.map(({ key: pluginName }) => {
         return (0, exports.getPluginManifest)(pluginName, pluginList);
     }));
-    return manifests?.filter(manifest => {
+    return manifests?.filter((manifest) => {
         return !!manifest;
     });
 };
@@ -113,6 +113,11 @@ const hasPlugin = (pluginName, plugins) => {
     return false;
 };
 exports.hasPlugin = hasPlugin;
+const getMissingUpstreamDependencies = async (pluginName, manifest, plugins) => {
+    // TODO: finish
+    return [];
+};
+exports.getMissingUpstreamDependencies = getMissingUpstreamDependencies;
 const getUpstreamDependencyList = async (pluginName, manifest, plugins) => {
     if (!(0, exports.hasPlugin)(pluginName, plugins)) {
         return null;
@@ -143,9 +148,11 @@ const getUpstreamDependencyList = async (pluginName, manifest, plugins) => {
 exports.getUpstreamDependencyList = getUpstreamDependencyList;
 const containsCyclicTypes = (schema, struct, visited = {}) => {
     for (const prop in struct) {
-        if (struct[prop].type == "set") {
+        if (struct[prop].type == "set" ||
+            (struct[prop].type == "array" &&
+                !primitives.has(struct[prop].values))) {
             if (visited[struct[prop].values] ||
-                containsCyclicTypes(schema, schema.types[struct[prop].values], {
+                (0, exports.containsCyclicTypes)(schema, schema.types[struct[prop].values], {
                     ...visited,
                     [struct[prop].values]: true,
                 })) {
@@ -154,7 +161,7 @@ const containsCyclicTypes = (schema, struct, visited = {}) => {
         }
         else if (schema.types[struct[prop].type]) {
             if (visited[struct[prop].type] ||
-                containsCyclicTypes(schema, schema.types[struct[prop].type], {
+                (0, exports.containsCyclicTypes)(schema, schema.types[struct[prop].type], {
                     ...visited,
                     [schema.types[struct[prop].type]]: true,
                 })) {
@@ -162,7 +169,7 @@ const containsCyclicTypes = (schema, struct, visited = {}) => {
             }
         }
         else if (!struct[prop]?.type) {
-            if (containsCyclicTypes(schema, struct[prop], {
+            if ((0, exports.containsCyclicTypes)(schema, struct[prop], {
                 ...visited,
             })) {
                 return true;
@@ -171,9 +178,11 @@ const containsCyclicTypes = (schema, struct, visited = {}) => {
     }
     return false;
 };
+exports.containsCyclicTypes = containsCyclicTypes;
 const constructRootSchema = (schema, struct, pluginName) => {
     let out = {};
-    for (const prop in struct) {
+    const sortedStructedProps = Object.keys(struct).sort();
+    for (const prop of sortedStructedProps) {
         out[prop] = {};
         if (struct[prop]?.type == "set") {
             if (typeof struct[prop]?.values == "string" &&
@@ -424,9 +433,10 @@ const sanitizePrimitivesWithSchema = (struct, state) => {
         }
         if ((struct[prop]?.type == "set" || struct[prop]?.type == "array") &&
             typeof struct[prop]?.values == "object") {
-            out[prop] = (state?.[prop] ?? [])?.map((value) => {
-                return sanitizePrimitivesWithSchema(struct[prop]?.values, value);
-            });
+            out[prop] =
+                (state?.[prop] ?? [])?.map((value) => {
+                    return sanitizePrimitivesWithSchema(struct[prop]?.values, value);
+                }) ?? [];
             continue;
         }
         if (struct[prop]?.type == "int") {
@@ -480,10 +490,68 @@ const writePathString = (pathParts) => {
         .join(".");
 };
 exports.writePathString = writePathString;
+const extractKeyValueFromRefString = (str) => {
+    let key = "";
+    let i = 0;
+    while (str[i] != "<") {
+        key += str[i++];
+    }
+    let value = "";
+    let counter = 1;
+    i++;
+    while (i < str.length) {
+        if (str[i] == "<")
+            counter++;
+        if (str[i] == ">")
+            counter--;
+        if (counter >= 1) {
+            value += str[i];
+        }
+        i++;
+    }
+    return {
+        key,
+        value,
+    };
+};
+const getCounterArrowBalanance = (str) => {
+    let counter = 0;
+    for (let i = 0; i < str.length; ++i) {
+        if (str[i] == "<")
+            counter++;
+        if (str[i] == ">")
+            counter--;
+    }
+    return counter;
+};
+const splitPath = (str) => {
+    let out = [];
+    let arrowBalance = 0;
+    let curr = "";
+    for (let i = 0; i <= str.length; ++i) {
+        if (i == str.length) {
+            out.push(curr);
+            continue;
+        }
+        if (arrowBalance == 0 && str[i] == ".") {
+            out.push(curr);
+            curr = "";
+            continue;
+        }
+        if (str[i] == "<") {
+            arrowBalance++;
+        }
+        if (str[i] == ">") {
+            arrowBalance--;
+        }
+        curr += str[i];
+    }
+    return out;
+};
 const decodeSchemaPath = (pathString) => {
-    return pathString.split(".").map((part) => {
-        if (/^(.+)<(.+)>$/.test(part)) {
-            const [, key, value] = /^(.+)<(.+)>$/.exec(part);
+    return splitPath(pathString).map((part) => {
+        if (/^(.+)<(.+)>$/.test(part) && getCounterArrowBalanance(part) == 0) {
+            const { key, value } = extractKeyValueFromRefString(part);
             return {
                 key,
                 value,
@@ -495,7 +563,8 @@ const decodeSchemaPath = (pathString) => {
 exports.decodeSchemaPath = decodeSchemaPath;
 const getStateId = (schema, state) => {
     let hashPairs = [];
-    for (let prop in schema) {
+    const sortedProps = Object.keys(schema).sort();
+    for (let prop of sortedProps) {
         if (!schema[prop].type) {
             hashPairs.push({
                 key: prop,
@@ -539,7 +608,8 @@ const flattenStateToSchemaPathKV = (schemaRoot, state, traversalPath) => {
     const nestedStructures = [];
     const value = {};
     let primaryKey = null;
-    for (let prop in schemaRoot) {
+    const sortedProps = Object.keys(schemaRoot).sort();
+    for (let prop of sortedProps) {
         if (schemaRoot[prop].isKey) {
             primaryKey = {
                 key: prop,
@@ -681,18 +751,35 @@ const buildObjectsAtPath = (rootSchema, path, properties, out = {}) => {
 };
 exports.buildObjectsAtPath = buildObjectsAtPath;
 const getSchemaAtPath = (rootSchema, path) => {
+    try {
+        const [, ...decodedPath] = (0, exports.decodeSchemaPath)(path);
+        let currentSchema = rootSchema;
+        for (const part of decodedPath) {
+            if (typeof part == "string" && currentSchema?.[part]?.type == "set") {
+                currentSchema = currentSchema[part].values;
+                continue;
+            }
+            if (typeof part == "string" && currentSchema?.[part]?.type == "array") {
+                currentSchema = currentSchema[part].values;
+                continue;
+            }
+            if (typeof part == "string") {
+                currentSchema = currentSchema[part];
+                continue;
+            }
+        }
+        return currentSchema;
+    }
+    catch (e) {
+        return null;
+    }
+    // ignore $(store)
+};
+const getStaticSchemaAtPath = (rootSchema, path) => {
     // ignore $(store)
     const [, ...decodedPath] = (0, exports.decodeSchemaPath)(path);
     let currentSchema = rootSchema;
     for (const part of decodedPath) {
-        if (typeof part == "string" && currentSchema?.[part]?.type == "set") {
-            currentSchema = currentSchema[part].values;
-            continue;
-        }
-        if (typeof part == "string" && currentSchema?.[part]?.type == "array") {
-            currentSchema = currentSchema[part].values;
-            continue;
-        }
         if (typeof part == "string") {
             currentSchema = currentSchema[part];
             continue;
@@ -754,16 +841,15 @@ const cleanArrayIDsFromState = (state) => {
     return out;
 };
 const generateKVFromStateWithRootSchema = (rootSchema, pluginName, state) => {
-    return (0, exports.flattenStateToSchemaPathKV)(rootSchema, state, [
-        `$(${pluginName})`,
-    ])?.map(({ key, value }) => {
+    const flattenedState = (0, exports.flattenStateToSchemaPathKV)(rootSchema, state, [`$(${pluginName})`]);
+    return (flattenedState?.map?.(({ key, value }) => {
         return {
             key: (0, exports.writePathString)(key),
             value,
         };
-    });
+    }) ?? []);
 };
-const iterateSchemaTypes = (types, pluginName) => {
+const iterateSchemaTypes = (types, pluginName, importedTypes = {}) => {
     let out = {};
     for (const prop in types) {
         out[prop] = {};
@@ -780,8 +866,13 @@ const iterateSchemaTypes = (types, pluginName) => {
                 out[prop].values = `${pluginName}.${types[prop].values}`;
                 continue;
             }
+            if (typeof types[prop].values == "string" &&
+                typeof importedTypes[types[prop].values] == "object") {
+                out[prop].values = iterateSchemaTypes(importedTypes[types[prop].values], pluginName, importedTypes);
+                continue;
+            }
             if (typeof types[prop].values == "object") {
-                out[prop].values = iterateSchemaTypes(types[prop].values, pluginName);
+                out[prop].values = iterateSchemaTypes(types[prop].values, pluginName, importedTypes);
                 continue;
             }
         }
@@ -801,27 +892,37 @@ const iterateSchemaTypes = (types, pluginName) => {
             out[prop] = types[prop];
             continue;
         }
+        if (typeof types[prop].type == "string" &&
+            importedTypes[types[prop]?.type]) {
+            out[prop] = iterateSchemaTypes(importedTypes[types[prop]?.type], pluginName, importedTypes);
+            continue;
+        }
+        if (typeof types[prop].type == "string" &&
+            importedTypes[pluginName + "." + types[prop]?.type]) {
+            out[prop] = iterateSchemaTypes(importedTypes[pluginName + "." + types[prop]?.type], pluginName, importedTypes);
+            continue;
+        }
         if (!types[prop]?.type) {
-            out[prop] = iterateSchemaTypes(types[prop], pluginName);
+            out[prop] = iterateSchemaTypes(types[prop], pluginName, importedTypes);
         }
     }
     return out;
 };
-const drawSchemaTypesFromImports = (schema, pluginName) => {
+const drawSchemaTypesFromImports = (schema, pluginName, importedTypes = {}) => {
     const types = Object.keys(schema[pluginName].types).reduce((types, key) => {
         if (key.startsWith(`${pluginName}.`)) {
             return {
                 ...types,
-                [key]: iterateSchemaTypes(schema[pluginName].types[key], pluginName),
+                [key]: iterateSchemaTypes(schema[pluginName].types[key], pluginName, { ...importedTypes, ...schema[pluginName].types }),
             };
         }
         return {
             ...types,
-            [`${pluginName}.${key}`]: iterateSchemaTypes(schema[pluginName].types[key], pluginName),
+            [`${pluginName}.${key}`]: iterateSchemaTypes(schema[pluginName].types[key], pluginName, { ...importedTypes, ...schema[pluginName].types }),
         };
     }, {});
     return Object.keys(schema[pluginName].imports).reduce((acc, importPluginName) => {
-        const importTypes = drawSchemaTypesFromImports(schema, importPluginName);
+        const importTypes = drawSchemaTypesFromImports(schema, importPluginName, importedTypes);
         return {
             ...acc,
             ...importTypes,
@@ -853,9 +954,25 @@ const getStateFromKVForPlugin = (schemaMap, kv, pluginName) => {
     return cleanArrayIDsFromState(out);
 };
 exports.getStateFromKVForPlugin = getStateFromKVForPlugin;
+const getExpandedTypesForPlugin = (schemaMap, pluginName) => {
+    const upstreamDeps = getUpstreamDepsInSchemaMap(schemaMap, pluginName);
+    const schemaWithTypes = [...upstreamDeps, pluginName].reduce((acc, pluginName) => {
+        return {
+            ...acc,
+            ...drawSchemaTypesFromImports(schemaMap, pluginName, acc),
+        };
+    }, {});
+    return Object.keys(schemaWithTypes).reduce((acc, type) => {
+        return {
+            ...acc,
+            [type]: iterateSchemaTypes(acc[type], type, schemaWithTypes),
+        };
+    }, schemaWithTypes);
+};
+exports.getExpandedTypesForPlugin = getExpandedTypesForPlugin;
 const getRootSchemaForPlugin = (schemaMap, pluginName) => {
-    const schemaWithTypes = drawSchemaTypesFromImports(schemaMap, pluginName);
-    const schemaWithStores = iterateSchemaTypes(schemaMap[pluginName].store, pluginName);
+    const schemaWithTypes = (0, exports.getExpandedTypesForPlugin)(schemaMap, pluginName);
+    const schemaWithStores = iterateSchemaTypes(schemaMap[pluginName].store, pluginName, schemaWithTypes);
     return constructRootSchema({
         types: schemaWithTypes,
     }, schemaWithStores, pluginName);
@@ -870,7 +987,7 @@ const getRootSchemaMap = (schemaMap) => {
 };
 exports.getRootSchemaMap = getRootSchemaMap;
 const getKeyType = (keyPath, rootSchemaMap) => {
-    const [pluginWrapper, ...path] = keyPath.split(".");
+    const [pluginWrapper, ...path] = splitPath(keyPath);
     let current = null;
     const typeGroup = /^\$\((.+)\)$/.exec(pluginWrapper)?.[1] ?? null;
     if (typeGroup && rootSchemaMap[typeGroup]) {
@@ -956,7 +1073,7 @@ const getDownstreamDepsInSchemaMap = (schemaMap, pluginName, memo = {}) => {
 };
 const refSetFromKey = (key) => {
     const out = [];
-    const parts = key.split(".");
+    const parts = splitPath(key);
     const curr = [];
     for (const part of parts) {
         curr.push(part);
@@ -1136,14 +1253,14 @@ const isTopologicalSubset = (oldSchemaMap, oldStateMap, newSchemaMap, newStateMa
         return false;
     }
     const oldKVs = (0, exports.getKVStateForPlugin)(oldSchemaMap, pluginName, oldStateMap)
-        .map(({ key }) => key)
-        ?.filter((key) => {
+        ?.map?.(({ key }) => key)
+        ?.filter?.((key) => {
         // remove array refs, since unstable
         if (/\(id\)<.+>/.test(key)) {
             return false;
         }
         return true;
-    });
+    }) ?? [];
     const newKVs = (0, exports.getKVStateForPlugin)(newSchemaMap, pluginName, newStateMap).map(({ key }) => key);
     const newKVsSet = new Set(newKVs);
     for (let key of oldKVs) {
@@ -1192,4 +1309,858 @@ const isTopologicalSubsetValid = (oldSchemaMap, oldStateMap, newSchemaMap, newSt
     return true;
 };
 exports.isTopologicalSubsetValid = isTopologicalSubsetValid;
+const isSchemaValid = (typeStruct, schemaMap, rootSchemaMap, expandedTypes, isDirectParentSet = false, isDirectParentArray = false, isArrayDescendent = false, path = []) => {
+    try {
+        let keyCount = 0;
+        const sets = [];
+        const arrays = [];
+        const nestedStructures = [];
+        const refs = [];
+        for (const prop in typeStruct) {
+            if (typeof typeStruct[prop] == "object" &&
+                Object.keys(typeStruct[prop]).length == 0) {
+                const [root, ...rest] = path;
+                const formattedPath = [`$(${root})`, ...rest, prop].join(".");
+                const schemaMapValue = getSchemaAtPath?.(schemaMap[root].store, (0, exports.writePathString)([`$(${root})`, ...rest]));
+                const schemaMapValueProp = schemaMapValue?.[prop];
+                if (schemaMapValue &&
+                    schemaMapValueProp &&
+                    schemaMapValueProp?.type &&
+                    (schemaMapValueProp.type == "set" ||
+                        schemaMapValueProp.type == "array") &&
+                    !primitives.has(schemaMapValueProp?.values ?? "")) {
+                    return {
+                        status: "error",
+                        message: `Invalid value type for values '${schemaMapValueProp.values}'. Found at '${formattedPath}'.`,
+                    };
+                }
+                if (schemaMapValue &&
+                    schemaMapValueProp &&
+                    schemaMapValueProp?.type &&
+                    !(schemaMapValueProp.type == "set" ||
+                        schemaMapValueProp.type == "array") &&
+                    !primitives.has(schemaMapValueProp?.type ?? "")) {
+                    return {
+                        status: "error",
+                        message: `Invalid value type '${schemaMapValueProp.type}. Found' at '${formattedPath}'.`,
+                    };
+                }
+                return {
+                    status: "error",
+                    message: `Invalid value type for prop '${prop}'. Found at '${formattedPath}'.`,
+                };
+            }
+            if (typeof typeStruct[prop]?.type == "string" && typeStruct[prop].isKey) {
+                if (typeStruct[prop]?.nullable == true) {
+                    const [root, ...rest] = path;
+                    const formattedPath = [`$(${root})`, ...rest, prop].join(".");
+                    return {
+                        status: "error",
+                        message: `Invalid key '${prop}'. Key types cannot be nullable. Found at '${formattedPath}'.`,
+                    };
+                }
+                if (typeStruct[prop]?.type == "ref" &&
+                    typeStruct[prop].onDelete == "nullify") {
+                    const [root, ...rest] = path;
+                    const formattedPath = [`$(${root})`, ...rest, prop].join(".");
+                    return {
+                        status: "error",
+                        message: `Invalid key '${prop}'. Key types that are refs cannot have a cascaded onDelete values of nullify. Found at '${formattedPath}'.`,
+                    };
+                }
+                keyCount++;
+            }
+            if (typeof typeStruct[prop]?.type == "string" &&
+                typeof typeStruct[prop]?.values != "string" &&
+                typeStruct[prop].type == "set" &&
+                Object.keys(typeStruct[prop]?.values ?? {}).length != 0) {
+                sets.push(prop);
+                continue;
+            }
+            if (typeof typeStruct[prop]?.type == "string" &&
+                typeof typeStruct[prop]?.values != "string" &&
+                typeStruct[prop].type == "array" &&
+                Object.keys(typeStruct[prop]?.values ?? {}).length != 0) {
+                arrays.push(prop);
+                continue;
+            }
+            if (typeof typeStruct[prop]?.type == "string" &&
+                typeStruct[prop].type == "ref") {
+                refs.push(prop);
+                continue;
+            }
+            if (typeof typeStruct[prop]?.type == "string" &&
+                !(typeStruct[prop]?.type == "set" ||
+                    typeStruct[prop]?.type == "array" ||
+                    typeStruct[prop]?.type == "ref") &&
+                !primitives.has(typeStruct[prop].type)) {
+                const [root, ...rest] = path;
+                const formattedPath = [`$(${root})`, ...rest, prop].join(".");
+                const schemaMapValue = getSchemaAtPath?.(schemaMap[root].store, (0, exports.writePathString)([`$(${root})`, ...rest]));
+                const schemaMapValueProp = schemaMapValue?.[prop];
+                if (schemaMapValue &&
+                    schemaMapValueProp &&
+                    schemaMapValueProp?.type &&
+                    !primitives.has(schemaMapValueProp?.type ?? "")) {
+                    return {
+                        status: "error",
+                        message: `Invalid value type for type '${schemaMapValueProp.type}'. Found at '${formattedPath}'.`,
+                    };
+                }
+                return {
+                    status: "error",
+                    message: `Invalid value type for prop '${prop}'. Found at '${formattedPath}'.`,
+                };
+            }
+            if (typeof typeStruct[prop]?.type == "string" &&
+                (typeStruct[prop]?.type == "set" ||
+                    typeStruct[prop]?.type == "array") &&
+                typeof typeStruct[prop]?.values == "string" &&
+                !primitives.has(typeStruct[prop].values)) {
+                const [root, ...rest] = path;
+                const formattedPath = [`$(${root})`, ...rest, prop].join(".");
+                return {
+                    status: "error",
+                    message: `Invalid type for values of '${typeStruct[prop]?.type}'. Found at '${formattedPath}'.`,
+                };
+            }
+            if (typeof typeStruct[prop] == "object" && !typeStruct[prop]?.type) {
+                nestedStructures.push(prop);
+                continue;
+            }
+        }
+        if (sets.length > 0 && isArrayDescendent) {
+            const [root, ...rest] = path;
+            const formattedPath = [`$(${root})`, ...rest].join(".");
+            return {
+                status: "error",
+                message: `Arrays cannot contain keyed set descendents. Found at '${formattedPath}'.`,
+            };
+        }
+        if (isDirectParentArray && keyCount > 1) {
+            const [root, ...rest] = path;
+            const formattedPath = [`$(${root})`, ...rest].join(".");
+            return {
+                status: "error",
+                message: `Arrays cannot contain keyed values. Found at '${formattedPath}'.`,
+            };
+        }
+        if (isDirectParentSet && keyCount > 1) {
+            const [root, ...rest] = path;
+            const formattedPath = [`$(${root})`, ...rest].join(".");
+            return {
+                status: "error",
+                message: `Sets cannot contain multiple key types. Multiple key types found at '${formattedPath}'.`,
+            };
+        }
+        if (isDirectParentSet && keyCount == 0) {
+            const [root, ...rest] = path;
+            const formattedPath = [`$(${root})`, ...rest].join(".");
+            return {
+                status: "error",
+                message: `Sets must contain one (and only one) key type. No key type found at '${formattedPath}'.`,
+            };
+        }
+        if (!isDirectParentArray && !isDirectParentSet && keyCount > 0) {
+            const [root, ...rest] = path;
+            const formattedPath = [`$(${root})`, ...rest].join(".");
+            return {
+                status: "error",
+                message: `Only sets may contain key types. Invalid key type found at '${formattedPath}'.`,
+            };
+        }
+        const refCheck = refs.reduce((response, refProp) => {
+            if (response.status != "ok") {
+                return response;
+            }
+            const refStruct = typeStruct[refProp];
+            if (refStruct?.refType?.startsWith("$")) {
+                const pluginName = /^\$\((.+)\)$/.exec(refStruct?.refType.split(".")[0])?.[1] ?? null;
+                const referencedType = getStaticSchemaAtPath(rootSchemaMap[pluginName], refStruct.refType);
+                if (!referencedType) {
+                    const [root, ...rest] = path;
+                    const formattedPath = [`$(${root})`, ...rest, refProp].join(".");
+                    return {
+                        status: "error",
+                        message: `Invalid reference pointer '${refStruct.refType}'. No reference value found for value at '${formattedPath}'.`,
+                    };
+                }
+                if (refStruct.isKey && refStruct === referencedType[refProp]) {
+                    const [root, ...rest] = path;
+                    const formattedPath = [`$(${root})`, ...rest, refProp].join(".");
+                    return {
+                        status: "error",
+                        message: `Invalid reference pointer '${refStruct.refType}'. Keys that are constrained ref types, cannot be self-referential. Found at '${formattedPath}'.`,
+                    };
+                }
+                const containsKey = Object.keys(referencedType).reduce((contains, prop) => {
+                    if (contains) {
+                        return true;
+                    }
+                    return referencedType[prop]?.isKey;
+                }, false);
+                if (!containsKey) {
+                    const [root, ...rest] = path;
+                    const formattedPath = [`$(${root})`, ...rest, refProp].join(".");
+                    return {
+                        status: "error",
+                        message: `Invalid reference constrainted pointer '${refStruct.refType}'. Constrained references must point directly at the values of a set. Found at '${formattedPath}'.`,
+                    };
+                }
+            }
+            else {
+                const referencedType = expandedTypes[refStruct.refType];
+                if (!referencedType) {
+                    const [root, ...rest] = path;
+                    const formattedPath = [`$(${root})`, ...rest, refProp].join(".");
+                    return {
+                        status: "error",
+                        message: `Invalid reference pointer '${refStruct.refType}'. No reference type found for reference at '${formattedPath}'.`,
+                    };
+                }
+                const containsKey = Object.keys(referencedType).reduce((contains, prop) => {
+                    if (contains) {
+                        return true;
+                    }
+                    return referencedType[prop]?.isKey;
+                }, false);
+                if (!containsKey) {
+                    const [root, ...rest] = path;
+                    const formattedPath = [`$(${root})`, ...rest, refProp].join(".");
+                    return {
+                        status: "error",
+                        message: `Invalid reference pointer '${refStruct.refType}'. References type ${refStruct.refType} contains no key type. Found at '${formattedPath}'.`,
+                    };
+                }
+            }
+            return { status: "ok" };
+        }, { status: "ok" });
+        if (refCheck.status != "ok") {
+            return refCheck;
+        }
+        const nestedStructureCheck = nestedStructures.reduce((response, nestedStructureProp) => {
+            if (response.status != "ok") {
+                return response;
+            }
+            return (0, exports.isSchemaValid)(typeStruct[nestedStructureProp], schemaMap, rootSchemaMap, expandedTypes, false, false, isArrayDescendent, [...path, nestedStructureProp]);
+        }, { status: "ok" });
+        if (nestedStructureCheck.status != "ok") {
+            return nestedStructureCheck;
+        }
+        const arrayCheck = arrays.reduce((response, arrayProp) => {
+            if (response.status != "ok") {
+                return response;
+            }
+            return (0, exports.isSchemaValid)(typeStruct[arrayProp].values, schemaMap, rootSchemaMap, expandedTypes, false, true, true, [...path, arrayProp]);
+        }, { status: "ok" });
+        if (arrayCheck.status != "ok") {
+            return arrayCheck;
+        }
+        const setCheck = sets.reduce((response, setProp) => {
+            if (response.status != "ok") {
+                return response;
+            }
+            return (0, exports.isSchemaValid)(typeStruct[setProp].values, schemaMap, rootSchemaMap, expandedTypes, true, false, isArrayDescendent, [...path, setProp]);
+        }, { status: "ok" });
+        if (setCheck.status != "ok") {
+            return setCheck;
+        }
+        return {
+            status: "ok",
+        };
+    }
+    catch (e) {
+        const [root, ...rest] = path;
+        const formattedPath = [`$(${root})`, ...rest].join(".");
+        return {
+            status: "error",
+            message: `${e?.toString?.() ?? "unknown error"}. Found at '${formattedPath}'.`,
+        };
+    }
+};
+exports.isSchemaValid = isSchemaValid;
+const invalidSchemaPropsCheck = (typeStruct, rootSchema, path = []) => {
+    for (let prop in typeStruct) {
+        if (!rootSchema[prop]) {
+            const formattedPath = [...path, prop].join(".");
+            return {
+                status: "error",
+                message: `Invalid prop in schema. Remove '${prop}' from '${path.join(".")}'. Found at '${formattedPath}'.`,
+            };
+        }
+        if (typeof typeStruct[prop] == "object") {
+            const hasInvalidTypesResponse = (0, exports.invalidSchemaPropsCheck)(typeStruct[prop], rootSchema[prop] ?? {}, [...path, prop]);
+            if (hasInvalidTypesResponse.status == "error") {
+                return hasInvalidTypesResponse;
+            }
+        }
+    }
+    return {
+        status: "ok",
+    };
+};
+exports.invalidSchemaPropsCheck = invalidSchemaPropsCheck;
+const collectKeyRefs = (typeStruct, path = []) => {
+    let out = [];
+    for (let prop in typeStruct) {
+        if (typeStruct[prop]?.isKey) {
+            if (typeStruct[prop].type == "ref") {
+                path.push({ key: prop, value: `ref<${typeStruct[prop].refType}>` });
+            }
+            else {
+                path.push({ key: prop, value: typeStruct[prop].type });
+            }
+            out.push((0, exports.writePathString)(path));
+        }
+        if (typeStruct[prop]?.type == "set" &&
+            typeof typeStruct[prop]?.values == "object") {
+            out.push(...(0, exports.collectKeyRefs)(typeStruct[prop].values, [
+                ...path,
+                path.length == 0 ? `$(${prop})` : prop,
+            ]));
+            continue;
+        }
+        if (!typeStruct[prop]?.type && typeof typeStruct[prop] == "object") {
+            out.push(...(0, exports.collectKeyRefs)(typeStruct[prop], [
+                ...path,
+                path.length == 0 ? `$(${prop})` : prop,
+            ]));
+            continue;
+        }
+    }
+    return out;
+};
+exports.collectKeyRefs = collectKeyRefs;
+const replaceRefVarsWithValues = (pathString) => {
+    const path = splitPath(pathString);
+    return path
+        .map((part) => {
+        if (/^(.+)<(.+)>$/.test(part)) {
+            return "values";
+        }
+        return part;
+    })
+        .join(".");
+};
+const replaceRefVarsWithWildcards = (pathString) => {
+    const path = splitPath(pathString);
+    return path
+        .map((part) => {
+        if (/^(.+)<(.+)>$/.test(part)) {
+            const { key } = extractKeyValueFromRefString(part);
+            return `${key}<?>`;
+        }
+        return part;
+    })
+        .join(".");
+};
+exports.replaceRefVarsWithWildcards = replaceRefVarsWithWildcards;
+const replaceRawRefsInExpandedType = (typeStruct, expandedTypes, rootSchemaMap) => {
+    let out = {};
+    for (let prop in typeStruct) {
+        if (typeof typeStruct[prop]?.type == "string" &&
+            /^ref<(.+)>$/.test(typeStruct[prop]?.type)) {
+            const { value: refType } = extractKeyValueFromRefString(typeStruct[prop]?.type);
+            out[prop] = { ...typeStruct[prop] };
+            out[prop].type = "ref";
+            out[prop].refType = refType;
+            out[prop].onDelete = typeStruct[prop]?.onDelete ?? "delete";
+            out[prop].nullable = typeStruct[prop]?.nullable ?? false;
+            if (/^\$\(.+\)/.test(refType)) {
+                const pluginName = /^\$\((.+)\)$/.exec(refType.split(".")[0])?.[1] ?? null;
+                const staticSchema = getStaticSchemaAtPath(rootSchemaMap[pluginName], refType);
+                const keyProp = Object.keys(staticSchema).find((p) => staticSchema[p].isKey);
+                const refKeyType = staticSchema[keyProp].type;
+                out[prop].refKeyType = refKeyType;
+            }
+            else {
+                const staticSchema = expandedTypes[refType];
+                const keyProp = Object.keys(staticSchema).find((p) => staticSchema[p].isKey);
+                const refKeyType = staticSchema[keyProp].type;
+                out[prop].refKeyType = refKeyType;
+            }
+            continue;
+        }
+        if (typeof typeStruct[prop] == "object") {
+            out[prop] = (0, exports.replaceRawRefsInExpandedType)(typeStruct[prop], expandedTypes, rootSchemaMap);
+            continue;
+        }
+        out[prop] = typeStruct[prop];
+    }
+    return out;
+};
+exports.replaceRawRefsInExpandedType = replaceRawRefsInExpandedType;
+const typestructsAreEquivalent = (typestructA, typestructB) => {
+    if (Object.keys(typestructA ?? {}).length !=
+        Object.keys(typestructB ?? {}).length) {
+        return false;
+    }
+    for (let prop in typestructA) {
+        if (typeof typestructA[prop] == "object" && typeof typestructB[prop]) {
+            const areEquivalent = (0, exports.typestructsAreEquivalent)(typestructA[prop], typestructB[prop]);
+            if (!areEquivalent) {
+                return false;
+            }
+            continue;
+        }
+        if (typestructA[prop] != typestructB[prop]) {
+            return false;
+        }
+    }
+    return true;
+};
+exports.typestructsAreEquivalent = typestructsAreEquivalent;
+const buildPointerReturnTypeMap = (rootSchemaMap, expandedTypes, referenceKeys) => {
+    const expandedTypesWithRefs = (0, exports.replaceRawRefsInExpandedType)(expandedTypes, expandedTypes, rootSchemaMap);
+    let out = {};
+    for (let key of referenceKeys) {
+        const pluginName = /^\$\((.+)\)$/.exec(key.split(".")[0])?.[1] ?? null;
+        const staticPath = replaceRefVarsWithValues(key);
+        const staticSchema = getStaticSchemaAtPath(rootSchemaMap[pluginName], staticPath);
+        const types = Object.keys(expandedTypesWithRefs).filter((type) => {
+            return (0, exports.typestructsAreEquivalent)(expandedTypesWithRefs[type], staticSchema);
+        });
+        out[key] = [staticPath, ...types];
+    }
+    return out;
+};
+exports.buildPointerReturnTypeMap = buildPointerReturnTypeMap;
+const getPointersForRefType = (refType, referenceReturnTypeMap) => {
+    return Object.keys(referenceReturnTypeMap).filter((path) => {
+        return referenceReturnTypeMap[path].includes(refType);
+    });
+};
+const buildPointerArgsMap = (referenceReturnTypeMap) => {
+    let out = {};
+    for (let key in referenceReturnTypeMap) {
+        const path = (0, exports.decodeSchemaPath)(key);
+        const argsPath = path.filter((part) => typeof part != "string");
+        let args = argsPath.map((arg) => {
+            if (primitives.has(arg.value)) {
+                if (arg.value == "int" || arg.value == "float") {
+                    return ["number"];
+                }
+                return [arg.value];
+            }
+            const { value: argValue } = extractKeyValueFromRefString(arg.value);
+            let refArgs = getPointersForRefType(argValue, referenceReturnTypeMap);
+            return refArgs;
+        });
+        out[key] = args;
+    }
+    return out;
+};
+exports.buildPointerArgsMap = buildPointerArgsMap;
+const drawQueryTypes = (argMap) => {
+    let code = "export type QueryTypes = {\n";
+    for (let path in argMap) {
+        const wildcard = (0, exports.replaceRefVarsWithWildcards)(path);
+        const argStr = argMap[path].reduce((s, argPossibilities) => {
+            if (argPossibilities[0] == "string" ||
+                argPossibilities[0] == "boolean" ||
+                argPossibilities[0] == "number") {
+                return s.replace("<?>", `<\$\{${argPossibilities[0]}\}>`);
+            }
+            const line = argPossibilities
+                .map(exports.replaceRefVarsWithWildcards)
+                .map((wcq) => `QueryTypes['${wcq}']`)
+                .join("|");
+            return s.replace("<?>", `<\$\{${line}\}>`);
+        }, wildcard);
+        code += `  ['${wildcard}']: \`${argStr}\`;\n`;
+    }
+    code += "};\n";
+    return code;
+};
+const drawMakeQueryRef = (argMap, useReact = false) => {
+    let code = drawQueryTypes(argMap) + "\n";
+    let globalArgs = [];
+    const globalQueryParam = Object.keys(argMap)
+        .map(exports.replaceRefVarsWithWildcards)
+        .map((query) => `'${query}'`)
+        .join("|");
+    const globalQueryReturn = Object.keys(argMap)
+        .map(exports.replaceRefVarsWithWildcards)
+        .map((query) => `QueryTypes['${query}']`)
+        .join("|");
+    for (let query in argMap) {
+        const args = argMap[query];
+        for (let i = 0; i < args.length; ++i) {
+            if (globalArgs[i] == undefined) {
+                globalArgs.push([]);
+            }
+            for (let j = 0; j < args[i].length; ++j) {
+                if (!globalArgs[i].includes(args[i][j])) {
+                    globalArgs[i].push(args[i][j]);
+                }
+            }
+        }
+        const params = args.reduce((s, possibleArgs, index) => {
+            const argType = possibleArgs
+                .map((possibleArg) => {
+                if (possibleArg == "string" ||
+                    possibleArg == "boolean" ||
+                    possibleArg == "number") {
+                    return possibleArg;
+                }
+                return `QueryTypes['${(0, exports.replaceRefVarsWithWildcards)(possibleArg)}']`;
+            })
+                .join("|");
+            return s + `, arg${index}: ${argType}`;
+        }, `query: '${(0, exports.replaceRefVarsWithWildcards)(query)}'`);
+        code += `export function makeQueryRef(${params}): QueryTypes['${(0, exports.replaceRefVarsWithWildcards)(query)}'];\n`;
+    }
+    let globalParams = [];
+    for (let i = 0; i < globalArgs.length; ++i) {
+        const args = globalArgs[i];
+        const isOptional = i > 0;
+        const argType = args
+            .map((possibleArg) => {
+            if (possibleArg == "string" ||
+                possibleArg == "boolean" ||
+                possibleArg == "number") {
+                return possibleArg;
+            }
+            return `QueryTypes['${(0, exports.replaceRefVarsWithWildcards)(possibleArg)}']`;
+        })
+            .join("|");
+        const params = `arg${i}${isOptional ? "?" : ""}: ${argType}`;
+        globalParams.push(params);
+    }
+    code += `export function makeQueryRef(query: ${globalQueryParam}, ${globalParams.join(", ")}): ${globalQueryReturn}|null {\n`;
+    for (let query in argMap) {
+        const args = argMap[query];
+        const returnType = args.reduce((s, argType, i) => {
+            if (argType[0] == "string" ||
+                argType[0] == "boolean" ||
+                argType[0] == "number") {
+                return s.replace("<?>", `<\$\{arg${i} as ${argType[0]}\}>`);
+            }
+            return s.replace("<?>", `<\$\{arg${i} as ${argType
+                .map(exports.replaceRefVarsWithWildcards)
+                .map((v) => `QueryTypes['${v}']`)
+                .join("|")}\}>`);
+        }, `return \`${(0, exports.replaceRefVarsWithWildcards)(query)}\`;`);
+        code += `  if (query == '${(0, exports.replaceRefVarsWithWildcards)(query)}') {\n`;
+        code += `    ${returnType}\n`;
+        code += `  }\n`;
+    }
+    code += `  return null;\n`;
+    code += `};\n`;
+    if (useReact) {
+        code += `\n`;
+        for (let query in argMap) {
+            const args = argMap[query];
+            const params = args.reduce((s, possibleArgs, index) => {
+                const argType = possibleArgs
+                    .map((possibleArg) => {
+                    if (possibleArg == "string" ||
+                        possibleArg == "boolean" ||
+                        possibleArg == "number") {
+                        return possibleArg;
+                    }
+                    return `QueryTypes['${(0, exports.replaceRefVarsWithWildcards)(possibleArg)}']`;
+                })
+                    .join("|");
+                return s + `, arg${index}: ${argType}`;
+            }, `query: '${(0, exports.replaceRefVarsWithWildcards)(query)}'`);
+            code += `export function useMakeQueryRef(${params}): QueryTypes['${(0, exports.replaceRefVarsWithWildcards)(query)}'];\n`;
+        }
+        code += `export function useMakeQueryRef(query: ${globalQueryParam}, ${globalParams.join(", ")}): ${globalQueryReturn}|null {\n`;
+        code += `  return useMemo(() => {\n`;
+        for (let query in argMap) {
+            const args = argMap[query];
+            const argsCasts = args
+                .map((argType, i) => {
+                if (argType[0] == "string" ||
+                    argType[0] == "boolean" ||
+                    argType[0] == "number") {
+                    return `arg${i} as ${argType[0]}`;
+                }
+                return `arg${i} as ${argType
+                    .map(exports.replaceRefVarsWithWildcards)
+                    .map((v) => `QueryTypes['${v}']`)
+                    .join("|")}`;
+            })
+                .join(", ");
+            code += `    if (query == '${(0, exports.replaceRefVarsWithWildcards)(query)}') {\n`;
+            code += `      return makeQueryRef(query, ${argsCasts});\n`;
+            code += `    }\n`;
+        }
+        code += `    return null;\n`;
+        code += `  }, [query, ${globalArgs
+            .map((_, i) => `arg${i}`)
+            .join(", ")}]);\n`;
+        code += `};`;
+    }
+    return code;
+};
+exports.drawMakeQueryRef = drawMakeQueryRef;
+const drawSchemaRoot = (rootSchemaMap, referenceReturnTypeMap) => {
+    return `export type SchemaRoot = ${drawTypestruct(rootSchemaMap, referenceReturnTypeMap)}`;
+};
+exports.drawSchemaRoot = drawSchemaRoot;
+const drawRefReturnTypes = (rootSchemaMap, referenceReturnTypeMap) => {
+    let code = `export type RefReturnTypes = {\n`;
+    for (let path in referenceReturnTypeMap) {
+        const [staticPath] = referenceReturnTypeMap[path];
+        const pluginName = /^\$\((.+)\)$/.exec(staticPath.split(".")[0])?.[1] ?? null;
+        const staticSchema = getStaticSchemaAtPath(rootSchemaMap[pluginName], staticPath);
+        const typestructCode = drawTypestruct(staticSchema, referenceReturnTypeMap, "  ");
+        const wildcard = (0, exports.replaceRefVarsWithWildcards)(path);
+        code += `  ['${wildcard}']: ${typestructCode}\n`;
+    }
+    code += "};\n";
+    return code;
+};
+exports.drawRefReturnTypes = drawRefReturnTypes;
+const drawTypestruct = (typeStruct, referenceReturnTypeMap, indentation = "", semicolonLastLine = true, identTop = true, breakLastLine = true) => {
+    let code = `${identTop ? indentation : ""}{\n`;
+    for (const prop in typeStruct) {
+        if (prop == "(id)") {
+            continue;
+        }
+        if (typeof typeStruct[prop]?.type == "string" &&
+            primitives.has(typeStruct[prop]?.type)) {
+            const propName = typeStruct[prop].nullable
+                ? `['${prop}']?`
+                : `['${prop}']`;
+            const type = typeStruct[prop]?.type == "int" || typeStruct[prop]?.type == "float"
+                ? "number"
+                : typeStruct[prop]?.type;
+            code += `  ${indentation}${propName}: ${type};\n`;
+            continue;
+        }
+        if (typeof typeStruct[prop]?.type == "string" &&
+            typeStruct[prop]?.type == "ref") {
+            const propName = typeStruct[prop].nullable
+                ? `['${prop}']?`
+                : `['${prop}']`;
+            const returnTypes = Object.keys(referenceReturnTypeMap)
+                .filter((query) => {
+                return referenceReturnTypeMap[query].includes(typeStruct[prop]?.refType);
+            })
+                .map(exports.replaceRefVarsWithWildcards)
+                .map((query) => `QueryTypes['${query}']`)
+                .join("|");
+            code += `  ${indentation}${propName}: ${returnTypes};\n`;
+            continue;
+        }
+        if (typeof typeStruct[prop]?.type == "string" &&
+            (typeStruct[prop]?.type == "array" || typeStruct[prop]?.type == "set") &&
+            typeof typeStruct[prop]?.values == "string" &&
+            primitives.has(typeStruct[prop]?.values)) {
+            const type = typeStruct[prop]?.values == "int" || typeStruct[prop]?.values == "float"
+                ? "number"
+                : typeStruct[prop]?.type;
+            const propName = `['${prop}']`;
+            code += `  ${indentation}${propName}: Array<${type}>;\n`;
+            continue;
+        }
+        if (typeof typeStruct[prop]?.type == "string" &&
+            (typeStruct[prop]?.type == "array" || typeStruct[prop]?.type == "set") &&
+            typeof typeStruct[prop]?.values == "object") {
+            const type = drawTypestruct(typeStruct[prop]?.values, referenceReturnTypeMap, `${indentation}  `, false, false, false);
+            const propName = `['${prop}']`;
+            code += `  ${indentation}${propName}: Array<${type}>;\n`;
+            continue;
+        }
+        if (!typeStruct[prop]?.type && typeof typeStruct[prop] == "object") {
+            const type = drawTypestruct(typeStruct[prop], referenceReturnTypeMap, `${indentation}  `, false, false, false);
+            const propName = `['${prop}']`;
+            code += `  ${indentation}${propName}: ${type};\n`;
+            continue;
+        }
+    }
+    code += `${indentation}}${semicolonLastLine ? ";" : ""}${breakLastLine ? "\n" : ""}`;
+    return code;
+};
+const GENERATED_CODE_FUNCTIONS = `
+const getCounterArrowBalanance = (str: string): number => {
+  let counter = 0;
+  for (let i = 0; i < str.length; ++i) {
+    if (str[i] == "<") counter++;
+    if (str[i] == ">") counter--;
+  }
+  return counter;
+};
+
+const extractKeyValueFromRefString = (
+  str: string
+): { key: string; value: string } => {
+  let key = "";
+  let i = 0;
+  while (str[i] != "<") {
+    key += str[i++];
+  }
+  let value = "";
+  let counter = 1;
+  i++;
+  while (i < str.length) {
+    if (str[i] == "<") counter++;
+    if (str[i] == ">") counter--;
+    if (counter >= 1) {
+      value += str[i];
+    }
+    i++;
+  }
+  return {
+    key,
+    value,
+  };
+};
+
+const splitPath = (str: string): Array<string> => {
+  let out: Array<string> = [];
+  let arrowBalance = 0;
+  let curr = "";
+  for (let i = 0; i <= str.length; ++i) {
+    if (i == str.length) {
+      out.push(curr);
+      continue;
+    }
+    if (arrowBalance == 0 && str[i] == ".") {
+      out.push(curr);
+      curr = "";
+      continue;
+    }
+    if (str[i] == "<") {
+      arrowBalance++;
+    }
+    if (str[i] == ">") {
+      arrowBalance--;
+    }
+    curr += str[i];
+  }
+  return out;
+};
+
+const decodeSchemaPath = (
+  pathString: string
+): Array<{ key: string; value: string } | string> => {
+  return splitPath(pathString).map((part) => {
+    if (/^(.+)<(.+)>$/.test(part) && getCounterArrowBalanance(part) == 0) {
+      const { key, value } = extractKeyValueFromRefString(part);
+      return {
+        key,
+        value,
+      };
+    }
+    return part;
+  });
+};
+
+export const getObjectInStateMap = (stateMap: object, path: string): object | null => {
+  let current: null | undefined | object = null;
+  const [pluginWrapper, ...decodedPath] = decodeSchemaPath(path);
+  const pluginName = /^\$\((.+)\)$/.exec(pluginWrapper as string)?.[1] ?? null;
+  if (!pluginName) {
+    return null;
+  }
+  current = stateMap[pluginName];
+  for (let part of decodedPath) {
+    if (!current) {
+      return null;
+    }
+    if (typeof part != "string") {
+      const { key, value } = part as { key: string; value: string };
+      if (Array.isArray(current)) {
+        const element = current.find?.((v) => v?.[key] == value);
+        current = element;
+      } else {
+        return null;
+      }
+    } else {
+      current = current[part];
+    }
+  }
+  return current ?? null;
+};
+
+export const replaceRefVarsWithWildcards = (pathString: string): string => {
+  const path = splitPath(pathString);
+  return path
+    .map((part) => {
+      if (/^(.+)<(.+)>$/.test(part)) {
+        const { key } = extractKeyValueFromRefString(part);
+        return \`\$\{key\}<?>\`;
+      }
+      return part;
+    })
+    .join(".");
+};
+`;
+const drawGetReferencedObject = (argMap, useReact = false) => {
+    const wildcards = Object.keys(argMap).map(exports.replaceRefVarsWithWildcards);
+    let code = "";
+    code += GENERATED_CODE_FUNCTIONS;
+    code += "\n";
+    for (let wildcard of wildcards) {
+        code += `export function getReferencedObject(root: SchemaRoot, query: QueryTypes['${wildcard}']): RefReturnTypes['${wildcard}'];\n`;
+    }
+    const globalQueryTypes = wildcards
+        .map((wildcard) => `QueryTypes['${wildcard}']`)
+        .join("|");
+    const globalReturnTypes = wildcards
+        .map((wildcard) => `RefReturnTypes['${wildcard}']`)
+        .join("|");
+    code += `export function getReferencedObject(root: SchemaRoot, query: ${globalQueryTypes}): ${globalReturnTypes}|null {\n`;
+    for (let wildcard of wildcards) {
+        code += `  if (replaceRefVarsWithWildcards(query) == '${wildcard}') {\n`;
+        code += `    return getObjectInStateMap(root, query) as RefReturnTypes['${wildcard}'];\n`;
+        code += `  }\n`;
+    }
+    code += `  return null;\n`;
+    code += `}`;
+    if (useReact) {
+        code += `\n`;
+        for (let wildcard of wildcards) {
+            code += `export function useReferencedObject(root: SchemaRoot, query: QueryTypes['${wildcard}']): RefReturnTypes['${wildcard}'];\n`;
+        }
+        const globalQueryTypes = wildcards
+            .map((wildcard) => `QueryTypes['${wildcard}']`)
+            .join("|");
+        const globalReturnTypes = wildcards
+            .map((wildcard) => `RefReturnTypes['${wildcard}']`)
+            .join("|");
+        code += `export function useReferencedObject(root: SchemaRoot, query: ${globalQueryTypes}): ${globalReturnTypes}|null {\n`;
+        code += `  return useMemo(() => {\n`;
+        for (let wildcard of wildcards) {
+            code += `    if (replaceRefVarsWithWildcards(query) == '${wildcard}') {\n`;
+            code += `      return getObjectInStateMap(root, query) as RefReturnTypes['${wildcard}'];\n`;
+            code += `    }\n`;
+        }
+        code += `    return null;\n`;
+        code += `  }, [root, query]);\n`;
+        code += `}`;
+    }
+    return code;
+};
+exports.drawGetReferencedObject = drawGetReferencedObject;
+const drawGetPluginStore = (rootSchemaMap, useReact = false) => {
+    let code = "";
+    code += "\n";
+    const plugins = Object.keys(rootSchemaMap);
+    for (let plugin of plugins) {
+        code += `export function getPluginStore(root: SchemaRoot, plugin: '${plugin}'): SchemaRoot['${plugin}'];\n`;
+    }
+    const globalPluginArgs = plugins.map((p) => `'${p}'`).join("|");
+    const globalPluginReturn = plugins.map((p) => `SchemaRoot['${p}']`).join("|");
+    code += `export function getPluginStore(root: SchemaRoot, plugin: ${globalPluginArgs}): ${globalPluginReturn} {\n`;
+    code += `  return root[plugin];\n`;
+    code += `}\n`;
+    if (useReact) {
+        code += "\n";
+        for (let plugin of plugins) {
+            code += `export function usePluginStore(root: SchemaRoot, plugin: '${plugin}'): SchemaRoot['${plugin}'];\n`;
+        }
+        code += `export function usePluginStore(root: SchemaRoot, plugin: ${globalPluginArgs}): ${globalPluginReturn} {\n`;
+        code += `  return useMemo(() => {\n`;
+        code += `    return root[plugin];\n`;
+        code += `  }, [root, plugin]);\n`;
+        code += `}\n`;
+    }
+    return code;
+};
+exports.drawGetPluginStore = drawGetPluginStore;
 //# sourceMappingURL=plugins.js.map

@@ -39,7 +39,7 @@ const getObjectStringValue = (obj: {
   [key: string]: number | string | boolean | Array<number | string | boolean>;
 }): string => {
   if (typeof obj == "string") return obj;
-  return Object.keys(obj).reduce((s, key) => {
+  return Object.keys(obj).sort().reduce((s, key) => {
     if (Array.isArray(obj[key])) {
       const value = (obj[key] as Array<number | string | boolean>).join("-");
       return `${s}/${key}:${value}`;
@@ -73,8 +73,7 @@ export const getRowHash = (obj: {
 };
 
 export const getDiffHash = (commitData: CommitData): string => {
-  // need to update
-  const diffString = commitData.diff;
+  const diffString = JSON.stringify(commitData.diff);
   if (!commitData.userId) {
     return null;
   }
@@ -84,7 +83,6 @@ export const getDiffHash = (commitData: CommitData): string => {
   if (!commitData.message) {
     return null;
   }
-  // WE AVOID JSON.stringify due to consistency problems (you cannot rely upon key order).
   if (!commitData.parent) {
     const str = `userId:${commitData.userId}/timestamp:${commitData.timestamp}/message:${commitData.timestamp}/diff:${diffString}`;
     return Crypto.SHA256(str);
@@ -516,6 +514,7 @@ const getReconciledSequence = (
  *
  *  IDX  0 1 2 3 4 5 6 7
  *  ROW  | | | | | | | |
+ *       A F C Z Z C Z Z
  *  0-A  1 0 0 0 0 0 0 0 -> MAX: 1, RIGHTMOST IDX of (1): 0
  *  1-C  0 0 3 0 0 3 0 0 -> MAX: 3, RIGHTMOST IDX of (3): 5
  *  2-Z  0 0 0 2 1 0 2 1 -> MAX: 2, RIGHTMOST IDX of (2): 6

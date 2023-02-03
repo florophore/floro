@@ -1,4 +1,5 @@
 import { User } from "./filestructure";
+import { PluginElement } from "./plugins";
 import { CommitData, Diff, TextDiff } from "./versioncontrol";
 export interface RawStore {
     [name: string]: Array<{
@@ -84,6 +85,7 @@ export declare const updateCurrentCommitSHA: (repoId: string, sha: string) => Pr
 export declare const updateCurrentWithSHA: (repoId: string, sha: string) => Promise<State | null>;
 export declare const updateCurrentWithNewBranch: (repoId: string, branchName: string) => Promise<State | null>;
 export declare const updateCurrentBranch: (repoId: string, branchName: string) => Promise<State | null>;
+export declare const getPluginsToRunUpdatesOn: (pastPlugins: Array<PluginElement>, nextPlugins: Array<PluginElement>) => PluginElement[];
 export declare const buildStateStore: (state: CommitState) => Promise<{
     [key: string]: unknown;
 }>;

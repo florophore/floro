@@ -1,7 +1,9 @@
 import express from "express";
 import path from "path";
+import fs from 'fs';
 import http from "http";
 import cors from "cors";
+import mime from 'mime-types';
 import {
   existsAsync,
   getRemoteHostSync,
@@ -11,6 +13,7 @@ import {
   removeUserSession,
   removeUser,
   vReposPath,
+  vDEVPath,
 } from "./filestructure";
 import { Server } from "socket.io";
 import { createProxyMiddleware } from "http-proxy-middleware";
@@ -50,6 +53,7 @@ import {
   updatePlugins,
   deleteBranch,
 } from "./repoapi";
+import { readDevPluginManifest } from "./plugins";
 
 const remoteHost = getRemoteHostSync();
 
@@ -544,10 +548,51 @@ app.post("/complete_signup", cors(remoteHostCors), async (req, res) => {
   }
 });
 
+app.get("/plugins/:pluginName/dev@*", async (req, res) => {
+  const pluginName = req?.params?.['pluginName'];
+  const pluginVersion = req.path.split("/")[3];
+  const [,version] = pluginVersion.split("@")
+  if (!version) {
+    res.sendStatus(404);
+    return;
+  }
+  const manifest = await readDevPluginManifest(pluginName, pluginVersion);
+  if (!manifest) {
+    res.sendStatus(404);
+    return;
+  }
+  const prodPath = `/plugins/${pluginName}/${version}`;
+  const basePath = `/plugins/${pluginName}/${pluginVersion}`;
+  const pathRemainer = req.path.substring(basePath.length)?.split('?')[0];
+  if (!pathRemainer || pathRemainer == "/" || pathRemainer == "/write" || pathRemainer == "/write/") {
+    const filePath = path.join(vDEVPath, pluginName, version, 'index.html');
+    const exists = await existsAsync(filePath)
+    if (!exists) {
+      res.sendStatus(404);
+      return;
+    }
+    const indexHtml = await fs.promises.readFile(filePath);
+    res.type('html');
+    res.send(indexHtml.toString().replaceAll(prodPath, basePath))
+    return;
+  }
+
+  const filePath = path.join(vDEVPath, pluginName, version, ...pathRemainer.split("/"));
+  const exists = await existsAsync(filePath)
+  if (!exists) {
+    res.sendStatus(404);
+    return;
+  }
+  const file = await fs.promises.readFile(filePath);
+  const contentType = mime.contentType(path.extname(filePath))
+  res.setHeader('content-type', contentType);
+  res.send(file.toString().replaceAll(prodPath, basePath));
+});
+
 for (let plugin in pluginsJSON.plugins) {
   let pluginInfo = pluginsJSON.plugins[plugin];
   if (pluginInfo["proxy"]) {
-    const proxy = createProxyMiddleware("/plugins/" + plugin, {
+    const proxy = createProxyMiddleware("/plugins/" + plugin + "/dev", {
       target: pluginInfo["host"],
       secure: true,
       ws: false,
@@ -557,11 +602,11 @@ for (let plugin in pluginsJSON.plugins) {
   }
 }
 
-app.get("/plugins/:pluginName*", async (req, res) => {
+app.get("/plugins/:pluginName/:pluginVersion*", async (req, res) => {
   const pluginName = req?.params?.['pluginName'];
-  const version = req?.query?.['v'];
+  const pluginVersion = req?.params?.['pluginVersion'];
   console.log("PN", pluginName);
-  console.log("V", version);
+  console.log("V", pluginVersion);
   console.log("path", req.path);
   // finsish this
   res.send({ok: true});

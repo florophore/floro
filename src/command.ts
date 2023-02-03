@@ -6,7 +6,9 @@ import commandLineArgs from "command-line-args";
 import { startDaemon, killDaemon } from "./daemon";
 import inquirer from 'inquirer';
 import { logout, promptEmail } from './login';
+import { exportPluginToDev, tarCreationPlugin, uploadPluginTar } from "./plugincreator";
 const { exec, spawn } = require('child_process');
+import clc from 'cli-color';
 
 /* first - parse the main command */
 const mainDefinitions = [{ name: "command", defaultOption: true }];
@@ -38,7 +40,31 @@ buildFloroFilestructure();
   }
 
   if (mainOptions.command == "plugin") {
-    console.log("test");
+    if (argv[0] == "push") {
+      if (argv[1] == "--staging" || argv[1] == "-s") {
+          const didSucceed = await exportPluginToDev(process.cwd())
+          if (didSucceed) {
+            console.log(clc.cyanBright.bgBlack.underline("Successfully pushed to staging!"));
+            return;
+          }
+          console.log(clc.redBright.bgBlack.underline("Failed to push to staging..."));
+          return;
+      }
+
+      if (argv[1] == "--prod" || argv[1] == "-p") {
+          const tarPath = await tarCreationPlugin(process.cwd())
+          if (!tarPath) {
+          }
+          console.log(`tar created at ${tarPath}`);
+          uploadPluginTar(tarPath);
+          //if (didSucceed) {
+          //  console.log(clc.cyanBright.bgBlack.underline("Successfully pushed to production!"));
+          //  return;
+          //}
+          return;
+      }
+      
+    }
     return;
   }
 
@@ -48,7 +74,7 @@ buildFloroFilestructure();
         type: "list",
         name: "config",
         message: "Choose a configuration option",
-        choices: ["cors", "remote", "plugins", "reset", "quit"],
+        choices: ["cors", "plugins", "reset", "quit"],
       },
     ]);
     if (response.config == "cors") {
@@ -58,13 +84,13 @@ buildFloroFilestructure();
         })
         return;
     }
-    if (response.config == "remote") {
-        const vim = spawn('vi', [vConfigRemotePath], {stdio: 'inherit'})
-        vim.on('exit', () => {
-            console.log("done");
-        })
-        return;
-    }
+    //if (response.config == "remote") {
+    //    const vim = spawn('vi', [vConfigRemotePath], {stdio: 'inherit'})
+    //    vim.on('exit', () => {
+    //        console.log("done");
+    //    })
+    //    return;
+    //}
     if (response.config == "plugins") {
         const vim = spawn('vi', [vConfigPluginsPath], {stdio: 'inherit'})
         vim.on('exit', () => {

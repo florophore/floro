@@ -143,7 +143,8 @@ export const makeTestPlugin = (manifest: Manifest, isDev = false) => {
   const pluginVersion = manifest.version;
   const pluginDir = path.join(
     isDev ? vDEVPath : vPluginsPath,
-    `${pluginName}@${pluginVersion}`
+    pluginName,
+    pluginVersion
   );
   fs.mkdirSync(pluginDir, { recursive: true });
   const floroCreationPath = path.join(pluginDir, "floro");

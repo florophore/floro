@@ -28,8 +28,10 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const path_1 = __importDefault(require("path"));
+const fs_1 = __importDefault(require("fs"));
 const http_1 = __importDefault(require("http"));
 const cors_1 = __importDefault(require("cors"));
+const mime_types_1 = __importDefault(require("mime-types"));
 const filestructure_1 = require("./filestructure");
 const socket_io_1 = require("socket.io");
 const http_proxy_middleware_1 = require("http-proxy-middleware");
@@ -40,6 +42,7 @@ const sha256_1 = __importDefault(require("crypto-js/sha256"));
 const enc_hex_1 = __importDefault(require("crypto-js/enc-hex"));
 const repo_1 = require("./repo");
 const repoapi_1 = require("./repoapi");
+const plugins_1 = require("./plugins");
 const remoteHost = (0, filestructure_1.getRemoteHostSync)();
 const app = (0, express_1.default)();
 const server = http_1.default.createServer(app);
@@ -378,10 +381,49 @@ app.post("/complete_signup", (0, cors_1.default)(remoteHostCors), async (req, re
         res.send({ message: "error" });
     }
 });
+app.get("/plugins/:pluginName/dev@*", async (req, res) => {
+    const pluginName = req?.params?.['pluginName'];
+    const pluginVersion = req.path.split("/")[3];
+    const [, version] = pluginVersion.split("@");
+    if (!version) {
+        res.sendStatus(404);
+        return;
+    }
+    const manifest = await (0, plugins_1.readDevPluginManifest)(pluginName, pluginVersion);
+    if (!manifest) {
+        res.sendStatus(404);
+        return;
+    }
+    const prodPath = `/plugins/${pluginName}/${version}`;
+    const basePath = `/plugins/${pluginName}/${pluginVersion}`;
+    const pathRemainer = req.path.substring(basePath.length)?.split('?')[0];
+    if (!pathRemainer || pathRemainer == "/" || pathRemainer == "/write" || pathRemainer == "/write/") {
+        const filePath = path_1.default.join(filestructure_1.vDEVPath, pluginName, version, 'index.html');
+        const exists = await (0, filestructure_1.existsAsync)(filePath);
+        if (!exists) {
+            res.sendStatus(404);
+            return;
+        }
+        const indexHtml = await fs_1.default.promises.readFile(filePath);
+        res.type('html');
+        res.send(indexHtml.toString().replaceAll(prodPath, basePath));
+        return;
+    }
+    const filePath = path_1.default.join(filestructure_1.vDEVPath, pluginName, version, ...pathRemainer.split("/"));
+    const exists = await (0, filestructure_1.existsAsync)(filePath);
+    if (!exists) {
+        res.sendStatus(404);
+        return;
+    }
+    const file = await fs_1.default.promises.readFile(filePath);
+    const contentType = mime_types_1.default.contentType(path_1.default.extname(filePath));
+    res.setHeader('content-type', contentType);
+    res.send(file.toString().replaceAll(prodPath, basePath));
+});
 for (let plugin in pluginsJSON.plugins) {
     let pluginInfo = pluginsJSON.plugins[plugin];
     if (pluginInfo["proxy"]) {
-        const proxy = (0, http_proxy_middleware_1.createProxyMiddleware)("/plugins/" + plugin, {
+        const proxy = (0, http_proxy_middleware_1.createProxyMiddleware)("/plugins/" + plugin + "/dev", {
             target: pluginInfo["host"],
             secure: true,
             ws: false,
@@ -390,11 +432,11 @@ for (let plugin in pluginsJSON.plugins) {
         app.use(proxy);
     }
 }
-app.get("/plugins/:pluginName*", async (req, res) => {
+app.get("/plugins/:pluginName/:pluginVersion*", async (req, res) => {
     const pluginName = req?.params?.['pluginName'];
-    const version = req?.query?.['v'];
+    const pluginVersion = req?.params?.['pluginVersion'];
     console.log("PN", pluginName);
-    console.log("V", version);
+    console.log("V", pluginVersion);
     console.log("path", req.path);
     // finsish this
     res.send({ ok: true });

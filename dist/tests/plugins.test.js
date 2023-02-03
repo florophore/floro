@@ -69,12 +69,192 @@ describe("plugins", () => {
                 value: "second",
             });
         });
+        test("obeys key lexical order", () => {
+            const PLUGIN_A_MANIFEST = {
+                name: "A",
+                version: "0.0.0",
+                displayName: "A",
+                icon: "",
+                imports: {},
+                types: {},
+                store: {
+                    bObjects: {
+                        type: "set",
+                        values: {
+                            zVal: {
+                                type: "int",
+                            },
+                            aKey: {
+                                isKey: true,
+                                type: "ref<$(A).aObjects.values>",
+                            },
+                        },
+                    },
+                    aObjects: {
+                        type: "set",
+                        values: {
+                            yVal: {
+                                type: "boolean",
+                            },
+                            xKey: {
+                                isKey: true,
+                                type: "string",
+                            },
+                        },
+                    },
+                },
+            };
+            const kvs = (0, plugins_1.getKVStateForPlugin)({
+                [PLUGIN_A_MANIFEST.name]: PLUGIN_A_MANIFEST,
+            }, PLUGIN_A_MANIFEST.name, {
+                [PLUGIN_A_MANIFEST.name]: {
+                    bObjects: [
+                        {
+                            zVal: 1,
+                            aKey: "$(A).aObjects.xKey<abc>",
+                        },
+                        {
+                            zVal: 2,
+                            aKey: "$(A).aObjects.xKey<def>",
+                        },
+                    ],
+                    aObjects: [
+                        {
+                            yVal: true,
+                            xKey: "abc",
+                        },
+                        {
+                            yVal: false,
+                            xKey: "def",
+                        },
+                    ],
+                },
+            });
+            const s1 = (0, plugins_1.getStateFromKVForPlugin)({ [PLUGIN_A_MANIFEST.name]: PLUGIN_A_MANIFEST }, kvs, PLUGIN_A_MANIFEST.name);
+            expect(s1).toEqual({
+                aObjects: [
+                    {
+                        xKey: "abc",
+                        yVal: true,
+                    },
+                    {
+                        xKey: "def",
+                        yVal: false,
+                    },
+                ],
+                bObjects: [
+                    {
+                        aKey: "$(A).aObjects.xKey<abc>",
+                        zVal: 1,
+                    },
+                    {
+                        aKey: "$(A).aObjects.xKey<def>",
+                        zVal: 2,
+                    },
+                ],
+            });
+        });
+        test("can handle references that are key types", () => {
+            const PLUGIN_A_MANIFEST = {
+                name: "A",
+                version: "0.0.0",
+                displayName: "A",
+                icon: "",
+                imports: {},
+                types: {},
+                store: {
+                    aObjects: {
+                        type: "set",
+                        values: {
+                            name: {
+                                isKey: true,
+                                type: "string",
+                            },
+                        },
+                    },
+                    bObjects: {
+                        type: "set",
+                        values: {
+                            mainKey: {
+                                isKey: true,
+                                type: "ref<$(A).aObjects.values>",
+                            },
+                        },
+                    },
+                    cObjects: {
+                        type: "set",
+                        values: {
+                            cVal: {
+                                isKey: true,
+                                type: "ref<$(A).bObjects.values>",
+                            },
+                        },
+                    },
+                },
+            };
+            const kvs = (0, plugins_1.getKVStateForPlugin)({
+                [PLUGIN_A_MANIFEST.name]: PLUGIN_A_MANIFEST,
+            }, PLUGIN_A_MANIFEST.name, {
+                [PLUGIN_A_MANIFEST.name]: {
+                    aObjects: [
+                        {
+                            name: "abc",
+                        },
+                        {
+                            name: "def",
+                        },
+                    ],
+                    bObjects: [
+                        {
+                            mainKey: "$(A).aObjects.name<abc>",
+                        },
+                        {
+                            mainKey: "$(A).aObjects.name<def>",
+                        },
+                    ],
+                    cObjects: [
+                        {
+                            cVal: "$(A).bObjects.mainKey<$(A).aObjects.name<abc>>",
+                        },
+                        {
+                            cVal: "$(A).bObjects.mainKey<$(A).aObjects.name<def>>",
+                        },
+                    ],
+                },
+            });
+            const s1 = (0, plugins_1.getStateFromKVForPlugin)({ [PLUGIN_A_MANIFEST.name]: PLUGIN_A_MANIFEST }, kvs, PLUGIN_A_MANIFEST.name);
+            expect(s1).toEqual({
+                aObjects: [
+                    {
+                        name: "abc",
+                    },
+                    {
+                        name: "def",
+                    },
+                ],
+                bObjects: [
+                    {
+                        mainKey: "$(A).aObjects.name<abc>",
+                    },
+                    {
+                        mainKey: "$(A).aObjects.name<def>",
+                    },
+                ],
+                cObjects: [
+                    {
+                        cVal: "$(A).bObjects.mainKey<$(A).aObjects.name<abc>>",
+                    },
+                    {
+                        cVal: "$(A).bObjects.mainKey<$(A).aObjects.name<def>>",
+                    },
+                ],
+            });
+        });
         test("can serialize array and set primitive array or set state", () => {
             const ARRAY_PLUGIN_MANIFEST = {
                 version: "0.0.0",
                 name: "simple",
                 displayName: "Simple",
-                publisher: "@jamiesunderland",
                 icon: {
                     light: "./palette-plugin-icon.svg",
                     dark: "./palette-plugin-icon.svg",
@@ -144,7 +324,6 @@ describe("plugins", () => {
                 version: "0.0.0",
                 name: "simple",
                 displayName: "Simple",
-                publisher: "@jamiesunderland",
                 icon: {
                     light: "./palette-plugin-icon.svg",
                     dark: "./palette-plugin-icon.svg",
@@ -239,7 +418,6 @@ describe("plugins", () => {
                 version: "0.0.0",
                 name: "a-plugin",
                 displayName: "A",
-                publisher: "@jamiesunderland",
                 icon: {
                     light: "./palette-plugin-icon.svg",
                     dark: "./palette-plugin-icon.svg",
@@ -264,7 +442,6 @@ describe("plugins", () => {
                 version: "0.0.0",
                 name: "b-plugin",
                 displayName: "Simple",
-                publisher: "@jamiesunderland",
                 icon: {
                     light: "./palette-plugin-icon.svg",
                     dark: "./palette-plugin-icon.svg",
@@ -303,7 +480,6 @@ describe("plugins", () => {
                 version: "0.0.0",
                 name: "c-plugin",
                 displayName: "Simple",
-                publisher: "@jamiesunderland",
                 icon: {
                     light: "./palette-plugin-icon.svg",
                     dark: "./palette-plugin-icon.svg",
@@ -410,12 +586,84 @@ describe("plugins", () => {
         });
     });
     describe("pluginManifestIsSubsetOfManifest", () => {
+        test("returns true when ordering of rootSchema keys change", () => {
+            const CURRENT_A_PLUGIN_MANIFEST = {
+                version: "0.0.0",
+                name: "a-plugin",
+                displayName: "A",
+                icon: {
+                    light: "./palette-plugin-icon.svg",
+                    dark: "./palette-plugin-icon.svg",
+                },
+                imports: {},
+                types: {
+                    typeA: {
+                        name: {
+                            type: "int",
+                            isKey: true,
+                        },
+                        a: {
+                            type: "int",
+                        },
+                        z: {
+                            type: "int",
+                        },
+                    },
+                },
+                store: {
+                    aObjects: {
+                        type: "set",
+                        values: "typeA",
+                    },
+                },
+            };
+            const NEXT_A_PLUGIN_MANIFEST = {
+                version: "0.0.0",
+                name: "a-plugin",
+                displayName: "A",
+                icon: {
+                    light: "./palette-plugin-icon.svg",
+                    dark: "./palette-plugin-icon.svg",
+                },
+                imports: {},
+                types: {
+                    typeA: {
+                        z: {
+                            type: "int",
+                        },
+                        name: {
+                            type: "int",
+                            isKey: true,
+                        },
+                        a: {
+                            type: "int",
+                        },
+                        additionalPropToA: {
+                            type: "float",
+                        },
+                    },
+                },
+                store: {
+                    aObjects: {
+                        type: "set",
+                        values: "typeA",
+                    },
+                },
+            };
+            const currentSchemaMap = {
+                "a-plugin": CURRENT_A_PLUGIN_MANIFEST,
+            };
+            const nextSchemaMap = {
+                "a-plugin": NEXT_A_PLUGIN_MANIFEST,
+            };
+            const isSubset = (0, plugins_1.pluginManifestIsSubsetOfManifest)(currentSchemaMap, nextSchemaMap, "a-plugin");
+            expect(isSubset).toBe(true);
+        });
         test("returns true when current rootSchema is subset of next rootSchema", () => {
             const CURRENT_A_PLUGIN_MANIFEST = {
                 version: "0.0.0",
                 name: "a-plugin",
                 displayName: "A",
-                publisher: "@jamiesunderland",
                 icon: {
                     light: "./palette-plugin-icon.svg",
                     dark: "./palette-plugin-icon.svg",
@@ -440,7 +688,6 @@ describe("plugins", () => {
                 version: "0.0.0",
                 name: "b-plugin",
                 displayName: "Simple",
-                publisher: "@jamiesunderland",
                 icon: {
                     light: "./palette-plugin-icon.svg",
                     dark: "./palette-plugin-icon.svg",
@@ -470,7 +717,6 @@ describe("plugins", () => {
                 version: "0.0.0",
                 name: "a-plugin",
                 displayName: "A",
-                publisher: "@jamiesunderland",
                 icon: {
                     light: "./palette-plugin-icon.svg",
                     dark: "./palette-plugin-icon.svg",
@@ -498,7 +744,6 @@ describe("plugins", () => {
                 version: "0.0.0",
                 name: "b-plugin",
                 displayName: "Simple",
-                publisher: "@jamiesunderland",
                 icon: {
                     light: "./palette-plugin-icon.svg",
                     dark: "./palette-plugin-icon.svg",
@@ -543,7 +788,6 @@ describe("plugins", () => {
                 version: "0.0.0",
                 name: "a-plugin",
                 displayName: "A",
-                publisher: "@jamiesunderland",
                 icon: {
                     light: "./palette-plugin-icon.svg",
                     dark: "./palette-plugin-icon.svg",
@@ -571,7 +815,6 @@ describe("plugins", () => {
                 version: "0.0.0",
                 name: "b-plugin",
                 displayName: "Simple",
-                publisher: "@jamiesunderland",
                 icon: {
                     light: "./palette-plugin-icon.svg",
                     dark: "./palette-plugin-icon.svg",
@@ -601,7 +844,6 @@ describe("plugins", () => {
                 version: "0.0.0",
                 name: "a-plugin",
                 displayName: "A",
-                publisher: "@jamiesunderland",
                 icon: {
                     light: "./palette-plugin-icon.svg",
                     dark: "./palette-plugin-icon.svg",
@@ -632,7 +874,6 @@ describe("plugins", () => {
                 version: "0.0.0",
                 name: "b-plugin",
                 displayName: "Simple",
-                publisher: "@jamiesunderland",
                 icon: {
                     light: "./palette-plugin-icon.svg",
                     dark: "./palette-plugin-icon.svg",
@@ -679,7 +920,6 @@ describe("plugins", () => {
                 version: "0.0.0",
                 name: "a-plugin",
                 displayName: "A",
-                publisher: "@jamiesunderland",
                 icon: {
                     light: "./palette-plugin-icon.svg",
                     dark: "./palette-plugin-icon.svg",
@@ -707,7 +947,6 @@ describe("plugins", () => {
                 version: "0.0.0",
                 name: "b-plugin",
                 displayName: "Simple",
-                publisher: "@jamiesunderland",
                 icon: {
                     light: "./palette-plugin-icon.svg",
                     dark: "./palette-plugin-icon.svg",
@@ -809,7 +1048,6 @@ describe("plugins", () => {
                 version: "0.0.0",
                 name: "a-plugin",
                 displayName: "A",
-                publisher: "@jamiesunderland",
                 icon: {
                     light: "./palette-plugin-icon.svg",
                     dark: "./palette-plugin-icon.svg",
@@ -838,7 +1076,6 @@ describe("plugins", () => {
                 version: "0.0.0",
                 name: "b-plugin",
                 displayName: "Simple",
-                publisher: "@jamiesunderland",
                 icon: {
                     light: "./palette-plugin-icon.svg",
                     dark: "./palette-plugin-icon.svg",
@@ -954,6 +1191,93 @@ describe("plugins", () => {
                 },
             });
         });
+        test("can cascade multi chained references", () => {
+            const PLUGIN_A_MANIFEST = {
+                name: "A",
+                version: "0.0.0",
+                displayName: "A",
+                icon: "",
+                imports: {},
+                types: {},
+                store: {
+                    aObjects: {
+                        type: "set",
+                        values: {
+                            name: {
+                                isKey: true,
+                                type: "string",
+                            },
+                        },
+                    },
+                    bObjects: {
+                        type: "set",
+                        values: {
+                            mainKey: {
+                                isKey: true,
+                                type: "ref<$(A).aObjects.values>",
+                            },
+                        },
+                    },
+                    cObjects: {
+                        type: "set",
+                        values: {
+                            cVal: {
+                                isKey: true,
+                                type: "ref<$(A).bObjects.values>",
+                            },
+                        },
+                    },
+                },
+            };
+            const schemaMap = {
+                [PLUGIN_A_MANIFEST.name]: PLUGIN_A_MANIFEST,
+            };
+            const stateMap = {
+                [PLUGIN_A_MANIFEST.name]: {
+                    aObjects: [
+                        {
+                            name: "def",
+                        },
+                    ],
+                    bObjects: [
+                        {
+                            mainKey: "$(A).aObjects.name<abc>",
+                        },
+                        {
+                            mainKey: "$(A).aObjects.name<def>",
+                        },
+                    ],
+                    cObjects: [
+                        {
+                            cVal: "$(A).bObjects.mainKey<$(A).aObjects.name<abc>>",
+                        },
+                        {
+                            cVal: "$(A).bObjects.mainKey<$(A).aObjects.name<def>>",
+                        },
+                    ],
+                },
+            };
+            const cascadedAState = (0, plugins_1.cascadePluginState)(schemaMap, stateMap, PLUGIN_A_MANIFEST.name);
+            expect(cascadedAState).toEqual({
+                A: {
+                    aObjects: [
+                        {
+                            name: "def",
+                        },
+                    ],
+                    bObjects: [
+                        {
+                            mainKey: "$(A).aObjects.name<def>",
+                        },
+                    ],
+                    cObjects: [
+                        {
+                            cVal: "$(A).bObjects.mainKey<$(A).aObjects.name<def>>",
+                        },
+                    ],
+                },
+            });
+        });
     });
     describe("state validation", () => {
         test("returns true when state is valid", () => {
@@ -961,7 +1285,6 @@ describe("plugins", () => {
                 version: "0.0.0",
                 name: "a-plugin",
                 displayName: "A",
-                publisher: "@jamiesunderland",
                 icon: {
                     light: "./palette-plugin-icon.svg",
                     dark: "./palette-plugin-icon.svg",
@@ -1015,7 +1338,6 @@ describe("plugins", () => {
                 version: "0.0.0",
                 name: "a-plugin",
                 displayName: "A",
-                publisher: "@jamiesunderland",
                 icon: {
                     light: "./palette-plugin-icon.svg",
                     dark: "./palette-plugin-icon.svg",
@@ -1069,7 +1391,6 @@ describe("plugins", () => {
                 version: "0.0.0",
                 name: "a-plugin",
                 displayName: "A",
-                publisher: "@jamiesunderland",
                 icon: {
                     light: "./palette-plugin-icon.svg",
                     dark: "./palette-plugin-icon.svg",
@@ -1124,7 +1445,6 @@ describe("plugins", () => {
                 version: "0.0.0",
                 name: "a-plugin",
                 displayName: "A",
-                publisher: "@jamiesunderland",
                 icon: {
                     light: "./palette-plugin-icon.svg",
                     dark: "./palette-plugin-icon.svg",
@@ -1177,7 +1497,6 @@ describe("plugins", () => {
                 version: "0.0.0",
                 name: "a-plugin",
                 displayName: "A",
-                publisher: "@jamiesunderland",
                 icon: {
                     light: "./palette-plugin-icon.svg",
                     dark: "./palette-plugin-icon.svg",
@@ -1222,7 +1541,6 @@ describe("plugins", () => {
                 version: "0.0.0",
                 name: "a-plugin",
                 displayName: "A",
-                publisher: "@jamiesunderland",
                 icon: {
                     light: "./palette-plugin-icon.svg",
                     dark: "./palette-plugin-icon.svg",
@@ -1281,7 +1599,6 @@ describe("plugins", () => {
                 version: "0.0.0",
                 name: "a-plugin",
                 displayName: "A",
-                publisher: "@jamiesunderland",
                 icon: {
                     light: "./palette-plugin-icon.svg",
                     dark: "./palette-plugin-icon.svg",
@@ -1326,7 +1643,6 @@ describe("plugins", () => {
                 version: "0.0.0",
                 name: "a-plugin",
                 displayName: "A",
-                publisher: "@jamiesunderland",
                 icon: {
                     light: "./palette-plugin-icon.svg",
                     dark: "./palette-plugin-icon.svg",
@@ -1378,7 +1694,6 @@ describe("plugins", () => {
                 version: "0.0.0",
                 name: "a-plugin",
                 displayName: "A",
-                publisher: "@jamiesunderland",
                 icon: {
                     light: "./palette-plugin-icon.svg",
                     dark: "./palette-plugin-icon.svg",

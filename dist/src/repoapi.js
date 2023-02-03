@@ -557,6 +557,9 @@ const updatePlugins = async (repoId, plugins) => {
         // TODO: check each plugin is present in floro
         // TODO COME BACK HERE
         const unstagedState = await (0, repo_1.getUnstagedCommitState)(repoId);
+        const pluginsToUpdate = (0, repo_1.getPluginsToRunUpdatesOn)(unstagedState.plugins, plugins);
+        // TODO: IMMEDIATELY, update this
+        console.log("er", pluginsToUpdate);
         const pluginsDiff = (0, versioncontrol_1.getDiff)(unstagedState.plugins, plugins);
         const nextPluginState = (0, versioncontrol_1.applyDiff)(pluginsDiff, unstagedState.plugins);
         // attempt download

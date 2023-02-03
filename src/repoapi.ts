@@ -26,6 +26,7 @@ import {
   updateCurrentWithSHA,
   deleteLocalBranch,
   canCommit,
+  getPluginsToRunUpdatesOn,
 } from "./repo";
 import {
   applyDiff,
@@ -597,6 +598,9 @@ export const updatePlugins = async (repoId?: string, plugins?: Array<PluginEleme
     // TODO: check each plugin is present in floro
     // TODO COME BACK HERE
     const unstagedState = await getUnstagedCommitState(repoId);
+    const pluginsToUpdate = getPluginsToRunUpdatesOn(unstagedState.plugins, plugins);
+    // TODO: IMMEDIATELY, update this
+    console.log("er", pluginsToUpdate);
     const pluginsDiff = getDiff(unstagedState.plugins, plugins);
     const nextPluginState = applyDiff(pluginsDiff, unstagedState.plugins);
     // attempt download

@@ -25,8 +25,8 @@ export const startSessionJob = () => {
                     }
                 });
                 if (response.status == 200) {
-                    await writeUserSession(response.data.session);
-                    await writeUser(response.data.user);
+                    await writeUserSession(response.data.exchangeSession);
+                    await writeUser(response.data.exchangeSession.user);
                     broadcastAllDevices("session_updated", response.data);
                 }
             }

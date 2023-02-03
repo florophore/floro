@@ -21,8 +21,6 @@ export interface Manifest {
     version: string;
     name: string;
     displayName: string;
-    publisher: string;
-    copyable?: boolean;
     icon: string | {
         light: string;
         dark: string;
@@ -47,7 +45,9 @@ export declare const manifestListToSchemaMap: (manifestList: Array<Manifest>) =>
     [pluginName: string]: Manifest;
 };
 export declare const hasPlugin: (pluginName: string, plugins: Array<PluginElement>) => boolean;
+export declare const getMissingUpstreamDependencies: (pluginName: string, manifest: Manifest, plugins: Array<PluginElement>) => Promise<Array<PluginElement>>;
 export declare const getUpstreamDependencyList: (pluginName: string, manifest: Manifest, plugins: Array<PluginElement>) => Promise<Array<PluginElement> | null>;
+export declare const containsCyclicTypes: (schema: Manifest, struct: TypeStruct, visited?: {}) => boolean;
 export declare const defaultVoidedState: (schemaMap: {
     [key: string]: Manifest;
 }, stateMap: {
@@ -67,6 +67,9 @@ export declare const constructDependencySchema: (plugins: Array<PluginElement>) 
 export declare const getStateFromKVForPlugin: (schemaMap: {
     [key: string]: Manifest;
 }, kv: Array<DiffElement>, pluginName: string) => object;
+export declare const getExpandedTypesForPlugin: (schemaMap: {
+    [key: string]: Manifest;
+}, pluginName: string) => TypeStruct;
 export declare const getRootSchemaForPlugin: (schemaMap: {
     [key: string]: Manifest;
 }, pluginName: string) => TypeStruct;
@@ -125,3 +128,44 @@ export declare const isTopologicalSubsetValid: (oldSchemaMap: {
 }, newStateMap: {
     [key: string]: object;
 }, pluginName: string) => boolean;
+export interface SchemaValidationResponse {
+    status: "ok" | "error";
+    message?: string;
+}
+export declare const isSchemaValid: (typeStruct: TypeStruct, schemaMap: {
+    [key: string]: Manifest;
+}, rootSchemaMap: {
+    [key: string]: TypeStruct;
+}, expandedTypes: TypeStruct, isDirectParentSet?: boolean, isDirectParentArray?: boolean, isArrayDescendent?: boolean, path?: Array<string>) => SchemaValidationResponse;
+export declare const invalidSchemaPropsCheck: (typeStruct: TypeStruct, rootSchema: TypeStruct | object, path?: Array<string>) => SchemaValidationResponse;
+export declare const collectKeyRefs: (typeStruct: TypeStruct, path?: any[]) => Array<string>;
+export declare const replaceRefVarsWithWildcards: (pathString: string) => string;
+export declare const replaceRawRefsInExpandedType: (typeStruct: TypeStruct, expandedTypes: TypeStruct, rootSchemaMap: {
+    [key: string]: TypeStruct;
+}) => TypeStruct;
+export declare const typestructsAreEquivalent: (typestructA: TypeStruct | object, typestructB: TypeStruct | object) => boolean;
+export declare const buildPointerReturnTypeMap: (rootSchemaMap: {
+    [key: string]: TypeStruct;
+}, expandedTypes: TypeStruct, referenceKeys: Array<string>) => {
+    [key: string]: string[];
+};
+export declare const buildPointerArgsMap: (referenceReturnTypeMap: {
+    [key: string]: string[];
+}) => {
+    [key: string]: string[][];
+};
+export declare const drawMakeQueryRef: (argMap: {
+    [key: string]: string[][];
+}, useReact?: boolean) => string;
+export declare const drawSchemaRoot: (rootSchemaMap: TypeStruct, referenceReturnTypeMap: {
+    [key: string]: string[];
+}) => string;
+export declare const drawRefReturnTypes: (rootSchemaMap: TypeStruct, referenceReturnTypeMap: {
+    [key: string]: string[];
+}) => string;
+export declare const drawGetReferencedObject: (argMap: {
+    [key: string]: string[][];
+}, useReact?: boolean) => string;
+export declare const drawGetPluginStore: (rootSchemaMap: {
+    [key: string]: TypeStruct;
+}, useReact?: boolean) => string;

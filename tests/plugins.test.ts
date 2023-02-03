@@ -88,12 +88,105 @@ describe("plugins", () => {
       });
     });
 
+    test("obeys key lexical order", () => {
+      const PLUGIN_A_MANIFEST: Manifest = {
+        name: "A",
+        version: "0.0.0",
+        displayName: "A",
+        icon: "",
+        imports: {},
+        types: {},
+        store: {
+          bObjects: {
+            type: "set",
+            values: {
+              zVal: {
+                type: "int",
+              },
+              aKey: {
+                isKey: true,
+                type: "ref<$(A).aObjects.values>",
+              },
+            },
+          },
+          aObjects: {
+            type: "set",
+            values: {
+              yVal: {
+                type: "boolean",
+              },
+              xKey: {
+                isKey: true,
+                type: "string",
+              },
+            },
+          },
+        },
+      };
+      const kvs = getKVStateForPlugin(
+        {
+          [PLUGIN_A_MANIFEST.name]: PLUGIN_A_MANIFEST,
+        },
+        PLUGIN_A_MANIFEST.name,
+        {
+          [PLUGIN_A_MANIFEST.name]: {
+            bObjects: [
+              {
+                zVal: 1,
+                aKey: "$(A).aObjects.xKey<abc>",
+              },
+              {
+                zVal: 2,
+                aKey: "$(A).aObjects.xKey<def>",
+              },
+            ],
+            aObjects: [
+              {
+                yVal: true,
+                xKey: "abc",
+              },
+              {
+                yVal: false,
+                xKey: "def",
+              },
+            ],
+          },
+        }
+      );
+      const s1 = getStateFromKVForPlugin(
+        { [PLUGIN_A_MANIFEST.name]: PLUGIN_A_MANIFEST },
+        kvs,
+        PLUGIN_A_MANIFEST.name
+      );
+      expect(s1).toEqual({
+        aObjects: [
+          {
+            xKey: "abc",
+            yVal: true,
+          },
+          {
+            xKey: "def",
+            yVal: false,
+          },
+        ],
+        bObjects: [
+          {
+            aKey: "$(A).aObjects.xKey<abc>",
+            zVal: 1,
+          },
+          {
+            aKey: "$(A).aObjects.xKey<def>",
+            zVal: 2,
+          },
+        ],
+      });
+    });
+
     test("can handle references that are key types", () => {
       const PLUGIN_A_MANIFEST: Manifest = {
         name: "A",
         version: "0.0.0",
         displayName: "A",
-        publisher: "@jamiesunderland",
         icon: "",
         imports: {},
         types: {},
@@ -103,7 +196,7 @@ describe("plugins", () => {
             values: {
               name: {
                 isKey: true,
-                type: "string"
+                type: "string",
               },
             },
           },
@@ -144,18 +237,18 @@ describe("plugins", () => {
             ],
             bObjects: [
               {
-                mainKey: "$(A).aObjects.name<abc>"
+                mainKey: "$(A).aObjects.name<abc>",
               },
               {
-                mainKey: "$(A).aObjects.name<def>"
+                mainKey: "$(A).aObjects.name<def>",
               },
             ],
             cObjects: [
               {
-                cVal: "$(A).bObjects.mainKey<$(A).aObjects.name<abc>>"
+                cVal: "$(A).bObjects.mainKey<$(A).aObjects.name<abc>>",
               },
               {
-                cVal: "$(A).bObjects.mainKey<$(A).aObjects.name<def>>"
+                cVal: "$(A).bObjects.mainKey<$(A).aObjects.name<def>>",
               },
             ],
           },
@@ -199,7 +292,6 @@ describe("plugins", () => {
         version: "0.0.0",
         name: "simple",
         displayName: "Simple",
-        publisher: "@jamiesunderland",
         icon: {
           light: "./palette-plugin-icon.svg",
           dark: "./palette-plugin-icon.svg",
@@ -286,7 +378,6 @@ describe("plugins", () => {
         version: "0.0.0",
         name: "simple",
         displayName: "Simple",
-        publisher: "@jamiesunderland",
         icon: {
           light: "./palette-plugin-icon.svg",
           dark: "./palette-plugin-icon.svg",
@@ -399,7 +490,6 @@ describe("plugins", () => {
         version: "0.0.0",
         name: "a-plugin",
         displayName: "A",
-        publisher: "@jamiesunderland",
         icon: {
           light: "./palette-plugin-icon.svg",
           dark: "./palette-plugin-icon.svg",
@@ -425,7 +515,6 @@ describe("plugins", () => {
         version: "0.0.0",
         name: "b-plugin",
         displayName: "Simple",
-        publisher: "@jamiesunderland",
         icon: {
           light: "./palette-plugin-icon.svg",
           dark: "./palette-plugin-icon.svg",
@@ -465,7 +554,6 @@ describe("plugins", () => {
         version: "0.0.0",
         name: "c-plugin",
         displayName: "Simple",
-        publisher: "@jamiesunderland",
         icon: {
           light: "./palette-plugin-icon.svg",
           dark: "./palette-plugin-icon.svg",
@@ -574,12 +662,93 @@ describe("plugins", () => {
   });
 
   describe("pluginManifestIsSubsetOfManifest", () => {
+    test("returns true when ordering of rootSchema keys change", () => {
+      const CURRENT_A_PLUGIN_MANIFEST = {
+        version: "0.0.0",
+        name: "a-plugin",
+        displayName: "A",
+        icon: {
+          light: "./palette-plugin-icon.svg",
+          dark: "./palette-plugin-icon.svg",
+        },
+        imports: {},
+        types: {
+          typeA: {
+            name: {
+              type: "int",
+              isKey: true,
+            },
+            a: {
+              type: "int",
+            },
+            z: {
+              type: "int",
+            },
+          },
+        },
+        store: {
+          aObjects: {
+            type: "set",
+            values: "typeA",
+          },
+        },
+      };
+
+      const NEXT_A_PLUGIN_MANIFEST = {
+        version: "0.0.0",
+        name: "a-plugin",
+        displayName: "A",
+        icon: {
+          light: "./palette-plugin-icon.svg",
+          dark: "./palette-plugin-icon.svg",
+        },
+        imports: {},
+        types: {
+          typeA: {
+            z: {
+              type: "int",
+            },
+            name: {
+              type: "int",
+              isKey: true,
+            },
+            a: {
+              type: "int",
+            },
+            additionalPropToA: {
+              type: "float",
+            },
+          },
+        },
+        store: {
+          aObjects: {
+            type: "set",
+            values: "typeA",
+          },
+        },
+      };
+
+      const currentSchemaMap = {
+        "a-plugin": CURRENT_A_PLUGIN_MANIFEST,
+      };
+
+      const nextSchemaMap = {
+        "a-plugin": NEXT_A_PLUGIN_MANIFEST,
+      };
+
+      const isSubset = pluginManifestIsSubsetOfManifest(
+        currentSchemaMap,
+        nextSchemaMap,
+        "a-plugin"
+      );
+      expect(isSubset).toBe(true);
+    });
+
     test("returns true when current rootSchema is subset of next rootSchema", () => {
       const CURRENT_A_PLUGIN_MANIFEST = {
         version: "0.0.0",
         name: "a-plugin",
         displayName: "A",
-        publisher: "@jamiesunderland",
         icon: {
           light: "./palette-plugin-icon.svg",
           dark: "./palette-plugin-icon.svg",
@@ -605,7 +774,6 @@ describe("plugins", () => {
         version: "0.0.0",
         name: "b-plugin",
         displayName: "Simple",
-        publisher: "@jamiesunderland",
         icon: {
           light: "./palette-plugin-icon.svg",
           dark: "./palette-plugin-icon.svg",
@@ -636,7 +804,6 @@ describe("plugins", () => {
         version: "0.0.0",
         name: "a-plugin",
         displayName: "A",
-        publisher: "@jamiesunderland",
         icon: {
           light: "./palette-plugin-icon.svg",
           dark: "./palette-plugin-icon.svg",
@@ -665,7 +832,6 @@ describe("plugins", () => {
         version: "0.0.0",
         name: "b-plugin",
         displayName: "Simple",
-        publisher: "@jamiesunderland",
         icon: {
           light: "./palette-plugin-icon.svg",
           dark: "./palette-plugin-icon.svg",
@@ -718,7 +884,6 @@ describe("plugins", () => {
         version: "0.0.0",
         name: "a-plugin",
         displayName: "A",
-        publisher: "@jamiesunderland",
         icon: {
           light: "./palette-plugin-icon.svg",
           dark: "./palette-plugin-icon.svg",
@@ -747,7 +912,6 @@ describe("plugins", () => {
         version: "0.0.0",
         name: "b-plugin",
         displayName: "Simple",
-        publisher: "@jamiesunderland",
         icon: {
           light: "./palette-plugin-icon.svg",
           dark: "./palette-plugin-icon.svg",
@@ -778,7 +942,6 @@ describe("plugins", () => {
         version: "0.0.0",
         name: "a-plugin",
         displayName: "A",
-        publisher: "@jamiesunderland",
         icon: {
           light: "./palette-plugin-icon.svg",
           dark: "./palette-plugin-icon.svg",
@@ -810,7 +973,6 @@ describe("plugins", () => {
         version: "0.0.0",
         name: "b-plugin",
         displayName: "Simple",
-        publisher: "@jamiesunderland",
         icon: {
           light: "./palette-plugin-icon.svg",
           dark: "./palette-plugin-icon.svg",
@@ -865,7 +1027,6 @@ describe("plugins", () => {
         version: "0.0.0",
         name: "a-plugin",
         displayName: "A",
-        publisher: "@jamiesunderland",
         icon: {
           light: "./palette-plugin-icon.svg",
           dark: "./palette-plugin-icon.svg",
@@ -894,7 +1055,6 @@ describe("plugins", () => {
         version: "0.0.0",
         name: "b-plugin",
         displayName: "Simple",
-        publisher: "@jamiesunderland",
         icon: {
           light: "./palette-plugin-icon.svg",
           dark: "./palette-plugin-icon.svg",
@@ -1003,7 +1163,6 @@ describe("plugins", () => {
         version: "0.0.0",
         name: "a-plugin",
         displayName: "A",
-        publisher: "@jamiesunderland",
         icon: {
           light: "./palette-plugin-icon.svg",
           dark: "./palette-plugin-icon.svg",
@@ -1033,7 +1192,6 @@ describe("plugins", () => {
         version: "0.0.0",
         name: "b-plugin",
         displayName: "Simple",
-        publisher: "@jamiesunderland",
         icon: {
           light: "./palette-plugin-icon.svg",
           dark: "./palette-plugin-icon.svg",
@@ -1161,7 +1319,6 @@ describe("plugins", () => {
         name: "A",
         version: "0.0.0",
         displayName: "A",
-        publisher: "@jamiesunderland",
         icon: "",
         imports: {},
         types: {},
@@ -1171,7 +1328,7 @@ describe("plugins", () => {
             values: {
               name: {
                 isKey: true,
-                type: "string"
+                type: "string",
               },
             },
           },
@@ -1209,18 +1366,18 @@ describe("plugins", () => {
           ],
           bObjects: [
             {
-              mainKey: "$(A).aObjects.name<abc>"
+              mainKey: "$(A).aObjects.name<abc>",
             },
             {
-              mainKey: "$(A).aObjects.name<def>"
+              mainKey: "$(A).aObjects.name<def>",
             },
           ],
           cObjects: [
             {
-              cVal: "$(A).bObjects.mainKey<$(A).aObjects.name<abc>>"
+              cVal: "$(A).bObjects.mainKey<$(A).aObjects.name<abc>>",
             },
             {
-              cVal: "$(A).bObjects.mainKey<$(A).aObjects.name<def>>"
+              cVal: "$(A).bObjects.mainKey<$(A).aObjects.name<def>>",
             },
           ],
         },
@@ -1250,7 +1407,7 @@ describe("plugins", () => {
           ],
         },
       });
-    })
+    });
   });
 
   describe("state validation", () => {
@@ -1259,7 +1416,6 @@ describe("plugins", () => {
         version: "0.0.0",
         name: "a-plugin",
         displayName: "A",
-        publisher: "@jamiesunderland",
         icon: {
           light: "./palette-plugin-icon.svg",
           dark: "./palette-plugin-icon.svg",
@@ -1320,7 +1476,6 @@ describe("plugins", () => {
         version: "0.0.0",
         name: "a-plugin",
         displayName: "A",
-        publisher: "@jamiesunderland",
         icon: {
           light: "./palette-plugin-icon.svg",
           dark: "./palette-plugin-icon.svg",
@@ -1382,7 +1537,6 @@ describe("plugins", () => {
         version: "0.0.0",
         name: "a-plugin",
         displayName: "A",
-        publisher: "@jamiesunderland",
         icon: {
           light: "./palette-plugin-icon.svg",
           dark: "./palette-plugin-icon.svg",
@@ -1445,7 +1599,6 @@ describe("plugins", () => {
         version: "0.0.0",
         name: "a-plugin",
         displayName: "A",
-        publisher: "@jamiesunderland",
         icon: {
           light: "./palette-plugin-icon.svg",
           dark: "./palette-plugin-icon.svg",
@@ -1506,7 +1659,6 @@ describe("plugins", () => {
         version: "0.0.0",
         name: "a-plugin",
         displayName: "A",
-        publisher: "@jamiesunderland",
         icon: {
           light: "./palette-plugin-icon.svg",
           dark: "./palette-plugin-icon.svg",
@@ -1553,7 +1705,6 @@ describe("plugins", () => {
         version: "0.0.0",
         name: "a-plugin",
         displayName: "A",
-        publisher: "@jamiesunderland",
         icon: {
           light: "./palette-plugin-icon.svg",
           dark: "./palette-plugin-icon.svg",
@@ -1620,7 +1771,6 @@ describe("plugins", () => {
         version: "0.0.0",
         name: "a-plugin",
         displayName: "A",
-        publisher: "@jamiesunderland",
         icon: {
           light: "./palette-plugin-icon.svg",
           dark: "./palette-plugin-icon.svg",
@@ -1667,7 +1817,6 @@ describe("plugins", () => {
         version: "0.0.0",
         name: "a-plugin",
         displayName: "A",
-        publisher: "@jamiesunderland",
         icon: {
           light: "./palette-plugin-icon.svg",
           dark: "./palette-plugin-icon.svg",
@@ -1726,7 +1875,6 @@ describe("plugins", () => {
         version: "0.0.0",
         name: "a-plugin",
         displayName: "A",
-        publisher: "@jamiesunderland",
         icon: {
           light: "./palette-plugin-icon.svg",
           dark: "./palette-plugin-icon.svg",

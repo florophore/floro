@@ -4,6 +4,9 @@ import tar from "tar";
 import {
   copyDirectory,
   existsAsync,
+  getRemoteHostAsync,
+  getUserSession,
+  getUserSessionAsync,
   vDEVPath,
   vTMPPath,
 } from "./filestructure";
@@ -19,19 +22,19 @@ import {
   isSchemaValid,
   invalidSchemaPropsCheck,
   collectKeyRefs,
-  decodeSchemaPath,
   buildPointerReturnTypeMap,
   buildPointerArgsMap,
-  TypeStruct,
-  replaceRefVarsWithWildcards,
   drawMakeQueryRef,
-  drawTypestruct,
   drawSchemaRoot,
   drawRefReturnTypes,
   drawGetReferencedObject,
   drawGetPluginStore,
 } from "./plugins";
 import semver from "semver";
+import { exec } from 'child_process';
+import axios from 'axios';
+import FormData from 'form-data';
+import { Blob } from "buffer"
 
 export const checkDirectoryIsPluginWorkingDirectory = async (
   cwd: string
@@ -74,23 +77,42 @@ export const exportPluginToDev = async (cwd: string) => {
     return false;
   }
   try {
+    await new Promise((resolve, reject) => {
+      console.log("packaging plugin...");
+      if (process.env.NODE_ENV == "test") {
+        resolve("testing");
+        return;
+      }
+      exec('CDN_HOST=http://localhost:63403 npm run build', {cwd}, (err, stdout) => {
+        if (err) {
+          console.error("something went wrong while packaging!")
+          reject(err);
+          return;
+        }
+        console.log(stdout);
+        resolve(stdout);
+      });
+    });
+    console.log("done packaging");
+
     const floroManifestPath = path.join(cwd, "floro", "floro.manifest.json");
     const floroManifestString = await fs.promises.readFile(floroManifestPath);
     const floroManifest = JSON.parse(floroManifestString.toString());
     const pluginName = floroManifest.name;
     const pluginVersion = floroManifest.version;
-    const devPathDir = path.join(vDEVPath, `${pluginName}@${pluginVersion}`);
-    const devPathExists = await existsAsync(devPathDir);
-    if (devPathExists) {
-      await fs.promises.rmdir(devPathDir);
+    const devPathDir = path.join(vDEVPath, pluginName);
+    const devVersionPathDir = path.join(devPathDir, pluginVersion);
+    const devVersionPathExists = await existsAsync(devVersionPathDir);
+    if (devVersionPathExists) {
+      await fs.promises.rm(devVersionPathDir, { recursive: true});
     }
-    await fs.promises.mkdir(devPathDir, { recursive: true });
+    await fs.promises.mkdir(devVersionPathDir, { recursive: true });
     const sourceManifestDirPath = path.join(cwd, "floro");
-    const destManifestDirPath = path.join(devPathDir, "floro");
+    const destManifestDirPath = path.join(devVersionPathDir, "floro");
     const sourceIndexHTMLPath = path.join(cwd, "dist", "index.html");
-    const destIndexHTMLPath = path.join(devPathDir, "index.html");
+    const destIndexHTMLPath = path.join(devVersionPathDir, "index.html");
     const sourceAssetsPath = path.join(cwd, "dist", "assets");
-    const destAssetsPath = path.join(devPathDir, "assets");
+    const destAssetsPath = path.join(devVersionPathDir, "assets");
     await copyDirectory(sourceManifestDirPath, destManifestDirPath);
     await fs.promises.copyFile(sourceIndexHTMLPath, destIndexHTMLPath);
     await copyDirectory(sourceAssetsPath, destAssetsPath);
@@ -100,12 +122,29 @@ export const exportPluginToDev = async (cwd: string) => {
   }
 };
 
-export const tarCreationPlugin = async (cwd: string): Promise<boolean> => {
+export const tarCreationPlugin = async (cwd: string): Promise<null|string> => {
   const canExport = canExportPlugin(cwd);
   if (!canExport) {
-    return false;
+    return null;
   }
   try {
+    await new Promise((resolve, reject) => {
+      console.log("packaging plugin...");
+      if (process.env.NODE_ENV == "test") {
+        resolve("testing");
+        return;
+      }
+      exec('CDN_HOST=http://localhost:63403 npm run build', {cwd}, (err, stdout) => {
+        if (err) {
+          console.error("something went wrong while packaging!")
+          reject(err);
+          return;
+        }
+        console.log(stdout);
+        resolve(stdout);
+      });
+    });
+    console.log("done packaging");
     const floroManifestPath = path.join(cwd, "floro", "floro.manifest.json");
     const floroManifestString = await fs.promises.readFile(floroManifestPath);
     const floroManifest = JSON.parse(floroManifestString.toString());
@@ -123,7 +162,7 @@ export const tarCreationPlugin = async (cwd: string): Promise<boolean> => {
       await fs.promises.mkdir(outPathDir, { recursive: true });
     }
     if (buildPathExists) {
-      await fs.promises.rmdir(buildPathDir);
+      await fs.promises.rm(buildPathDir, { recursive: true});
     }
     await fs.promises.mkdir(buildPathDir, { recursive: true });
     const sourceManifestDirPath = path.join(cwd, "floro");
@@ -148,16 +187,38 @@ export const tarCreationPlugin = async (cwd: string): Promise<boolean> => {
       {
         gzip: true,
         file: tarFile,
+        C: buildPathDir,
+        portable: true
       },
-      [buildPathDir]
+      await fs.promises.readdir(buildPathDir)
     );
-    return true;
+    return tarFile;
   } catch (e) {
-    return false;
+    return null;
   }
 };
 
-export const uploadPluginTar = () => {};
+export const uploadPluginTar = async (tarPath: string) => {
+try {
+    const remote = await getRemoteHostAsync();
+    const session = await getUserSessionAsync();
+    const formData = new FormData();
+    const buffer = await fs.promises.readFile(tarPath);
+    const blob = new Blob([Uint8Array.from(buffer)]);
+    formData.append('file', fs.createReadStream(tarPath));
+    await axios.post(`${remote}/api/plugin/upload`, formData, {
+      headers: {
+        ["session_key"]: session?.clientKey,
+        "Content-Type": "multipart/form-data"
+      },
+    })
+    console.log("HERE")
+    ///reader.readAsBinaryString(new Blob([await fs.promises.readFile(tarPath)]))
+  } catch (e) {
+    console.log("e", e)
+
+  }
+};
 
 export interface DepFetch {
   status: "ok" | "error";
@@ -396,7 +457,7 @@ export const validatePluginManifest = async (manifest: Manifest) => {
   }
 };
 
-export const generateTypeScriptAPI = async (manifest: Manifest, useReact = true) => {
+export const generateTypeScriptAPI = async (manifest: Manifest, useReact = true): Promise<string> => {
     const schemaMap = await getSchemaMapForCreationManifest(manifest);
     const rootSchemaMap = getRootSchemaMap(schemaMap);
     const referenceKeys = collectKeyRefs(rootSchemaMap);

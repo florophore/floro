@@ -26,7 +26,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.buildStateStore = exports.updateCurrentBranch = exports.updateCurrentWithNewBranch = exports.updateCurrentWithSHA = exports.updateCurrentCommitSHA = exports.saveDiffListToCurrent = exports.getRepoState = exports.getUnstagedCommitState = exports.getCurrentBranch = exports.getCommitState = exports.updateLocalBranch = exports.deleteLocalBranch = exports.getLocalBranch = exports.getHistory = exports.writeCommit = exports.readCommit = exports.canCommit = exports.diffIsEmpty = exports.getCommitDirPath = exports.getLocalBranches = exports.getCurrentCommitSha = exports.getCurrentState = exports.getRepoSettings = exports.cloneRepo = exports.getLocalRepos = void 0;
+exports.buildStateStore = exports.getPluginsToRunUpdatesOn = exports.updateCurrentBranch = exports.updateCurrentWithNewBranch = exports.updateCurrentWithSHA = exports.updateCurrentCommitSHA = exports.saveDiffListToCurrent = exports.getRepoState = exports.getUnstagedCommitState = exports.getCurrentBranch = exports.getCommitState = exports.updateLocalBranch = exports.deleteLocalBranch = exports.getLocalBranch = exports.getHistory = exports.writeCommit = exports.readCommit = exports.canCommit = exports.diffIsEmpty = exports.getCommitDirPath = exports.getLocalBranches = exports.getCurrentCommitSha = exports.getCurrentState = exports.getRepoSettings = exports.cloneRepo = exports.getLocalRepos = void 0;
 const axios_1 = __importDefault(require("axios"));
 const fs_1 = __importStar(require("fs"));
 const path_1 = __importDefault(require("path"));
@@ -481,6 +481,22 @@ const updateCurrentBranch = async (repoId, branchName) => {
     }
 };
 exports.updateCurrentBranch = updateCurrentBranch;
+const getPluginsToRunUpdatesOn = (pastPlugins, nextPlugins) => {
+    console.log("PP", pastPlugins);
+    console.log("NP", nextPlugins);
+    return nextPlugins.filter(({ key, value }) => {
+        const lastPlugin = pastPlugins.find(p => p.key == key);
+        console.log("LP", lastPlugin, !lastPlugin);
+        if (!lastPlugin) {
+            return true;
+        }
+        if (lastPlugin.value != value) {
+            return true;
+        }
+        return false;
+    });
+};
+exports.getPluginsToRunUpdatesOn = getPluginsToRunUpdatesOn;
 const buildStateStore = async (state) => {
     let out = {};
     // THIS IS WRONG, needs to map to schema not value

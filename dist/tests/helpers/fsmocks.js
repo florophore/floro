@@ -22,47 +22,10 @@ const USER_SESSION = JSON.parse(`
       "freeDiskSpaceBytes": "37580963840",
       "diskSpaceLimitBytes": "21474836480",
       "utilizedDiskSpaceBytes": "0",
-      "profilePhotoId": "f02b59a9-2fb6-4477-89ef-98b36f82972d",
-      "profilePhoto": {
-        "id": "f02b59a9-2fb6-4477-89ef-98b36f82972d",
-        "createdAt": "2022-12-21T15:10:46.481Z",
-        "updatedAt": "2022-12-21T15:10:46.481Z",
-        "hash": "ebc4833518254cbdbedd4b7d71d06c67e4c3787468c597f1c30c3a4df7c07737",
-        "path": "/users/3edbc450-7e78-40db-895e-5eed8de73fcf/photos/ebc4833518254cbdbedd4b7d71d06c67e4c3787468c597f1c30c3a4df7c07737.png",
-        "thumbnailHash": "754e4f180522390c003ff9f3add7236cb7001758dd4f8e041f261b8ed02c55fe",
-        "thumbnailPath": "/users/3edbc450-7e78-40db-895e-5eed8de73fcf/photos/754e4f180522390c003ff9f3add7236cb7001758dd4f8e041f261b8ed02c55fe.png",
-        "mimeType": "png",
-        "uploadedByUserId": "3edbc450-7e78-40db-895e-5eed8de73fcf",
-        "url": "http://localhost:9000/cdn/users/3edbc450-7e78-40db-895e-5eed8de73fcf/photos/ebc4833518254cbdbedd4b7d71d06c67e4c3787468c597f1c30c3a4df7c07737.png",
-        "thumbnailUrl": "http://localhost:9000/cdn/users/3edbc450-7e78-40db-895e-5eed8de73fcf/photos/754e4f180522390c003ff9f3add7236cb7001758dd4f8e041f261b8ed02c55fe.png"
-      }
+      "profilePhotoId": null,
+      "profilePhoto": null
     },
     "authenticationCredentials": [
-      {
-        "id": "a57f501f-3295-4479-acb6-38aa5fb4f7b5",
-        "createdAt": "2022-11-30T22:14:48.679Z",
-        "updatedAt": "2022-12-30T17:44:00.220Z",
-        "credentialType": "email_pass",
-        "isSignupCredential": false,
-        "email": "test@gmail.com",
-        "normalizedEmail": "test@gmail.com",
-        "emailHash": "5BqJH9ef6kkcV2vdTmcV6A==",
-        "isVerified": true,
-        "isThirdPartyVerified": false,
-        "isDisabled": false,
-        "hasThirdPartyTwoFactorEnabled": null,
-        "accessToken": null,
-        "googleId": null,
-        "googleGivenName": null,
-        "googleFamilyName": null,
-        "googleLocale": null,
-        "githubId": null,
-        "githubNodeId": null,
-        "githubLogin": null,
-        "githubName": null,
-        "githubCompany": null,
-        "userId": "3edbc450-7e78-40db-895e-5eed8de73fcf"
-      }
     ],
     "expiresAt": "2023-01-20T20:00:00.000Z",
     "createdAt": "2022-12-30T20:45:35.058Z",
@@ -81,20 +44,8 @@ const USER = JSON.parse(`{
     "freeDiskSpaceBytes": "37580963840",
     "diskSpaceLimitBytes": "21474836480",
     "utilizedDiskSpaceBytes": "0",
-    "profilePhotoId": "f02b59a9-2fb6-4477-89ef-98b36f82972d",
-    "profilePhoto": {
-      "id": "f02b59a9-2fb6-4477-89ef-98b36f82972d",
-      "createdAt": "2022-12-21T15:10:46.481Z",
-      "updatedAt": "2022-12-21T15:10:46.481Z",
-      "hash": "ebc4833518254cbdbedd4b7d71d06c67e4c3787468c597f1c30c3a4df7c07737",
-      "path": "/users/3edbc450-7e78-40db-895e-5eed8de73fcf/photos/ebc4833518254cbdbedd4b7d71d06c67e4c3787468c597f1c30c3a4df7c07737.png",
-      "thumbnailHash": "754e4f180522390c003ff9f3add7236cb7001758dd4f8e041f261b8ed02c55fe",
-      "thumbnailPath": "/users/3edbc450-7e78-40db-895e-5eed8de73fcf/photos/754e4f180522390c003ff9f3add7236cb7001758dd4f8e041f261b8ed02c55fe.png",
-      "mimeType": "png",
-      "uploadedByUserId": "3edbc450-7e78-40db-895e-5eed8de73fcf",
-      "url": "http://localhost:9000/cdn//users/3edbc450-7e78-40db-895e-5eed8de73fcf/photos/ebc4833518254cbdbedd4b7d71d06c67e4c3787468c597f1c30c3a4df7c07737.png",
-      "thumbnailUrl": "http://localhost:9000/cdn//users/3edbc450-7e78-40db-895e-5eed8de73fcf/photos/754e4f180522390c003ff9f3add7236cb7001758dd4f8e041f261b8ed02c55fe.png"
-    }
+    "profilePhotoId": null,
+    "profilePhoto": null
   }
 `);
 const REPO_CURRENT = `
@@ -179,7 +130,7 @@ exports.makePluginCreationDirectory = makePluginCreationDirectory;
 const makeTestPlugin = (manifest, isDev = false) => {
     const pluginName = manifest.name;
     const pluginVersion = manifest.version;
-    const pluginDir = path_1.default.join(isDev ? filestructure_1.vDEVPath : filestructure_1.vPluginsPath, `${pluginName}@${pluginVersion}`);
+    const pluginDir = path_1.default.join(isDev ? filestructure_1.vDEVPath : filestructure_1.vPluginsPath, pluginName, pluginVersion);
     fs_1.default.mkdirSync(pluginDir, { recursive: true });
     const floroCreationPath = path_1.default.join(pluginDir, "floro");
     fs_1.default.mkdirSync(floroCreationPath, { recursive: true });
@@ -202,21 +153,21 @@ exports.getPluginCreationDirectoryRoot = getPluginCreationDirectoryRoot;
 const createBlankRepo = (repoId) => {
     const repoPath = path_1.default.join(filestructure_1.vReposPath, repoId);
     if (!fs_1.default.existsSync(repoPath)) {
-        const binariesPath = path_1.default.join(repoPath, 'binaries');
-        const branchesPath = path_1.default.join(repoPath, 'branches');
-        const commitsPath = path_1.default.join(repoPath, 'commits');
-        const stashesPath = path_1.default.join(repoPath, 'stash');
+        const binariesPath = path_1.default.join(repoPath, "binaries");
+        const branchesPath = path_1.default.join(repoPath, "branches");
+        const commitsPath = path_1.default.join(repoPath, "commits");
+        const stashesPath = path_1.default.join(repoPath, "stash");
         fs_1.default.mkdirSync(repoPath);
         fs_1.default.mkdirSync(binariesPath);
         fs_1.default.mkdirSync(branchesPath);
         fs_1.default.mkdirSync(commitsPath);
         fs_1.default.mkdirSync(stashesPath);
-        const repoSettingsPath = path_1.default.join(repoPath, 'settings.json');
-        const currentPath = path_1.default.join(repoPath, 'current.json');
-        const mainBranchPath = path_1.default.join(branchesPath, 'main.json');
-        fs_1.default.writeFileSync(repoSettingsPath, REPO_SETTINGS, 'utf-8');
-        fs_1.default.writeFileSync(currentPath, REPO_CURRENT, 'utf-8');
-        fs_1.default.writeFileSync(mainBranchPath, MAIN_BRANCH, 'utf-8');
+        const repoSettingsPath = path_1.default.join(repoPath, "settings.json");
+        const currentPath = path_1.default.join(repoPath, "current.json");
+        const mainBranchPath = path_1.default.join(branchesPath, "main.json");
+        fs_1.default.writeFileSync(repoSettingsPath, REPO_SETTINGS, "utf-8");
+        fs_1.default.writeFileSync(currentPath, REPO_CURRENT, "utf-8");
+        fs_1.default.writeFileSync(mainBranchPath, MAIN_BRANCH, "utf-8");
     }
 };
 exports.createBlankRepo = createBlankRepo;

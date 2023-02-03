@@ -3,7 +3,7 @@ import { getPluginsJsonAsync, vDEVPath, vPluginsPath } from "./filestructure";
 import axios from "axios";
 import path from "path";
 import { DiffElement } from "./versioncontrol";
-import fs from 'fs';
+import fs from "fs";
 import { Crypto } from "cryptojs";
 
 export interface PluginElement {
@@ -31,8 +31,6 @@ export interface Manifest {
   version: string;
   name: string;
   displayName: string;
-  publisher: string;
-  copyable?: boolean;
   icon:
     | string
     | {
@@ -56,9 +54,12 @@ export const readDevPluginManifest = async (
   if (!pluginsJSON) {
     return null;
   }
-  if (pluginsJSON.plugins?.[pluginName]?.proxy) {
+  if (
+    pluginsJSON.plugins?.[pluginName]?.proxy &&
+    !pluginVersion.startsWith("dev@")
+  ) {
     try {
-      const uri = `http://127.0.0.1:63403/plugins/${pluginName}/floro/floro.manifest.json`;
+      const uri = `http://127.0.0.1:63403/plugins/${pluginName}/dev/floro/floro.manifest.json`;
       const res = await axios.get(uri);
       return res.data;
     } catch (e) {
@@ -68,7 +69,8 @@ export const readDevPluginManifest = async (
   try {
     const pluginManifestPath = path.join(
       vDEVPath,
-      `${pluginName}@${pluginVersion}`,
+      pluginName,
+      pluginVersion.split("@")?.[1] ?? "none",
       "floro",
       "floro.manifest.json"
     );
@@ -88,15 +90,15 @@ export const getPluginManifest = async (
     return;
   }
   if (pluginInfo.value.startsWith("dev")) {
-    const [, v] = pluginInfo.value.split("@");
-    return await readDevPluginManifest(pluginName, v ?? "");
+    return await readDevPluginManifest(pluginName, pluginInfo.value);
   }
   if (!pluginInfo.value) {
     return null;
   }
   const pluginManifestPath = path.join(
     vPluginsPath,
-    `${pluginName}@${pluginInfo.value}`,
+    pluginName,
+    pluginInfo.value,
     "floro",
     "floro.manifest.json"
   );
@@ -184,6 +186,15 @@ export const hasPlugin = (
     }
   }
   return false;
+};
+
+export const getMissingUpstreamDependencies = async (
+  pluginName: string,
+  manifest: Manifest,
+  plugins: Array<PluginElement>
+): Promise<Array<PluginElement>> => {
+  // TODO: finish
+  return [];
 };
 
 export const getUpstreamDependencyList = async (
@@ -283,7 +294,8 @@ const constructRootSchema = (
   pluginName: string
 ): TypeStruct => {
   let out = {};
-  for (const prop in struct) {
+  const sortedStructedProps = Object.keys(struct).sort();
+  for (const prop of sortedStructedProps) {
     out[prop] = {};
     if (struct[prop]?.type == "set") {
       if (
@@ -759,7 +771,8 @@ export const decodeSchemaPath = (
 
 export const getStateId = (schema: TypeStruct, state: object) => {
   let hashPairs = [];
-  for (let prop in schema) {
+  const sortedProps = Object.keys(schema).sort();
+  for (let prop of sortedProps) {
     if (!schema[prop].type) {
       hashPairs.push({
         key: prop,
@@ -813,7 +826,8 @@ export const flattenStateToSchemaPathKV = (
   const nestedStructures = [];
   const value = {};
   let primaryKey = null;
-  for (let prop in schemaRoot) {
+  const sortedProps = Object.keys(schemaRoot).sort();
+  for (let prop of sortedProps) {
     if (schemaRoot[prop].isKey) {
       primaryKey = {
         key: prop,
@@ -2351,6 +2365,15 @@ export const buildPointerReturnTypeMap = (
   return out;
 };
 
+const getPointersForRefType = (
+  refType: string,
+  referenceReturnTypeMap: { [key: string]: Array<string> }
+): Array<string> => {
+  return Object.keys(referenceReturnTypeMap).filter((path) => {
+    return referenceReturnTypeMap[path].includes(refType);
+  });
+};
+
 export const buildPointerArgsMap = (referenceReturnTypeMap: {
   [key: string]: Array<string>;
 }): { [key: string]: Array<Array<string>> } => {
@@ -2374,33 +2397,6 @@ export const buildPointerArgsMap = (referenceReturnTypeMap: {
     out[key] = args;
   }
   return out;
-};
-
-export const getPointersForRefType = (
-  refType: string,
-  referenceReturnTypeMap: { [key: string]: Array<string> }
-): Array<string> => {
-  return Object.keys(referenceReturnTypeMap).filter((path) => {
-    return referenceReturnTypeMap[path].includes(refType);
-  });
-};
-
-export const getStaticPointersForRefType = (
-  staticRefType: string,
-  referenceReturnTypeMap: { [key: string]: Array<string> }
-): Array<string> => {
-  const staticReferenceReturnTypeMap = {};
-  const staticPathMap = {};
-  for (let path in referenceReturnTypeMap) {
-    const staticPath = replaceRefVarsWithValues(path);
-    staticReferenceReturnTypeMap[staticPath] = referenceReturnTypeMap[path];
-    staticPathMap[staticPath] = path;
-  }
-  return Object.keys(staticReferenceReturnTypeMap)
-    .filter((staticPath) => {
-      return staticReferenceReturnTypeMap[staticPath].includes(staticRefType);
-    })
-    ?.map((staticPath) => staticPathMap[staticPath]);
 };
 
 const drawQueryTypes = (argMap: { [key: string]: Array<Array<string>> }) => {
@@ -2617,7 +2613,7 @@ export const drawRefReturnTypes = (
   return code;
 };
 
-export const drawTypestruct = (
+const drawTypestruct = (
   typeStruct: TypeStruct,
   referenceReturnTypeMap: { [key: string]: Array<string> },
   indentation = "",
@@ -2895,8 +2891,8 @@ export const drawGetPluginStore = (
   for (let plugin of plugins) {
     code += `export function getPluginStore(root: SchemaRoot, plugin: '${plugin}'): SchemaRoot['${plugin}'];\n`;
   }
-  const globalPluginArgs = plugins.map(p => `'${p}'`).join('|');
-  const globalPluginReturn = plugins.map(p => `SchemaRoot['${p}']`).join('|');
+  const globalPluginArgs = plugins.map((p) => `'${p}'`).join("|");
+  const globalPluginReturn = plugins.map((p) => `SchemaRoot['${p}']`).join("|");
   code += `export function getPluginStore(root: SchemaRoot, plugin: ${globalPluginArgs}): ${globalPluginReturn} {\n`;
   code += `  return root[plugin];\n`;
   code += `}\n`;
@@ -2912,4 +2908,4 @@ export const drawGetPluginStore = (
     code += `}\n`;
   }
   return code;
-}
+};

@@ -10,7 +10,9 @@ const command_line_args_1 = __importDefault(require("command-line-args"));
 const daemon_1 = require("./daemon");
 const inquirer_1 = __importDefault(require("inquirer"));
 const login_1 = require("./login");
+const plugincreator_1 = require("./plugincreator");
 const { exec, spawn } = require('child_process');
+const cli_color_1 = __importDefault(require("cli-color"));
 /* first - parse the main command */
 const mainDefinitions = [{ name: "command", defaultOption: true }];
 const mainOptions = (0, command_line_args_1.default)(mainDefinitions, {
@@ -35,7 +37,29 @@ const argv = mainOptions._unknown || [];
         return;
     }
     if (mainOptions.command == "plugin") {
-        console.log("test");
+        if (argv[0] == "push") {
+            if (argv[1] == "--staging" || argv[1] == "-s") {
+                const didSucceed = await (0, plugincreator_1.exportPluginToDev)(process.cwd());
+                if (didSucceed) {
+                    console.log(cli_color_1.default.cyanBright.bgBlack.underline("Successfully pushed to staging!"));
+                    return;
+                }
+                console.log(cli_color_1.default.redBright.bgBlack.underline("Failed to push to staging..."));
+                return;
+            }
+            if (argv[1] == "--prod" || argv[1] == "-p") {
+                const tarPath = await (0, plugincreator_1.tarCreationPlugin)(process.cwd());
+                if (!tarPath) {
+                }
+                console.log(`tar created at ${tarPath}`);
+                (0, plugincreator_1.uploadPluginTar)(tarPath);
+                //if (didSucceed) {
+                //  console.log(clc.cyanBright.bgBlack.underline("Successfully pushed to production!"));
+                //  return;
+                //}
+                return;
+            }
+        }
         return;
     }
     if (mainOptions.command == "config") {
@@ -44,7 +68,7 @@ const argv = mainOptions._unknown || [];
                 type: "list",
                 name: "config",
                 message: "Choose a configuration option",
-                choices: ["cors", "remote", "plugins", "reset", "quit"],
+                choices: ["cors", "plugins", "reset", "quit"],
             },
         ]);
         if (response.config == "cors") {
@@ -54,13 +78,13 @@ const argv = mainOptions._unknown || [];
             });
             return;
         }
-        if (response.config == "remote") {
-            const vim = spawn('vi', [filestructure_1.vConfigRemotePath], { stdio: 'inherit' });
-            vim.on('exit', () => {
-                console.log("done");
-            });
-            return;
-        }
+        //if (response.config == "remote") {
+        //    const vim = spawn('vi', [vConfigRemotePath], {stdio: 'inherit'})
+        //    vim.on('exit', () => {
+        //        console.log("done");
+        //    })
+        //    return;
+        //}
         if (response.config == "plugins") {
             const vim = spawn('vi', [filestructure_1.vConfigPluginsPath], { stdio: 'inherit' });
             vim.on('exit', () => {

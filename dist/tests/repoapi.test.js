@@ -100,6 +100,54 @@ describe("repoapi", () => {
             ]);
         });
     });
+    describe("update plugins", () => {
+        test.only("adds upstream plugins", async () => {
+            const PLUGIN_A_MANIFEST = {
+                name: "A",
+                version: "1.0.0",
+                displayName: "A",
+                icon: "",
+                imports: {},
+                types: {},
+                store: {
+                    mainKey: {
+                        isKey: true,
+                        type: "string",
+                    },
+                    secondKey: {
+                        type: "string",
+                    },
+                },
+            };
+            (0, fsmocks_1.makeTestPlugin)(PLUGIN_A_MANIFEST);
+            const PLUGIN_B_MANIFEST = {
+                name: "B",
+                version: "0.0.0",
+                displayName: "B",
+                icon: "",
+                imports: {},
+                types: {},
+                store: {
+                    bnKey: {
+                        isKey: true,
+                        type: "string",
+                    },
+                    aRef: {
+                        type: "ref<$(A).store.values>",
+                    },
+                },
+            };
+            (0, fsmocks_1.makeTestPlugin)(PLUGIN_B_MANIFEST);
+            let plugins = [
+                {
+                    key: "B",
+                    value: "0.0.0"
+                }
+            ];
+            const result = await (0, repoapi_1.updatePlugins)("abc", plugins);
+            console.log(JSON.stringify(result, null, 2));
+        });
+    });
     describe("commits", () => {
         test("description can commit", async () => {
             let description = (await (0, repoapi_1.readRepoDescription)("abc")).join("");

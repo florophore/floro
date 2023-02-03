@@ -65,7 +65,8 @@ describe("plugincreator", () => {
       expect(created).toEqual(true);
       const indexHTMLDevPath = path.join(
         vDEVPath,
-        SIMPLE_PLUGIN_MANIFEST.name + "@" + SIMPLE_PLUGIN_MANIFEST.version,
+        SIMPLE_PLUGIN_MANIFEST.name,
+        SIMPLE_PLUGIN_MANIFEST.version,
         "index.html"
       );
       const indexHTMLCWDPath = path.join(cwd, "dist", "index.html");
@@ -74,7 +75,8 @@ describe("plugincreator", () => {
       expect(indexHTMLDev).toEqual(indexHTMLCWD);
       const indexJSDevPath = path.join(
         vDEVPath,
-        SIMPLE_PLUGIN_MANIFEST.name + "@" + SIMPLE_PLUGIN_MANIFEST.version,
+        SIMPLE_PLUGIN_MANIFEST.name,
+        SIMPLE_PLUGIN_MANIFEST.version,
         "assets",
         "index.js"
       );
@@ -90,8 +92,6 @@ describe("plugincreator", () => {
       const cwd = makePluginCreationDirectory("simple", SIMPLE_PLUGIN_MANIFEST);
       const didTar = await tarCreationPlugin(cwd);
 
-      expect(didTar).toBe(true);
-
       const tarOutPath = path.join(
         vTMPPath,
         "out",
@@ -100,44 +100,26 @@ describe("plugincreator", () => {
           SIMPLE_PLUGIN_MANIFEST.version +
           ".tar.gz"
       );
-      const files = new Set();
+      expect(didTar).toBe(tarOutPath);
+      const files = [];
 
       tar.t({
         file: tarOutPath,
         sync: true,
         onentry: (entry) => {
           if (entry.path[entry.path.length - 1] == "/") {
-            files.add(entry.path.substring(0, entry.path.length - 1));
+            files.push(entry.path.substring(0, entry.path.length - 1));
           } else {
-            files.add(entry.path);
+            files.push(entry.path);
           }
         },
       });
 
-      const buildPathDir = path
-        .join(
-          vTMPPath,
-          "build",
-          `${SIMPLE_PLUGIN_MANIFEST.name}@${SIMPLE_PLUGIN_MANIFEST.version}`
-        )
-        .substring(1);
-      const buildAssetsPathDir = path.join(buildPathDir, "assets");
-      const buildFloroPathDir = path.join(buildPathDir, "floro");
-      const buildIndexHTMLPathDir = path.join(buildPathDir, "index.html");
-      const buildIndexJSPathDir = path.join(buildPathDir, "assets", "index.js");
-      const buildFloroManifestPathDir = path.join(
-        buildPathDir,
-        "floro",
-        "floro.manifest.json"
-      );
-
-      expect(files.has(buildPathDir)).toEqual(true);
-      expect(files.has(buildAssetsPathDir)).toEqual(true);
-      expect(files.has(buildFloroPathDir)).toEqual(true);
-      expect(files.has(buildFloroPathDir)).toEqual(true);
-      expect(files.has(buildIndexHTMLPathDir)).toEqual(true);
-      expect(files.has(buildIndexJSPathDir)).toEqual(true);
-      expect(files.has(buildFloroManifestPathDir)).toEqual(true);
+      expect(files.includes("floro")).toEqual(true);
+      expect(files.includes("assets")).toEqual(true);
+      expect(files.includes("index.html")).toEqual(true);
+      expect(files.includes("assets/index.js")).toEqual(true);
+      expect(files.includes("floro/floro.manifest.json")).toEqual(true);
     });
   });
 
@@ -147,7 +129,6 @@ describe("plugincreator", () => {
         name: "A",
         version: "0.0.0",
         displayName: "A",
-        publisher: "@jamiesunderland",
         icon: "",
         imports: {},
         types: {},
@@ -160,7 +141,6 @@ describe("plugincreator", () => {
         name: "B",
         version: "0.0.0",
         displayName: "B",
-        publisher: "@jamiesunderland",
         icon: "",
         imports: {
           A: "0.0.0",
@@ -174,7 +154,6 @@ describe("plugincreator", () => {
         name: "C",
         version: "0.0.0",
         displayName: "C",
-        publisher: "@jamiesunderland",
         icon: "",
         imports: {
           B: "dev@0.0.0",
@@ -194,7 +173,6 @@ describe("plugincreator", () => {
         name: "A",
         version: "0.0.0",
         displayName: "A",
-        publisher: "@jamiesunderland",
         icon: "",
         imports: {},
         types: {},
@@ -211,7 +189,6 @@ describe("plugincreator", () => {
         name: "B",
         version: "0.0.0",
         displayName: "B",
-        publisher: "@jamiesunderland",
         icon: "",
         imports: {
           A: "0.0.0",
@@ -229,7 +206,6 @@ describe("plugincreator", () => {
         name: "A",
         version: "1.0.0",
         displayName: "A",
-        publisher: "@jamiesunderland",
         icon: "",
         imports: {
           B: "0.0.0",
@@ -251,7 +227,6 @@ describe("plugincreator", () => {
         name: "C",
         version: "0.0.0",
         displayName: "C",
-        publisher: "@jamiesunderland",
         icon: "",
         imports: {
           A: "1.0.0",
@@ -282,7 +257,6 @@ describe("plugincreator", () => {
         name: "A",
         version: "0.0.0",
         displayName: "A",
-        publisher: "@jamiesunderland",
         icon: "",
         imports: {},
         types: {},
@@ -299,7 +273,6 @@ describe("plugincreator", () => {
         name: "A",
         version: "1.0.0",
         displayName: "A",
-        publisher: "@jamiesunderland",
         icon: "",
         imports: {
           B: "0.0.0",
@@ -321,7 +294,6 @@ describe("plugincreator", () => {
         name: "B",
         version: "0.0.0",
         displayName: "B",
-        publisher: "@jamiesunderland",
         icon: "",
         imports: {},
         types: {},
@@ -337,7 +309,6 @@ describe("plugincreator", () => {
         name: "C",
         version: "0.0.0",
         displayName: "C",
-        publisher: "@jamiesunderland",
         icon: "",
         imports: {
           A: "1.0.0",
@@ -366,7 +337,6 @@ describe("plugincreator", () => {
         name: "A",
         version: "0.0.0",
         displayName: "A",
-        publisher: "@jamiesunderland",
         icon: "",
         imports: {},
         types: {},
@@ -383,7 +353,6 @@ describe("plugincreator", () => {
         name: "A",
         version: "1.0.0",
         displayName: "A",
-        publisher: "@jamiesunderland",
         icon: "",
         imports: {},
         types: {},
@@ -401,7 +370,6 @@ describe("plugincreator", () => {
         name: "B",
         version: "0.0.0",
         displayName: "B",
-        publisher: "@jamiesunderland",
         icon: "",
         imports: {
           A: "0.0.0",
@@ -419,7 +387,6 @@ describe("plugincreator", () => {
         name: "C",
         version: "0.0.0",
         displayName: "C",
-        publisher: "@jamiesunderland",
         icon: "",
         imports: {
           A: "1.0.0",
@@ -457,7 +424,6 @@ describe("plugincreator", () => {
         name: "A",
         version: "0.0.0",
         displayName: "A",
-        publisher: "@jamiesunderland",
         icon: "",
         imports: {},
         types: {},
@@ -474,7 +440,6 @@ describe("plugincreator", () => {
         name: "A",
         version: "1.0.0",
         displayName: "A",
-        publisher: "@jamiesunderland",
         icon: "",
         imports: {
           B: "0.0.0",
@@ -496,7 +461,6 @@ describe("plugincreator", () => {
         name: "B",
         version: "0.0.0",
         displayName: "B",
-        publisher: "@jamiesunderland",
         icon: "",
         imports: {},
         types: {},
@@ -512,7 +476,6 @@ describe("plugincreator", () => {
         name: "C",
         version: "0.0.0",
         displayName: "C",
-        publisher: "@jamiesunderland",
         icon: "",
         imports: {
           A: "1.0.0",
@@ -544,7 +507,6 @@ describe("plugincreator", () => {
         name: "A",
         version: "0.0.0",
         displayName: "A",
-        publisher: "@jamiesunderland",
         icon: "",
         imports: {},
         types: {
@@ -569,7 +531,6 @@ describe("plugincreator", () => {
         name: "B",
         version: "0.0.0",
         displayName: "B",
-        publisher: "@jamiesunderland",
         icon: "",
         imports: {
           "A": "0.0.0"
@@ -601,7 +562,6 @@ describe("plugincreator", () => {
         name: "A",
         version: "0.0.0",
         displayName: "A",
-        publisher: "@jamiesunderland",
         icon: "",
         imports: {
         },
@@ -636,7 +596,6 @@ describe("plugincreator", () => {
         name: "A",
         version: "0.0.0",
         displayName: "A",
-        publisher: "@jamiesunderland",
         icon: "",
         imports: {
         },
@@ -669,7 +628,6 @@ describe("plugincreator", () => {
         name: "A",
         version: "0.0.0",
         displayName: "A",
-        publisher: "@jamiesunderland",
         icon: "",
         imports: {},
         types: {},
@@ -707,7 +665,6 @@ describe("plugincreator", () => {
         name: "A",
         version: "0.0.0",
         displayName: "A",
-        publisher: "@jamiesunderland",
         icon: "",
         imports: {},
         types: {},
@@ -741,7 +698,6 @@ describe("plugincreator", () => {
         name: "A",
         version: "0.0.0",
         displayName: "A",
-        publisher: "@jamiesunderland",
         icon: "",
         imports: {},
         types: {},
@@ -769,7 +725,6 @@ describe("plugincreator", () => {
         name: "A",
         version: "0.0.0",
         displayName: "A",
-        publisher: "@jamiesunderland",
         icon: "",
         imports: {},
         types: {},
@@ -800,7 +755,6 @@ describe("plugincreator", () => {
         name: "A",
         version: "0.0.0",
         displayName: "A",
-        publisher: "@jamiesunderland",
         icon: "",
         imports: {},
         types: {},
@@ -840,7 +794,6 @@ describe("plugincreator", () => {
         name: "A",
         version: "0.0.0",
         displayName: "A",
-        publisher: "@jamiesunderland",
         icon: "",
         imports: {},
         types: {},
@@ -870,7 +823,6 @@ describe("plugincreator", () => {
         name: "A",
         version: "0.0.0",
         displayName: "A",
-        publisher: "@jamiesunderland",
         icon: "",
         imports: {
         },
@@ -904,7 +856,6 @@ describe("plugincreator", () => {
         name: "A",
         version: "0.0.0",
         displayName: "A",
-        publisher: "@jamiesunderland",
         icon: "",
         imports: {},
         types: {
@@ -949,7 +900,6 @@ describe("plugincreator", () => {
         name: "B",
         version: "0.0.0",
         displayName: "B",
-        publisher: "@jamiesunderland",
         icon: "",
         imports: {
           "A": "0.0.0"

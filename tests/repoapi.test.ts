@@ -1,5 +1,6 @@
 import { fs, vol } from "memfs";
 import { buildFloroFilestructure, userHome } from "../src/filestructure";
+import { Manifest, PluginElement } from "../src/plugins";
 import {
   readCommitState,
   readCurrentHistory,
@@ -7,11 +8,12 @@ import {
   readRepoDescription,
   readRepoLicenses,
   repoExists,
+  updatePlugins,
   writeRepoCommit,
   writeRepoDescription,
   writeRepoLicenses,
 } from "../src/repoapi";
-import { createBlankRepo, makeSignedInUser } from "./helpers/fsmocks";
+import { createBlankRepo, makeSignedInUser, makeTestPlugin } from "./helpers/fsmocks";
 
 jest.mock("fs");
 jest.mock("fs/promises");
@@ -113,6 +115,56 @@ describe("repoapi", () => {
           value: "MIT License",
         },
       ]);
+    });
+  });
+
+  describe("update plugins", () => {
+    test.only("adds upstream plugins", async () => {
+      const PLUGIN_A_MANIFEST: Manifest = {
+        name: "A",
+        version: "1.0.0",
+        displayName: "A",
+        icon: "",
+        imports: {},
+        types: {},
+        store: {
+          mainKey: {
+            isKey: true,
+            type: "string",
+          },
+          secondKey: {
+            type: "string",
+          },
+        },
+      };
+      makeTestPlugin(PLUGIN_A_MANIFEST);
+
+      const PLUGIN_B_MANIFEST: Manifest = {
+        name: "B",
+        version: "0.0.0",
+        displayName: "B",
+        icon: "",
+        imports: {},
+        types: {},
+        store: {
+          bnKey: {
+            isKey: true,
+            type: "string",
+          },
+          aRef: {
+            type: "ref<$(A).store.values>",
+          },
+        },
+      };
+      makeTestPlugin(PLUGIN_B_MANIFEST);
+      let plugins: PluginElement[] = [
+        {
+          key: "B",
+          value: "0.0.0"
+        }
+      ];
+      const result = await updatePlugins("abc", plugins);
+      console.log(JSON.stringify(result, null, 2));
     });
   });
 
