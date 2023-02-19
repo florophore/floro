@@ -382,6 +382,7 @@ export const verifyPluginDependencyCompatability = async (
 export const getSchemaMapForCreationManifest = async (
   manifest: Manifest
 ): Promise<{ [key: string]: Manifest } | null> => {
+  // switch to getUpstreamDependencies
   const depResult = await getDependenciesForManifest(manifest);
   if (depResult.status == "error") {
     return null;
@@ -409,6 +410,7 @@ export const validatePluginManifest = async (manifest: Manifest) => {
         message: `${manifest.name}'s schema contains cyclic types, consider using references`,
       };
     }
+    // switch to getUpstreamDependencies (must for this one)
     const depResult = await getDependenciesForManifest(manifest);
     if (depResult.status == "error") {
       return {

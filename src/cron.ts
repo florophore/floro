@@ -1,37 +1,47 @@
-import cron from 'node-cron';
-import { getRemoteHostAsync, getUserSession, getUserSessionAsync, writeUser, writeUserSession } from './filestructure';
-import axios from 'axios';
-import { broadcastAllDevices } from './multiplexer';
+import cron from "node-cron";
+import {
+  getRemoteHostAsync,
+  getUserSession,
+  getUserSessionAsync,
+  writeUser,
+  writeUserSession,
+} from "./filestructure";
+import axios from "axios";
+import { broadcastAllDevices } from "./multiplexer";
 
 const ONE_WEEK = 1000 * 60 * 60 * 24 * 7;
-const HOUR_CRON = "0 * * * *"; 
+const HOUR_CRON = "0 * * * *";
 
 export const startSessionJob = () => {
-    cron.schedule(HOUR_CRON, async () => {
-        try {
-            const currentSession = await getUserSessionAsync();
-            if (!currentSession) {
-                return;
-            }
-            const expiresAt = new Date(currentSession.expiresAt);
-            const expiresAtMS = expiresAt.getTime();
-            const nowMS = (new Date()).getTime();
-            const delta = (expiresAtMS - nowMS);
-            if (delta > ONE_WEEK) {
-                const remote = await getRemoteHostAsync();
-                const response = await axios.post(`${remote}/api/session/exchange`, {}, {
-                    headers: {
-                        ['session_key']: currentSession?.clientKey
-                    }
-                });
-                if (response.status == 200) {
-                    await writeUserSession(response.data.exchangeSession);
-                    await writeUser(response.data.exchangeSession.user);
-                    broadcastAllDevices("session_updated", response.data);
-                }
-            }
-        } catch (e) {
-            //log nothing
+  cron.schedule(HOUR_CRON, async () => {
+    try {
+      const currentSession = await getUserSessionAsync();
+      if (!currentSession) {
+        return;
+      }
+      const expiresAt = new Date(currentSession.expiresAt);
+      const expiresAtMS = expiresAt.getTime();
+      const nowMS = new Date().getTime();
+      const delta = expiresAtMS - nowMS;
+      if (delta > ONE_WEEK) {
+        const remote = await getRemoteHostAsync();
+        const response = await axios.post(
+          `${remote}/api/session/exchange`,
+          {},
+          {
+            headers: {
+              ["session_key"]: currentSession?.clientKey,
+            },
+          }
+        );
+        if (response.status == 200) {
+          await writeUserSession(response.data.exchangeSession);
+          await writeUser(response.data.exchangeSession.user);
+          broadcastAllDevices("session_updated", response.data);
         }
-    });
-}
+      }
+    } catch (e) {
+      //log nothing
+    }
+  });
+};

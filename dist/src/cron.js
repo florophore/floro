@@ -19,14 +19,14 @@ const startSessionJob = () => {
             }
             const expiresAt = new Date(currentSession.expiresAt);
             const expiresAtMS = expiresAt.getTime();
-            const nowMS = (new Date()).getTime();
-            const delta = (expiresAtMS - nowMS);
+            const nowMS = new Date().getTime();
+            const delta = expiresAtMS - nowMS;
             if (delta > ONE_WEEK) {
                 const remote = await (0, filestructure_1.getRemoteHostAsync)();
                 const response = await axios_1.default.post(`${remote}/api/session/exchange`, {}, {
                     headers: {
-                        ['session_key']: currentSession?.clientKey
-                    }
+                        ["session_key"]: currentSession?.clientKey,
+                    },
                 });
                 if (response.status == 200) {
                     await (0, filestructure_1.writeUserSession)(response.data.exchangeSession);

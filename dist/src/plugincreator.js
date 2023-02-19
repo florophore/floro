@@ -314,6 +314,7 @@ const verifyPluginDependencyCompatability = async (deps) => {
 };
 exports.verifyPluginDependencyCompatability = verifyPluginDependencyCompatability;
 const getSchemaMapForCreationManifest = async (manifest) => {
+    // switch to getUpstreamDependencies
     const depResult = await (0, exports.getDependenciesForManifest)(manifest);
     if (depResult.status == "error") {
         return null;
@@ -341,6 +342,7 @@ const validatePluginManifest = async (manifest) => {
                 message: `${manifest.name}'s schema contains cyclic types, consider using references`,
             };
         }
+        // switch to getUpstreamDependencies (must for this one)
         const depResult = await (0, exports.getDependenciesForManifest)(manifest);
         if (depResult.status == "error") {
             return {

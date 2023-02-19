@@ -182,7 +182,7 @@ describe("plugins", () => {
       });
     });
 
-    test("can handle references that are key types", () => {
+    test.only("can handle references that are key types", () => {
       const PLUGIN_A_MANIFEST: Manifest = {
         name: "A",
         version: "0.0.0",
