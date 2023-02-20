@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.generateTypeScriptAPI = exports.getSchemaMapForCreationManifest = exports.uploadPluginTar = exports.tarCreationPlugin = exports.exportPluginToDev = exports.canExportPlugin = exports.isCreationDistDirectoryValid = exports.buildFloroTemplate = exports.checkDirectoryIsPluginWorkingDirectory = exports.PLUGIN_REGEX = void 0;
+exports.generateTypeScriptAPI = exports.getSchemaMapForCreationManifest = exports.uploadPluginTar = exports.tarCreationPlugin = exports.installDependency = exports.exportPluginToDev = exports.canExportPlugin = exports.isCreationDistDirectoryValid = exports.buildFloroTemplate = exports.checkDirectoryIsPluginWorkingDirectory = exports.PLUGIN_REGEX = void 0;
 const fs_1 = __importDefault(require("fs"));
 const path_1 = __importDefault(require("path"));
 const tar_1 = __importDefault(require("tar"));
@@ -191,6 +191,79 @@ const exportPluginToDev = async (cwd) => {
     }
 };
 exports.exportPluginToDev = exportPluginToDev;
+const installDependency = async (cwd, depname) => {
+    const floroManifestPath = path_1.default.join(cwd, "floro", "floro.manifest.json");
+    const floroManifestString = await fs_1.default.promises.readFile(floroManifestPath);
+    const manifest = JSON.parse(floroManifestString.toString());
+    const [pluginName, version] = depname.split("@");
+    let depManifest;
+    const remote = await (0, filestructure_1.getRemoteHostAsync)();
+    const session = await (0, filestructure_1.getUserSessionAsync)();
+    const manifestRequest = await axios_1.default.get(`${remote}/api/plugin/${pluginName}/${version ?? "last"}/manifest`, {
+        headers: {
+            ["session_key"]: session?.clientKey,
+        },
+    });
+    if (manifestRequest.status == 403) {
+        console.log(cli_color_1.default.redBright.bgBlack.underline("Forbidden access to " + depname));
+        return null;
+    }
+    if (manifestRequest.status == 404) {
+        console.log(cli_color_1.default.redBright.bgBlack.underline("Could not find " + depname));
+        return null;
+    }
+    if (manifestRequest.status == 200) {
+        depManifest = manifestRequest.data;
+    }
+    if (!depManifest) {
+        return null;
+    }
+    const dependencyManifests = await (0, plugins_1.getUpstreamDependencyManifests)(depManifest, async (pluginName, version) => {
+        const localCopy = await (0, plugins_1.readPluginManifest)(pluginName, version);
+        if (localCopy) {
+            return localCopy;
+        }
+        const request = await axios_1.default.get(`${remote}/api/plugin/${pluginName}/${version}/manifest`, {
+            headers: {
+                ["session_key"]: session?.clientKey,
+            },
+        });
+        if (request.status == 200) {
+            return request.data;
+        }
+        return null;
+    });
+    if (!dependencyManifests) {
+        console.log(cli_color_1.default.redBright.bgBlack.underline("Failed to fetch deps for " + depname));
+        return null;
+    }
+    const proposedManifest = { ...manifest, imports: { ...manifest.imports } };
+    for (const upstreamManifest of dependencyManifests) {
+        proposedManifest.imports[upstreamManifest.name] = upstreamManifest.version;
+    }
+    const areCompatible = await (0, plugins_1.pluginManifestsAreCompatibleForUpdate)(manifest, proposedManifest, plugins_1.readPluginManifest);
+    if (!areCompatible) {
+        console.log(cli_color_1.default.redBright.bgBlack.underline(depname +
+            "is incompatible with other dependencies. Please specifiy a different version or remove conflicting dependencies."));
+        return null;
+    }
+    const imports = [...Object.keys(manifest.imports), depManifest.name].sort().reduce((acc, pluginName) => {
+        if (pluginName == depManifest.name) {
+            return {
+                ...acc,
+                [pluginName]: depManifest.version
+            };
+        }
+        return {
+            ...acc,
+            [pluginName]: manifest.imports[pluginName]
+        };
+    }, {});
+    manifest.imports = imports;
+    await fs_1.default.promises.writeFile(floroManifestPath, JSON.stringify(manifest, null, 2), 'utf-8');
+    return manifest;
+};
+exports.installDependency = installDependency;
 const tarCreationPlugin = async (cwd) => {
     const canExport = (0, exports.canExportPlugin)(cwd);
     if (!canExport) {

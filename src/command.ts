@@ -13,7 +13,9 @@ import { startDaemon, killDaemon } from "./daemon";
 import { logout, promptEmail } from "./login";
 import {
   buildFloroTemplate,
+  checkDirectoryIsPluginWorkingDirectory,
   exportPluginToDev,
+  installDependency,
   tarCreationPlugin,
   uploadPluginTar,
 } from "./plugincreator";
@@ -165,18 +167,57 @@ yargs
           },
         })
         .command({
-          command: "pull",
+          command: "pull-deps",
           describe: "Installs dependies from floro.manifest.json",
           handler: () => {
             console.log("Handle deps");
           },
         })
         .command({
-          command: "install",
+          command: "install [dependency]",
           describe:
             "Installs remote dependency and saves into floro.manifest.json",
-          handler: () => {
-            console.log("Handle install");
+          builder: yargs => {
+            return yargs.positional('dependency', {
+              type: 'string'
+            });
+          },
+          handler: async (options) => {
+            if (!options.dependency) {
+              console.log(
+                clc.redBright.bgBlack.underline("No dependency specified")
+              );
+              return;
+            }
+            const isValidCWD = await checkDirectoryIsPluginWorkingDirectory(process.cwd());
+            if (!isValidCWD) {
+              console.log(
+                clc.redBright.bgBlack.underline("Invalid working directory: " + process.cwd())
+              );
+              console.log(
+                clc.redBright.bgBlack.underline("Please try again from your floro plugin's root directory.")
+              );
+              return;
+            }
+            const updatedManifest = await installDependency(process.cwd(), options.dependency);
+            if (!updatedManifest) {
+              console.log(
+                clc.redBright.bgBlack.underline("Install failed")
+              );
+              return;
+            }
+            const [depName,] = options.dependency.split("@");
+            console.log(
+              clc.cyanBright.bgBlack.underline(
+                "Successfully installed " +
+                  depName +
+                  "@" +
+                  updatedManifest.imports[depName] +
+                  " to " +
+                  updatedManifest.name +
+                  "!"
+              )
+            );
           },
         });
     },

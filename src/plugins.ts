@@ -1,11 +1,21 @@
-import { getPluginsJsonAsync, vDEVPath, vPluginsPath } from "./filestructure";
+import {
+  existsAsync,
+  getPluginsJsonAsync,
+  getRemoteHostAsync,
+  getUserSessionAsync,
+  vDEVPath,
+  vPluginsPath,
+  vTMPPath,
+} from "./filestructure";
 
 import axios from "axios";
 import path from "path";
 import { DiffElement } from "./versioncontrol";
-import fs from "fs";
+import fs, { createWriteStream } from "fs";
 import { Crypto } from "cryptojs";
-import semver from 'semver';
+import semver from "semver";
+import { broadcastAllDevices } from "./multiplexer";
+import tar from "tar";
 
 export interface PluginElement {
   key: string;
@@ -40,10 +50,12 @@ export interface Manifest {
     | {
         light: string;
         dark: string;
-        selected?: string | {
-          dark?: string;
-          light?: string;
-        };
+        selected?:
+          | string
+          | {
+              dark?: string;
+              light?: string;
+            };
       };
   imports: {
     [name: string]: string;
@@ -89,7 +101,134 @@ export const readDevPluginManifest = async (
   }
 };
 
-// different
+const pullTar = async (
+  name: string,
+  version: string,
+  link: string,
+  hash: string
+): Promise<Manifest | null> => {
+  const downloadPath = path.join(vTMPPath, `${hash}.tar.gz`);
+  const pluginPath = path.join(vPluginsPath, name, version);
+  const didWrite = await axios.get(link);
+  await axios({
+    method: "get",
+    url: link,
+    onDownloadProgress: (progressEvent) => {
+      broadcastAllDevices(
+        `plugin:${name}@${version}:download-progress`,
+        progressEvent
+      );
+    },
+    responseType: "stream",
+  }).then((response) => {
+    const exists = fs.existsSync(downloadPath);
+    if (exists) {
+      return true;
+    }
+    const writer = createWriteStream(downloadPath);
+    return new Promise((resolve) => {
+      response.data.pipe(writer);
+      let error = null;
+      writer.on("error", (err) => {
+        error = err;
+        writer.close();
+        resolve(false);
+      });
+      writer.on("close", () => {
+        if (!error) {
+          resolve(true);
+        }
+      });
+    });
+  });
+  const exists = await existsAsync(pluginPath);
+  if (!exists && didWrite) {
+    await fs.promises.mkdir(pluginPath, { recursive: true});
+    if (process.env.NODE_ENV != "test") {
+      await fs.promises.chmod(pluginPath, 0o755);
+    }
+    await tar.x({
+      file: downloadPath,
+      cwd: pluginPath,
+    });
+  }
+  if (exists && didWrite) {
+    await tar.x({
+      file: downloadPath,
+      cwd: pluginPath,
+    });
+  }
+  const downloadExists = await existsAsync(downloadPath);
+  if (downloadExists) {
+    await fs.promises.rm(downloadPath);
+  }
+  if (didWrite) {
+    const pluginManifestPath = path.join(
+      vPluginsPath,
+      name,
+      version,
+      "floro",
+      "floro.manifest.json"
+    );
+    const manifestString = await fs.promises.readFile(pluginManifestPath);
+    return JSON.parse(manifestString.toString());
+  }
+  return null;
+};
+
+export const downloadPlugin = async (
+  pluginName: string,
+  pluginVersion: string
+): Promise<Manifest | null> => {
+  const remote = await getRemoteHostAsync();
+  const session = await getUserSessionAsync();
+
+  const request = await axios.get(
+    `${remote}/api/plugin/${pluginName}/${pluginVersion}/install`,
+    {
+      headers: {
+        ["session_key"]: session?.clientKey,
+      },
+    }
+  );
+  if (request.status == 200) {
+    const installResponse = request.data;
+    for (const dependency of installResponse.dependencies) {
+      const pluginManifestPath = path.join(
+        vPluginsPath,
+        pluginName,
+        pluginVersion,
+        "floro",
+        "floro.manifest.json"
+      );
+      const existsLocallly = await existsAsync(pluginManifestPath);
+      if (existsLocallly) {
+        continue;
+      }
+      const dependencyManifest = await pullTar(
+        dependency.name,
+        dependency.version,
+        dependency.link,
+        dependency.hash
+      );
+      if (dependencyManifest) {
+        return null;
+      }
+      const stillExistsLocallly = await existsAsync(pluginManifestPath);
+      if (!stillExistsLocallly) {
+          return null;
+      }
+    }
+    return await pullTar(
+      installResponse.name,
+      installResponse.version,
+      installResponse.link,
+      installResponse.hash
+    );
+  }
+  return null;
+};
+
 export const readPluginManifest = async (
   pluginName: string,
   pluginValue: string
@@ -107,8 +246,12 @@ export const readPluginManifest = async (
     "floro",
     "floro.manifest.json"
   );
-  const manifestString = await fs.promises.readFile(pluginManifestPath);
-  return JSON.parse(manifestString.toString());
+  const existsLocallly = await existsAsync(pluginManifestPath);
+  if (existsLocallly) {
+    const manifestString = await fs.promises.readFile(pluginManifestPath);
+    return JSON.parse(manifestString.toString());
+  }
+  return await downloadPlugin(pluginName, pluginValue);
 };
 
 export const getPluginManifest = async (
@@ -130,7 +273,7 @@ export const pluginManifestsAreCompatibleForUpdate = async (
   oldManifest: Manifest,
   newManifest: Manifest,
   pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>
-): Promise<boolean|null> => {
+): Promise<boolean | null> => {
   const oldSchemaMap = await getSchemaMapForManifest(oldManifest, pluginFetch);
   const newSchemaMap = await getSchemaMapForManifest(newManifest, pluginFetch);
   if (!oldSchemaMap) {
@@ -141,19 +284,21 @@ export const pluginManifestsAreCompatibleForUpdate = async (
     return null;
   }
 
-  return Object.keys(newSchemaMap).map(k => newSchemaMap[k]).reduce((isCompatible, newManifest) => {
-    if (!isCompatible) {
-      return false;
-    }
-    if (!oldSchemaMap[newManifest.name]) {
-      return true;
-    }
-    return pluginManifestIsSubsetOfManifest(
-      oldSchemaMap,
-      newSchemaMap,
-      newManifest.name
-    );
-  }, true);
+  return Object.keys(newSchemaMap)
+    .map((k) => newSchemaMap[k])
+    .reduce((isCompatible, newManifest) => {
+      if (!isCompatible) {
+        return false;
+      }
+      if (!oldSchemaMap[newManifest.name]) {
+        return true;
+      }
+      return pluginManifestIsSubsetOfManifest(
+        oldSchemaMap,
+        newSchemaMap,
+        newManifest.name
+      );
+    }, true);
 };
 
 export const getPluginManifests = async (
@@ -238,7 +383,10 @@ export interface DepFetch {
 
 export const getDependenciesForManifest = async (
   manifest: Manifest,
-  pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>,
+  pluginFetch: (
+    pluginName: string,
+    version: string
+  ) => Promise<Manifest | null>,
   seen = {}
 ): Promise<DepFetch> => {
   const deps: Array<Manifest> = [];
@@ -250,17 +398,24 @@ export const getDependenciesForManifest = async (
       };
     }
     try {
-      const pluginManifest = await pluginFetch(pluginName, manifest.imports[pluginName]);
+      const pluginManifest = await pluginFetch(
+        pluginName,
+        manifest.imports[pluginName]
+      );
       if (!pluginManifest) {
         return {
           status: "error",
           reason: `cannot fetch manifest for ${pluginName}`,
         };
       }
-      const depResult = await getDependenciesForManifest(pluginManifest, pluginFetch, {
-        ...seen,
-        [manifest.name]: true,
-      });
+      const depResult = await getDependenciesForManifest(
+        pluginManifest,
+        pluginFetch,
+        {
+          ...seen,
+          [manifest.name]: true,
+        }
+      );
       if (depResult.status == "error") {
         return depResult;
       }
@@ -280,8 +435,11 @@ export const getDependenciesForManifest = async (
 
 export const getUpstreamDependencyManifests = async (
   manifest: Manifest,
-  pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>,
-  memo: {[key: string]: Array<Manifest>} = {}
+  pluginFetch: (
+    pluginName: string,
+    version: string
+  ) => Promise<Manifest | null>,
+  memo: { [key: string]: Array<Manifest> } = {}
 ): Promise<Array<Manifest> | null> => {
   if (memo[manifest.name + "-" + manifest.version]) {
     return memo[manifest.name + "-" + manifest.version];
@@ -316,7 +474,7 @@ export const getUpstreamDependencyManifests = async (
 
 export const coalesceDependencyVersions = (
   deps: Array<Manifest>
-): null|{
+): null | {
   [pluginName: string]: Array<string>;
 } => {
   try {
@@ -357,7 +515,7 @@ export interface VerifyDepsResult {
 
 export const verifyPluginDependencyCompatability = async (
   deps: Array<Manifest>,
-  pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>,
+  pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>
 ): Promise<VerifyDepsResult> => {
   const depsMap = coalesceDependencyVersions(deps);
   if (!depsMap) {
@@ -372,7 +530,9 @@ export const verifyPluginDependencyCompatability = async (
       continue;
     }
     for (let i = 1; i < depsMap[pluginName].length; ++i) {
-      const lastManifest = deps.find(v => v.name == pluginName && v.version == depsMap[pluginName][i - 1]);
+      const lastManifest = deps.find(
+        (v) => v.name == pluginName && v.version == depsMap[pluginName][i - 1]
+      );
       if (!lastManifest) {
         return {
           isValid: false,
@@ -382,7 +542,9 @@ export const verifyPluginDependencyCompatability = async (
           pluginVersion: depsMap[pluginName][i - 1],
         };
       }
-      const nextManifest = deps.find(v => v.name == pluginName && v.version == depsMap[pluginName][i]);
+      const nextManifest = deps.find(
+        (v) => v.name == pluginName && v.version == depsMap[pluginName][i]
+      );
       if (!nextManifest) {
         return {
           isValid: false,
@@ -392,7 +554,10 @@ export const verifyPluginDependencyCompatability = async (
           pluginVersion: depsMap[pluginName][i],
         };
       }
-      const lastDeps = await getDependenciesForManifest(lastManifest, pluginFetch);
+      const lastDeps = await getDependenciesForManifest(
+        lastManifest,
+        pluginFetch
+      );
       if (!lastDeps) {
         return {
           isValid: false,
@@ -402,7 +567,10 @@ export const verifyPluginDependencyCompatability = async (
           pluginVersion: depsMap[pluginName][i - 1],
         };
       }
-      const nextDeps = await getDependenciesForManifest(nextManifest, pluginFetch);
+      const nextDeps = await getDependenciesForManifest(
+        nextManifest,
+        pluginFetch
+      );
       if (!nextDeps) {
         return {
           isValid: false,
@@ -447,7 +615,7 @@ export const verifyPluginDependencyCompatability = async (
 
 export const getSchemaMapForManifest = async (
   manifest: Manifest,
-  pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>,
+  pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>
 ): Promise<{ [key: string]: Manifest } | null> => {
   const deps = await getUpstreamDependencyManifests(manifest, pluginFetch);
   if (!deps) {
@@ -458,10 +626,12 @@ export const getSchemaMapForManifest = async (
     return null;
   }
   const depsMap = coalesceDependencyVersions(deps);
-  const out: {[key: string]: Manifest} = {};
+  const out: { [key: string]: Manifest } = {};
   for (const pluginName in depsMap) {
     const maxVersion = depsMap[pluginName][depsMap[pluginName].length - 1];
-    const depManifest = deps.find((v) => v.name == pluginName && v.version == maxVersion);
+    const depManifest = deps.find(
+      (v) => v.name == pluginName && v.version == maxVersion
+    );
     if (!depManifest) {
       return null;
     }
@@ -523,9 +693,10 @@ export const containsCyclicTypes = (
   return false;
 };
 
-export const validatePluginManifest = async (manifest: Manifest,
+export const validatePluginManifest = async (
+  manifest: Manifest,
   pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>
-  ) => {
+) => {
   try {
     if (containsCyclicTypes(manifest, manifest.store)) {
       return {
@@ -540,7 +711,10 @@ export const validatePluginManifest = async (manifest: Manifest,
         message: "failed to get upstream dependencies.",
       };
     }
-    const areValid = await verifyPluginDependencyCompatability(deps, pluginFetch);
+    const areValid = await verifyPluginDependencyCompatability(
+      deps,
+      pluginFetch
+    );
     if (!areValid.isValid) {
       if (areValid.reason == "dep_fetch") {
         return {
@@ -560,8 +734,8 @@ export const validatePluginManifest = async (manifest: Manifest,
     if (!schemaMap) {
       return {
         status: "error",
-        message: "failed to construct schema map"
-      }
+        message: "failed to construct schema map",
+      };
     }
     const expandedTypes = getExpandedTypesForPlugin(schemaMap, manifest.name);
     const rootSchemaMap = getRootSchemaMap(schemaMap);

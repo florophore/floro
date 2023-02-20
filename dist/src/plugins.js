@@ -1,15 +1,40 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.drawGetPluginStore = exports.drawGetReferencedObject = exports.drawRefReturnTypes = exports.drawSchemaRoot = exports.drawMakeQueryRef = exports.buildPointerArgsMap = exports.buildPointerReturnTypeMap = exports.typestructsAreEquivalent = exports.replaceRawRefsInExpandedType = exports.replaceRefVarsWithWildcards = exports.collectKeyRefs = exports.invalidSchemaPropsCheck = exports.isSchemaValid = exports.isTopologicalSubsetValid = exports.isTopologicalSubset = exports.pluginManifestIsSubsetOfManifest = exports.validatePluginState = exports.cascadePluginState = exports.getKVStateForPlugin = exports.getRootSchemaMap = exports.getRootSchemaForPlugin = exports.getExpandedTypesForPlugin = exports.getStateFromKVForPlugin = exports.buildObjectsAtPath = exports.indexArrayDuplicates = exports.flattenStateToSchemaPathKV = exports.getStateId = exports.decodeSchemaPath = exports.writePathString = exports.defaultVoidedState = exports.validatePluginManifest = exports.containsCyclicTypes = exports.getSchemaMapForManifest = exports.verifyPluginDependencyCompatability = exports.coalesceDependencyVersions = exports.getUpstreamDependencyManifests = exports.getDependenciesForManifest = exports.hasPluginManifest = exports.hasPlugin = exports.manifestListToSchemaMap = exports.pluginMapToList = exports.pluginListToMap = exports.getPluginManifests = exports.pluginManifestsAreCompatibleForUpdate = exports.getPluginManifest = exports.readPluginManifest = exports.readDevPluginManifest = void 0;
+exports.drawGetPluginStore = exports.drawGetReferencedObject = exports.drawRefReturnTypes = exports.drawSchemaRoot = exports.drawMakeQueryRef = exports.buildPointerArgsMap = exports.buildPointerReturnTypeMap = exports.typestructsAreEquivalent = exports.replaceRawRefsInExpandedType = exports.replaceRefVarsWithWildcards = exports.collectKeyRefs = exports.invalidSchemaPropsCheck = exports.isSchemaValid = exports.isTopologicalSubsetValid = exports.isTopologicalSubset = exports.pluginManifestIsSubsetOfManifest = exports.validatePluginState = exports.cascadePluginState = exports.getKVStateForPlugin = exports.getRootSchemaMap = exports.getRootSchemaForPlugin = exports.getExpandedTypesForPlugin = exports.getStateFromKVForPlugin = exports.buildObjectsAtPath = exports.indexArrayDuplicates = exports.flattenStateToSchemaPathKV = exports.getStateId = exports.decodeSchemaPath = exports.writePathString = exports.defaultVoidedState = exports.validatePluginManifest = exports.containsCyclicTypes = exports.getSchemaMapForManifest = exports.verifyPluginDependencyCompatability = exports.coalesceDependencyVersions = exports.getUpstreamDependencyManifests = exports.getDependenciesForManifest = exports.hasPluginManifest = exports.hasPlugin = exports.manifestListToSchemaMap = exports.pluginMapToList = exports.pluginListToMap = exports.getPluginManifests = exports.pluginManifestsAreCompatibleForUpdate = exports.getPluginManifest = exports.readPluginManifest = exports.downloadPlugin = exports.readDevPluginManifest = void 0;
 const filestructure_1 = require("./filestructure");
 const axios_1 = __importDefault(require("axios"));
 const path_1 = __importDefault(require("path"));
-const fs_1 = __importDefault(require("fs"));
+const fs_1 = __importStar(require("fs"));
 const cryptojs_1 = require("cryptojs");
 const semver_1 = __importDefault(require("semver"));
+const multiplexer_1 = require("./multiplexer");
+const tar_1 = __importDefault(require("tar"));
 const primitives = new Set(["int", "float", "boolean", "string"]);
 const readDevPluginManifest = async (pluginName, pluginVersion) => {
     const pluginsJSON = await (0, filestructure_1.getPluginsJsonAsync)();
@@ -37,7 +62,96 @@ const readDevPluginManifest = async (pluginName, pluginVersion) => {
     }
 };
 exports.readDevPluginManifest = readDevPluginManifest;
-// different
+const pullTar = async (name, version, link, hash) => {
+    const downloadPath = path_1.default.join(filestructure_1.vTMPPath, `${hash}.tar.gz`);
+    const pluginPath = path_1.default.join(filestructure_1.vPluginsPath, name, version);
+    const didWrite = await axios_1.default.get(link);
+    await (0, axios_1.default)({
+        method: "get",
+        url: link,
+        onDownloadProgress: (progressEvent) => {
+            (0, multiplexer_1.broadcastAllDevices)(`plugin:${name}@${version}:download-progress`, progressEvent);
+        },
+        responseType: "stream",
+    }).then((response) => {
+        const exists = fs_1.default.existsSync(downloadPath);
+        if (exists) {
+            return true;
+        }
+        const writer = (0, fs_1.createWriteStream)(downloadPath);
+        return new Promise((resolve) => {
+            response.data.pipe(writer);
+            let error = null;
+            writer.on("error", (err) => {
+                error = err;
+                writer.close();
+                resolve(false);
+            });
+            writer.on("close", () => {
+                if (!error) {
+                    resolve(true);
+                }
+            });
+        });
+    });
+    const exists = await (0, filestructure_1.existsAsync)(pluginPath);
+    if (!exists && didWrite) {
+        await fs_1.default.promises.mkdir(pluginPath, { recursive: true });
+        if (process.env.NODE_ENV != "test") {
+            await fs_1.default.promises.chmod(pluginPath, 0o755);
+        }
+        await tar_1.default.x({
+            file: downloadPath,
+            cwd: pluginPath,
+        });
+    }
+    if (exists && didWrite) {
+        await tar_1.default.x({
+            file: downloadPath,
+            cwd: pluginPath,
+        });
+    }
+    const downloadExists = await (0, filestructure_1.existsAsync)(downloadPath);
+    if (downloadExists) {
+        await fs_1.default.promises.rm(downloadPath);
+    }
+    if (didWrite) {
+        const pluginManifestPath = path_1.default.join(filestructure_1.vPluginsPath, name, version, "floro", "floro.manifest.json");
+        const manifestString = await fs_1.default.promises.readFile(pluginManifestPath);
+        return JSON.parse(manifestString.toString());
+    }
+    return null;
+};
+const downloadPlugin = async (pluginName, pluginVersion) => {
+    const remote = await (0, filestructure_1.getRemoteHostAsync)();
+    const session = await (0, filestructure_1.getUserSessionAsync)();
+    const request = await axios_1.default.get(`${remote}/api/plugin/${pluginName}/${pluginVersion}/install`, {
+        headers: {
+            ["session_key"]: session?.clientKey,
+        },
+    });
+    if (request.status == 200) {
+        const installResponse = request.data;
+        for (const dependency of installResponse.dependencies) {
+            const pluginManifestPath = path_1.default.join(filestructure_1.vPluginsPath, pluginName, pluginVersion, "floro", "floro.manifest.json");
+            const existsLocallly = await (0, filestructure_1.existsAsync)(pluginManifestPath);
+            if (existsLocallly) {
+                continue;
+            }
+            const dependencyManifest = await pullTar(dependency.name, dependency.version, dependency.link, dependency.hash);
+            if (dependencyManifest) {
+                return null;
+            }
+            const stillExistsLocallly = await (0, filestructure_1.existsAsync)(pluginManifestPath);
+            if (!stillExistsLocallly) {
+                return null;
+            }
+        }
+        return await pullTar(installResponse.name, installResponse.version, installResponse.link, installResponse.hash);
+    }
+    return null;
+};
+exports.downloadPlugin = downloadPlugin;
 const readPluginManifest = async (pluginName, pluginValue) => {
     if (pluginValue.startsWith("dev")) {
         return await (0, exports.readDevPluginManifest)(pluginName, pluginValue);
@@ -46,8 +160,12 @@ const readPluginManifest = async (pluginName, pluginValue) => {
         return null;
     }
     const pluginManifestPath = path_1.default.join(filestructure_1.vPluginsPath, pluginName, pluginValue, "floro", "floro.manifest.json");
-    const manifestString = await fs_1.default.promises.readFile(pluginManifestPath);
-    return JSON.parse(manifestString.toString());
+    const existsLocallly = await (0, filestructure_1.existsAsync)(pluginManifestPath);
+    if (existsLocallly) {
+        const manifestString = await fs_1.default.promises.readFile(pluginManifestPath);
+        return JSON.parse(manifestString.toString());
+    }
+    return await (0, exports.downloadPlugin)(pluginName, pluginValue);
 };
 exports.readPluginManifest = readPluginManifest;
 const getPluginManifest = async (pluginName, plugins, pluginFetch) => {
@@ -70,7 +188,9 @@ const pluginManifestsAreCompatibleForUpdate = async (oldManifest, newManifest, p
     if (!newSchemaMap) {
         return null;
     }
-    return Object.keys(newSchemaMap).map(k => newSchemaMap[k]).reduce((isCompatible, newManifest) => {
+    return Object.keys(newSchemaMap)
+        .map((k) => newSchemaMap[k])
+        .reduce((isCompatible, newManifest) => {
         if (!isCompatible) {
             return false;
         }
@@ -241,7 +361,7 @@ const verifyPluginDependencyCompatability = async (deps, pluginFetch) => {
             continue;
         }
         for (let i = 1; i < depsMap[pluginName].length; ++i) {
-            const lastManifest = deps.find(v => v.name == pluginName && v.version == depsMap[pluginName][i - 1]);
+            const lastManifest = deps.find((v) => v.name == pluginName && v.version == depsMap[pluginName][i - 1]);
             if (!lastManifest) {
                 return {
                     isValid: false,
@@ -251,7 +371,7 @@ const verifyPluginDependencyCompatability = async (deps, pluginFetch) => {
                     pluginVersion: depsMap[pluginName][i - 1],
                 };
             }
-            const nextManifest = deps.find(v => v.name == pluginName && v.version == depsMap[pluginName][i]);
+            const nextManifest = deps.find((v) => v.name == pluginName && v.version == depsMap[pluginName][i]);
             if (!nextManifest) {
                 return {
                     isValid: false,
@@ -400,7 +520,7 @@ const validatePluginManifest = async (manifest, pluginFetch) => {
         if (!schemaMap) {
             return {
                 status: "error",
-                message: "failed to construct schema map"
+                message: "failed to construct schema map",
             };
         }
         const expandedTypes = (0, exports.getExpandedTypesForPlugin)(schemaMap, manifest.name);

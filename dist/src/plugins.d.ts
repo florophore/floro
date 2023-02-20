@@ -39,6 +39,7 @@ export interface Manifest {
     store: TypeStruct;
 }
 export declare const readDevPluginManifest: (pluginName: string, pluginVersion: string) => Promise<Manifest | null>;
+export declare const downloadPlugin: (pluginName: string, pluginVersion: string) => Promise<Manifest | null>;
 export declare const readPluginManifest: (pluginName: string, pluginValue: string) => Promise<Manifest | null>;
 export declare const getPluginManifest: (pluginName: string, plugins: Array<PluginElement>, pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>) => Promise<Manifest | null>;
 export declare const pluginManifestsAreCompatibleForUpdate: (oldManifest: Manifest, newManifest: Manifest, pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>) => Promise<boolean | null>;

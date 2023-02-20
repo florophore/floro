@@ -33,6 +33,9 @@ import {
   drawGetReferencedObject,
   drawGetPluginStore,
   verifyPluginDependencyCompatability,
+  getUpstreamDependencyManifests,
+  pluginManifestsAreCompatibleForUpdate,
+  readPluginManifest,
 } from "./plugins";
 import clc from "cli-color";
 import semver from "semver";
@@ -242,6 +245,101 @@ export const exportPluginToDev = async (cwd: string) => {
     return false;
   }
 };
+
+export const installDependency = async (
+  cwd: string,
+  depname: string
+): Promise<Manifest|null> => {
+    const floroManifestPath = path.join(cwd, "floro", "floro.manifest.json");
+    const floroManifestString = await fs.promises.readFile(floroManifestPath);
+    const manifest = JSON.parse(floroManifestString.toString());
+    const [pluginName, version] = depname.split("@");
+    let depManifest: Manifest|undefined;
+    const remote = await getRemoteHostAsync();
+    const session = await getUserSessionAsync();
+    const manifestRequest = await axios.get(
+      `${remote}/api/plugin/${pluginName}/${version ?? "last"}/manifest`,
+      {
+        headers: {
+          ["session_key"]: session?.clientKey,
+        },
+      }
+    );
+    if (manifestRequest.status == 403) {
+      console.log(
+        clc.redBright.bgBlack.underline("Forbidden access to " + depname)
+      );
+      return null;
+    }
+    if (manifestRequest.status == 404) {
+      console.log(clc.redBright.bgBlack.underline("Could not find " + depname));
+      return null;
+    }
+    if (manifestRequest.status == 200) {
+      depManifest = manifestRequest.data;
+    }
+    if (!depManifest) {
+      return null;
+    }
+    const dependencyManifests = await getUpstreamDependencyManifests(
+      depManifest,
+      async (pluginName, version) => {
+        const localCopy = await readPluginManifest(pluginName, version);
+        if (localCopy) {
+          return localCopy;
+        }
+        const request = await axios.get(
+          `${remote}/api/plugin/${pluginName}/${version}/manifest`,
+          {
+            headers: {
+              ["session_key"]: session?.clientKey,
+            },
+          }
+        );
+        if (request.status == 200) {
+          return request.data;
+        }
+        return null;
+      }
+    );
+    if (!dependencyManifests) {
+      console.log(clc.redBright.bgBlack.underline("Failed to fetch deps for " + depname));
+      return null;
+    }
+    const proposedManifest = { ...manifest, imports: { ...manifest.imports } };
+    for (const upstreamManifest of dependencyManifests) {
+      proposedManifest.imports[upstreamManifest.name] = upstreamManifest.version;
+    }
+    const areCompatible = await pluginManifestsAreCompatibleForUpdate(
+      manifest,
+      proposedManifest,
+      readPluginManifest
+    );
+    if (!areCompatible) {
+      console.log(
+        clc.redBright.bgBlack.underline(
+          depname +
+            "is incompatible with other dependencies. Please specifiy a different version or remove conflicting dependencies."
+        )
+      );
+      return null;
+    }
+    const imports = [...Object.keys(manifest.imports), depManifest.name].sort().reduce((acc, pluginName) => {
+      if (pluginName == depManifest.name) {
+        return {
+          ...acc,
+          [pluginName]: depManifest.version
+        }
+      }
+      return {
+        ...acc,
+        [pluginName]: manifest.imports[pluginName]
+      }
+    }, {})
+    manifest.imports = imports;
+    await fs.promises.writeFile(floroManifestPath, JSON.stringify(manifest, null, 2), 'utf-8');
+    return manifest;
+}
 
 export const tarCreationPlugin = async (
   cwd: string

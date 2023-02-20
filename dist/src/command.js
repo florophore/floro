@@ -132,17 +132,44 @@ yargs_1.default
             },
         })
             .command({
-            command: "pull",
+            command: "pull-deps",
             describe: "Installs dependies from floro.manifest.json",
             handler: () => {
                 console.log("Handle deps");
             },
         })
             .command({
-            command: "install",
+            command: "install [dependency]",
             describe: "Installs remote dependency and saves into floro.manifest.json",
-            handler: () => {
-                console.log("Handle install");
+            builder: yargs => {
+                return yargs.positional('dependency', {
+                    type: 'string'
+                });
+            },
+            handler: async (options) => {
+                if (!options.dependency) {
+                    console.log(cli_color_1.default.redBright.bgBlack.underline("No dependency specified"));
+                    return;
+                }
+                const isValidCWD = await (0, plugincreator_1.checkDirectoryIsPluginWorkingDirectory)(process.cwd());
+                if (!isValidCWD) {
+                    console.log(cli_color_1.default.redBright.bgBlack.underline("Invalid working directory: " + process.cwd()));
+                    console.log(cli_color_1.default.redBright.bgBlack.underline("Please try again from your floro plugin's root directory."));
+                    return;
+                }
+                const updatedManifest = await (0, plugincreator_1.installDependency)(process.cwd(), options.dependency);
+                if (!updatedManifest) {
+                    console.log(cli_color_1.default.redBright.bgBlack.underline("Install failed"));
+                    return;
+                }
+                const [depName,] = options.dependency.split("@");
+                console.log(cli_color_1.default.cyanBright.bgBlack.underline("Successfully installed " +
+                    depName +
+                    "@" +
+                    updatedManifest.imports[depName] +
+                    " to " +
+                    updatedManifest.name +
+                    "!"));
             },
         });
     },

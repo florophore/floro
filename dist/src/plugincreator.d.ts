@@ -5,6 +5,7 @@ export declare const buildFloroTemplate: (cwd: string, name: string) => Promise<
 export declare const isCreationDistDirectoryValid: (cwd: string) => Promise<boolean>;
 export declare const canExportPlugin: (cwd: string) => Promise<boolean>;
 export declare const exportPluginToDev: (cwd: string) => Promise<boolean>;
+export declare const installDependency: (cwd: string, depname: string) => Promise<Manifest | null>;
 export declare const tarCreationPlugin: (cwd: string) => Promise<null | string>;
 export declare const uploadPluginTar: (tarPath: string) => Promise<void>;
 export interface DepFetch {
