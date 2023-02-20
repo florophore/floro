@@ -1,0 +1,17 @@
+{
+  "version": "0.0.0",
+  "name": "theme",
+  "displayName": "Theme",
+  "description": "Will add later.",
+  "icon": {
+    "light": "./plugin_default.unselected.light.svg",
+    "dark": "./plugin_default.unselected.dark.svg",
+    "selected": {
+      "light": "./plugin_default.selected.light.svg",
+      "dark": "./plugin_default.selected.dark.svg"
+    }
+  },
+  "imports": {},
+  "types": {},
+  "store": {}
+}

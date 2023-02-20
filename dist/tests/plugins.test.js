@@ -24,7 +24,7 @@ describe("plugins", () => {
                     key: "simple",
                     value: "dev@0.0.0",
                 },
-            ]);
+            ], plugins_1.readPluginManifest);
             expect(manifest).toEqual(pluginmocks_1.SIMPLE_PLUGIN_MANIFEST);
         });
         test("returns non-dev manifest", async () => {
@@ -34,7 +34,7 @@ describe("plugins", () => {
                     key: "simple",
                     value: "0.0.0",
                 },
-            ]);
+            ], plugins_1.readPluginManifest);
             expect(manifest).toEqual(pluginmocks_1.SIMPLE_PLUGIN_MANIFEST);
         });
     });
@@ -154,7 +154,7 @@ describe("plugins", () => {
                 ],
             });
         });
-        test.only("can handle references that are key types", () => {
+        test("can handle references that are key types", () => {
             const PLUGIN_A_MANIFEST = {
                 name: "A",
                 version: "0.0.0",

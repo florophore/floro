@@ -145,6 +145,7 @@ describe("repoapi", () => {
                 }
             ];
             const result = await (0, repoapi_1.updatePlugins)("abc", plugins);
+            // need to finish this
             console.log(JSON.stringify(result, null, 2));
         });
     });

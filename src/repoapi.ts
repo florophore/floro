@@ -37,15 +37,14 @@ import {
   getTextDiff,
 } from "./versioncontrol";
 import {
-  constructDependencySchema,
   getStateFromKVForPlugin,
   getKVStateForPlugin,
   getPluginManifest,
   getRootSchemaForPlugin,
-  getUpstreamDependencyList,
   hasPlugin,
   PluginElement,
   pluginManifestsAreCompatibleForUpdate,
+  readPluginManifest,
 } from "./plugins";
 import { LicenseCodes } from "./licensecodes";
 
@@ -143,7 +142,7 @@ export const readRepoLicenses = async (repoId?: string): Promise<Array<{key: str
   } catch (e) {
     return null;
   }
-} 
+}
 
 export const readRepoDescription = async (repoId?: string) => {
     if (!repoId) {
@@ -510,7 +509,7 @@ export const writeRepoCommit = async (repoId?: string, message?: string) => {
       return null;
     }
     if (currentState.branch) {
-      const branchState = await getLocalBranch(repoId, currentState.branch); 
+      const branchState = await getLocalBranch(repoId, currentState.branch);
       if (!branchState) {
         return null;
       }
@@ -597,44 +596,44 @@ export const updatePlugins = async (repoId?: string, plugins?: Array<PluginEleme
     // fetch upstream plugins
     // TODO: check each plugin is present in floro
     // TODO COME BACK HERE
-    const unstagedState = await getUnstagedCommitState(repoId);
-    const pluginsToUpdate = getPluginsToRunUpdatesOn(unstagedState.plugins, plugins);
-    // TODO: IMMEDIATELY, update this
-    console.log("er", pluginsToUpdate);
-    const pluginsDiff = getDiff(unstagedState.plugins, plugins);
-    const nextPluginState = applyDiff(pluginsDiff, unstagedState.plugins);
-    // attempt download
-    const areCompatible = await pluginManifestsAreCompatibleForUpdate(unstagedState.plugins, nextPluginState); 
-    if (!areCompatible) {
-      return null;
-    }
-    //const nextPluginSchemaMap = getPlugin 
-    const pluginAdditions = [];
-    for (let plugin of nextPluginState) {
-      if (!hasPlugin(plugin.key, unstagedState.plugins)) {
-        //const initState = getKVStateForPlugin()
-        pluginAdditions.push({
-          namespace: "store",
-          pluginName: plugin.key,
-          diff: {
-            add: {},
-            remove: {},
-          },
-        });
-      }
-    }
+    //const unstagedState = await getUnstagedCommitState(repoId);
+    //const pluginsToUpdate = getPluginsToRunUpdatesOn(unstagedState.plugins, plugins);
+    //// TODO: IMMEDIATELY, update this
+    //console.log("er", pluginsToUpdate);
+    //const pluginsDiff = getDiff(unstagedState.plugins, plugins);
+    //const nextPluginState = applyDiff(pluginsDiff, unstagedState.plugins);
+    //// attempt download
+    //const areCompatible = await pluginManifestsAreCompatibleForUpdate(unstagedState.plugins, nextPluginState, readPluginManifest);
+    //if (!areCompatible) {
+    //  return null;
+    //}
+    ////const nextPluginSchemaMap = getPlugin
+    //const pluginAdditions = [];
+    //for (let plugin of nextPluginState) {
+    //  if (!hasPlugin(plugin.key, unstagedState.plugins)) {
+    //    //const initState = getKVStateForPlugin()
+    //    pluginAdditions.push({
+    //      namespace: "store",
+    //      pluginName: plugin.key,
+    //      diff: {
+    //        add: {},
+    //        remove: {},
+    //      },
+    //    });
+    //  }
+    //}
 
     // TRANSFORM store and binaries
     // run migrations
     //const state = await saveDiffToCurrent(repoId, pluginsDiff, 'plugins');
-    const state = await saveDiffListToCurrent(repoId, [
-      {
-        diff: pluginsDiff,
-        namespace: "plugins",
-      },
-      ...pluginAdditions,
-    ]);
-    return state;
+    //const state = await saveDiffListToCurrent(repoId, [
+    //  {
+    //    diff: pluginsDiff,
+    //    namespace: "plugins",
+    //  },
+    //  ...pluginAdditions,
+    //]);
+    //return state;
   } catch (e) {
     return null;
   }
@@ -663,17 +662,19 @@ export const updatePluginState = async (repoId?: string, pluginName?: string, up
     // TODO MOVE THIS LOGIC TO HANDLE DOWNSTREAM
     const manifest = await getPluginManifest(
       pluginName,
-      current?.plugins ?? []
+      current?.plugins ?? [],
+      readPluginManifest
     );
     if (manifest == null) {
       return null;
     }
-    const upstreamDependencies = await getUpstreamDependencyList(
-      pluginName,
-      manifest,
-      current?.plugins ?? []
-    );
-    const upsteamSchema = await constructDependencySchema(upstreamDependencies);
+    //const upstreamDependencies = await getUpstreamDependencyList(
+    //  pluginName,
+    //  manifest,
+    //  current?.plugins ?? [],
+    //  readPluginManifest
+    //);
+    //const upsteamSchema = await constructDependencySchema(upstreamDependencies, readPluginManifest);
     // TOOD: FIX THIS
     // COME BACK
     //const rootSchema = getRootSchemaForPlugin(

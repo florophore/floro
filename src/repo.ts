@@ -11,7 +11,7 @@ import {
   vTMPPath,
 } from "./filestructure";
 import { broadcastAllDevices } from "./multiplexer";
-import { getPluginManifest, getStateFromKVForPlugin, PluginElement } from "./plugins";
+import { getPluginManifest, getStateFromKVForPlugin, PluginElement, readPluginManifest } from "./plugins";
 import { applyDiff, CommitData, Diff, TextDiff } from "./versioncontrol";
 
 export interface RawStore {
@@ -55,7 +55,7 @@ export interface Branch {
 export interface CommitHistory {
   sha: null|string;
   message: string;
-} 
+}
 
 const EMPTY_COMMIT_STATE: CommitState = {
   description: [],
@@ -482,7 +482,7 @@ export const saveDiffListToCurrent = async (
 };
 
 /**
- * 
+ *
  * use when committing gainst branch or sha
  */
 export const updateCurrentCommitSHA = async (repoId: string, sha: string): Promise<State|null> => {
@@ -506,7 +506,7 @@ export const updateCurrentCommitSHA = async (repoId: string, sha: string): Promi
 };
 
 /**
- * 
+ *
  * use when HEAD is detached
  */
 
@@ -600,7 +600,7 @@ export const buildStateStore = async (
   for (let pluginName in state.store) {
     if (pluginsMap[pluginName]) {
       const kv = state?.store?.[pluginName] ?? [];
-      const manifest = await getPluginManifest(pluginName, state?.plugins ?? []);
+      const manifest = await getPluginManifest(pluginName, state?.plugins ?? [], readPluginManifest);
       const pluginState = getStateFromKVForPlugin(pluginsMap, kv, pluginName);
       out[pluginName] = pluginState;
     }

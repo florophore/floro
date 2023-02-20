@@ -82,5 +82,5 @@ export declare const readBranchState: (repoId?: string, branchName?: string) => 
 export declare const writeRepoCommit: (repoId?: string, message?: string) => Promise<CommitData>;
 export declare const checkoutBranch: (repoId?: string, branchName?: string) => Promise<import("./repo").State>;
 export declare const checkoutSha: (repoId?: string, sha?: string) => Promise<import("./repo").State>;
-export declare const updatePlugins: (repoId?: string, plugins?: Array<PluginElement>) => Promise<import("./repo").State>;
+export declare const updatePlugins: (repoId?: string, plugins?: Array<PluginElement>) => Promise<any>;
 export declare const updatePluginState: (repoId?: string, pluginName?: string, updateState?: unknown) => Promise<any>;

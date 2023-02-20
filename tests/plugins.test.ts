@@ -1,6 +1,7 @@
 import { fs, vol } from "memfs";
 import { buildFloroFilestructure, userHome } from "../src/filestructure";
 import {
+  readPluginManifest,
   getStateFromKVForPlugin,
   getPluginManifest,
   getRootSchemaMap,
@@ -36,7 +37,7 @@ describe("plugins", () => {
           key: "simple",
           value: "dev@0.0.0",
         },
-      ]);
+      ], readPluginManifest);
       expect(manifest).toEqual(SIMPLE_PLUGIN_MANIFEST);
     });
 
@@ -47,7 +48,7 @@ describe("plugins", () => {
           key: "simple",
           value: "0.0.0",
         },
-      ]);
+      ], readPluginManifest);
       expect(manifest).toEqual(SIMPLE_PLUGIN_MANIFEST);
     });
   });
@@ -182,7 +183,7 @@ describe("plugins", () => {
       });
     });
 
-    test.only("can handle references that are key types", () => {
+    test("can handle references that are key types", () => {
       const PLUGIN_A_MANIFEST: Manifest = {
         name: "A",
         version: "0.0.0",

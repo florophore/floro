@@ -14,7 +14,7 @@ export declare const userSessionPath: string;
 export declare const userPath: string;
 export declare const buildFloroFilestructure: () => void;
 export declare const clean: () => void;
-export declare const reset: () => void;
+export declare const reset: () => Promise<void>;
 export declare const writeUserSession: (session: any) => Promise<void>;
 export declare const removeUserSession: () => Promise<void>;
 export declare const getUserSession: () => any;
@@ -46,5 +46,11 @@ export declare const getPluginsJsonAsync: () => Promise<{
         };
     };
 }>;
+export declare const writePluginsJsonAsync: (plugins: {
+    [key: string]: {
+        proxy?: boolean;
+        host?: string;
+    };
+}) => Promise<void>;
 export declare const getRemoteHostSync: () => string;
 export declare const getRemoteHostAsync: () => Promise<string>;

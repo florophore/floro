@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getRemoteHostAsync = exports.getRemoteHostSync = exports.getPluginsJsonAsync = exports.getPluginsJson = exports.copyDirectory = exports.existsAsync = exports.getUserAsync = exports.getUser = exports.removeUser = exports.writeUser = exports.getUserSessionAsync = exports.getUserSession = exports.removeUserSession = exports.writeUserSession = exports.reset = exports.clean = exports.buildFloroFilestructure = exports.userPath = exports.userSessionPath = exports.vConfigPluginsPath = exports.vConfigRemotePath = exports.vConfigCORSPath = exports.vDEVPath = exports.vTMPPath = exports.vPluginsPath = exports.vReposPath = exports.vUserPath = exports.vCachePath = exports.vConfigPath = exports.homePath = exports.userHome = void 0;
+exports.getRemoteHostAsync = exports.getRemoteHostSync = exports.writePluginsJsonAsync = exports.getPluginsJsonAsync = exports.getPluginsJson = exports.copyDirectory = exports.existsAsync = exports.getUserAsync = exports.getUser = exports.removeUser = exports.writeUser = exports.getUserSessionAsync = exports.getUserSession = exports.removeUserSession = exports.writeUserSession = exports.reset = exports.clean = exports.buildFloroFilestructure = exports.userPath = exports.userSessionPath = exports.vConfigPluginsPath = exports.vConfigRemotePath = exports.vConfigCORSPath = exports.vDEVPath = exports.vTMPPath = exports.vPluginsPath = exports.vReposPath = exports.vUserPath = exports.vCachePath = exports.vConfigPath = exports.homePath = exports.userHome = void 0;
 const path_1 = __importDefault(require("path"));
 const os_1 = __importDefault(require("os"));
 const fs_1 = __importDefault(require("fs"));
@@ -120,7 +120,7 @@ exports.buildFloroFilestructure = buildFloroFilestructure;
 const clean = () => {
 };
 exports.clean = clean;
-const reset = () => {
+const reset = async () => {
     // FILES
     // ~/.floro/config/cors.txt
     writeDefaultFiles(true);
@@ -223,6 +223,17 @@ const getPluginsJsonAsync = async () => {
     }
 };
 exports.getPluginsJsonAsync = getPluginsJsonAsync;
+const writePluginsJsonAsync = async (plugins) => {
+    try {
+        const str = JSON.stringify(plugins, null, 2);
+        await fs_1.default.promises.writeFile(exports.vConfigPluginsPath, str);
+        return;
+    }
+    catch (e) {
+        return;
+    }
+};
+exports.writePluginsJsonAsync = writePluginsJsonAsync;
 const getRemoteHostSync = () => {
     try {
         const remoteHostTxt = fs_1.default.readFileSync(exports.vConfigRemotePath);

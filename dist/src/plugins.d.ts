@@ -21,9 +21,16 @@ export interface Manifest {
     version: string;
     name: string;
     displayName: string;
+    description?: string;
+    codeDocsUrl?: string;
+    codeRepoUrl?: string;
     icon: string | {
         light: string;
         dark: string;
+        selected?: string | {
+            dark?: string;
+            light?: string;
+        };
     };
     imports: {
         [name: string]: string;
@@ -32,9 +39,10 @@ export interface Manifest {
     store: TypeStruct;
 }
 export declare const readDevPluginManifest: (pluginName: string, pluginVersion: string) => Promise<Manifest | null>;
-export declare const getPluginManifest: (pluginName: string, plugins: Array<PluginElement>) => Promise<Manifest | null>;
-export declare const pluginManifestsAreCompatibleForUpdate: (oldPluginList: Array<PluginElement>, newPluginList: Array<PluginElement>) => Promise<boolean>;
-export declare const getPluginManifests: (pluginList: Array<PluginElement>) => Promise<Array<Manifest>>;
+export declare const readPluginManifest: (pluginName: string, pluginValue: string) => Promise<Manifest | null>;
+export declare const getPluginManifest: (pluginName: string, plugins: Array<PluginElement>, pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>) => Promise<Manifest | null>;
+export declare const pluginManifestsAreCompatibleForUpdate: (oldManifest: Manifest, newManifest: Manifest, pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>) => Promise<boolean | null>;
+export declare const getPluginManifests: (pluginList: Array<PluginElement>, pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>) => Promise<Array<Manifest>>;
 export declare const pluginListToMap: (pluginList: Array<PluginElement>) => {
     [pluginName: string]: string;
 };
@@ -45,9 +53,37 @@ export declare const manifestListToSchemaMap: (manifestList: Array<Manifest>) =>
     [pluginName: string]: Manifest;
 };
 export declare const hasPlugin: (pluginName: string, plugins: Array<PluginElement>) => boolean;
-export declare const getMissingUpstreamDependencies: (pluginName: string, manifest: Manifest, plugins: Array<PluginElement>) => Promise<Array<PluginElement>>;
-export declare const getUpstreamDependencyList: (pluginName: string, manifest: Manifest, plugins: Array<PluginElement>) => Promise<Array<PluginElement> | null>;
+export declare const hasPluginManifest: (manifest: Manifest, manifests: Array<Manifest>) => boolean;
+export interface DepFetch {
+    status: "ok" | "error";
+    reason?: string;
+    deps?: Array<Manifest>;
+}
+export declare const getDependenciesForManifest: (manifest: Manifest, pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>, seen?: {}) => Promise<DepFetch>;
+export declare const getUpstreamDependencyManifests: (manifest: Manifest, pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>, memo?: {
+    [key: string]: Manifest[];
+}) => Promise<Array<Manifest> | null>;
+export declare const coalesceDependencyVersions: (deps: Array<Manifest>) => {
+    [pluginName: string]: string[];
+};
+export interface VerifyDepsResult {
+    isValid: boolean;
+    status: "ok" | "error";
+    reason?: string;
+    pluginName?: string;
+    pluginVersion?: string;
+    lastVersion?: string;
+    nextVersion?: string;
+}
+export declare const verifyPluginDependencyCompatability: (deps: Array<Manifest>, pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>) => Promise<VerifyDepsResult>;
+export declare const getSchemaMapForManifest: (manifest: Manifest, pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>) => Promise<{
+    [key: string]: Manifest;
+}>;
 export declare const containsCyclicTypes: (schema: Manifest, struct: TypeStruct, visited?: {}) => boolean;
+export declare const validatePluginManifest: (manifest: Manifest, pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>) => Promise<SchemaValidationResponse | {
+    status: string;
+    message: any;
+}>;
 export declare const defaultVoidedState: (schemaMap: {
     [key: string]: Manifest;
 }, stateMap: {
@@ -55,15 +91,15 @@ export declare const defaultVoidedState: (schemaMap: {
 }) => any[];
 export declare const writePathString: (pathParts: Array<DiffElement | string>) => string;
 export declare const decodeSchemaPath: (pathString: string) => Array<DiffElement | string>;
-export declare const getStateId: (schema: TypeStruct, state: object) => any;
-export declare const flattenStateToSchemaPathKV: (schemaRoot: Manifest, state: object, traversalPath: Array<string>) => Array<DiffElement>;
+export declare const getStateId: (schema: TypeStruct, state: object) => string;
+export declare const flattenStateToSchemaPathKV: (schemaRoot: Manifest, state: object, traversalPath: Array<string | DiffElement>) => {
+    key: string | Array<string | DiffElement>;
+    value: unknown;
+}[];
 export declare const indexArrayDuplicates: (kvs: Array<DiffElement>) => Array<DiffElement>;
 export declare const buildObjectsAtPath: (rootSchema: Manifest, path: string, properties: {
     [key: string]: string | number | boolean;
 }, out?: {}) => object;
-export declare const constructDependencySchema: (plugins: Array<PluginElement>) => Promise<{
-    [key: string]: Manifest;
-}>;
 export declare const getStateFromKVForPlugin: (schemaMap: {
     [key: string]: Manifest;
 }, kv: Array<DiffElement>, pluginName: string) => object;
@@ -138,7 +174,10 @@ export declare const isSchemaValid: (typeStruct: TypeStruct, schemaMap: {
     [key: string]: TypeStruct;
 }, expandedTypes: TypeStruct, isDirectParentSet?: boolean, isDirectParentArray?: boolean, isArrayDescendent?: boolean, path?: Array<string>) => SchemaValidationResponse;
 export declare const invalidSchemaPropsCheck: (typeStruct: TypeStruct, rootSchema: TypeStruct | object, path?: Array<string>) => SchemaValidationResponse;
-export declare const collectKeyRefs: (typeStruct: TypeStruct, path?: any[]) => Array<string>;
+export declare const collectKeyRefs: (typeStruct: TypeStruct, path?: Array<string | {
+    key: string;
+    value: string;
+}>) => Array<string>;
 export declare const replaceRefVarsWithWildcards: (pathString: string) => string;
 export declare const replaceRawRefsInExpandedType: (typeStruct: TypeStruct, expandedTypes: TypeStruct, rootSchemaMap: {
     [key: string]: TypeStruct;

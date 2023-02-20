@@ -11,14 +11,17 @@ import {
 import {
   checkDirectoryIsPluginWorkingDirectory,
   exportPluginToDev,
-  getDependenciesForManifest,
   getSchemaMapForCreationManifest,
   tarCreationPlugin,
-  validatePluginManifest,
-  verifyPluginDependencyCompatability,
   generateTypeScriptAPI,
 } from "../src/plugincreator";
-import { Manifest } from "../src/plugins";
+import { Manifest,
+  /** MOVE */
+  validatePluginManifest,
+  verifyPluginDependencyCompatability,
+  getDependenciesForManifest,
+  readPluginManifest
+} from "../src/plugins";
 import {
   makePluginCreationDirectory,
   makeSignedInUser,
@@ -162,9 +165,9 @@ describe("plugincreator", () => {
         store: {},
       };
       makeTestPlugin(PLUGIN_C_MANIFEST, true);
-      const bDeps = await getDependenciesForManifest(PLUGIN_B_MANIFEST);
+      const bDeps = await getDependenciesForManifest(PLUGIN_B_MANIFEST, readPluginManifest);
       expect(bDeps.deps).toEqual([PLUGIN_A_MANIFEST]);
-      const cDeps = await getDependenciesForManifest(PLUGIN_C_MANIFEST);
+      const cDeps = await getDependenciesForManifest(PLUGIN_C_MANIFEST, readPluginManifest);
       expect(cDeps.deps).toEqual([PLUGIN_B_MANIFEST, PLUGIN_A_MANIFEST]);
     });
 
@@ -242,7 +245,8 @@ describe("plugincreator", () => {
       makeTestPlugin(PLUGIN_C_MANIFEST);
 
       const depListResponse = await getDependenciesForManifest(
-        PLUGIN_C_MANIFEST
+        PLUGIN_C_MANIFEST,
+        readPluginManifest
       );
       expect(depListResponse).toEqual({
         status: "error",
@@ -324,10 +328,12 @@ describe("plugincreator", () => {
       makeTestPlugin(PLUGIN_C_MANIFEST);
 
       const depListResponse = await getDependenciesForManifest(
-        PLUGIN_C_MANIFEST
+        PLUGIN_C_MANIFEST,
+        readPluginManifest
       );
       const validationResponse = await verifyPluginDependencyCompatability(
-        depListResponse.deps
+        depListResponse.deps,
+        readPluginManifest
       );
       expect(validationResponse.isValid).toEqual(true);
     });
@@ -402,10 +408,12 @@ describe("plugincreator", () => {
       makeTestPlugin(PLUGIN_C_MANIFEST);
 
       const depListResponse = await getDependenciesForManifest(
-        PLUGIN_C_MANIFEST
+        PLUGIN_C_MANIFEST,
+        readPluginManifest
       );
       const validationResponse = await verifyPluginDependencyCompatability(
-        depListResponse.deps
+        depListResponse.deps,
+        readPluginManifest
       );
       expect(validationResponse).toEqual({
         isValid: false,
@@ -491,7 +499,8 @@ describe("plugincreator", () => {
       makeTestPlugin(PLUGIN_C_MANIFEST);
 
       const depListResponse = await getSchemaMapForCreationManifest(
-        PLUGIN_C_MANIFEST
+        PLUGIN_C_MANIFEST,
+        readPluginManifest
       );
       expect(depListResponse).toEqual({
         'A': PLUGIN_A_1_MANIFEST,
@@ -553,7 +562,10 @@ describe("plugincreator", () => {
       };
       makeTestPlugin(PLUGIN_B_MANIFEST);
 
-      const result = await validatePluginManifest(PLUGIN_B_MANIFEST);
+      const result = await validatePluginManifest(
+        PLUGIN_B_MANIFEST,
+        readPluginManifest
+      );
       expect(result).toEqual({status: "ok"})
     });
 
@@ -583,7 +595,10 @@ describe("plugincreator", () => {
         },
       };
       makeTestPlugin(PLUGIN_A_MANIFEST);
-      const result = await validatePluginManifest(PLUGIN_A_MANIFEST);
+      const result = await validatePluginManifest(
+        PLUGIN_A_MANIFEST,
+        readPluginManifest
+      );
       expect(result).toEqual({
         status: "error",
         message:
@@ -615,7 +630,7 @@ describe("plugincreator", () => {
         },
       };
       makeTestPlugin(PLUGIN_A_MANIFEST);
-      const result = await validatePluginManifest(PLUGIN_A_MANIFEST);
+      const result = await validatePluginManifest(PLUGIN_A_MANIFEST, readPluginManifest);
       expect(result).toEqual({
         status: "error",
         message:
@@ -652,7 +667,7 @@ describe("plugincreator", () => {
         },
       };
       makeTestPlugin(PLUGIN_A_MANIFEST);
-      const result = await validatePluginManifest(PLUGIN_A_MANIFEST);
+      const result = await validatePluginManifest(PLUGIN_A_MANIFEST, readPluginManifest);
       expect(result).toEqual({
         status: "error",
         message:
@@ -684,7 +699,7 @@ describe("plugincreator", () => {
         },
       };
       makeTestPlugin(PLUGIN_A_MANIFEST);
-      const result = await validatePluginManifest(PLUGIN_A_MANIFEST);
+      const result = await validatePluginManifest(PLUGIN_A_MANIFEST, readPluginManifest);
       expect(result).toEqual({
         status: "error",
         message:
@@ -712,7 +727,7 @@ describe("plugincreator", () => {
         },
       };
       makeTestPlugin(PLUGIN_A_MANIFEST);
-      const result = await validatePluginManifest(PLUGIN_A_MANIFEST);
+      const result = await validatePluginManifest(PLUGIN_A_MANIFEST, readPluginManifest);
       expect(result).toEqual({
         status: "error",
         message:
@@ -742,7 +757,7 @@ describe("plugincreator", () => {
         },
       };
       makeTestPlugin(PLUGIN_A_MANIFEST);
-      const result = await validatePluginManifest(PLUGIN_A_MANIFEST);
+      const result = await validatePluginManifest(PLUGIN_A_MANIFEST, readPluginManifest);
       expect(result).toEqual({
         status: "error",
         message:
@@ -781,7 +796,7 @@ describe("plugincreator", () => {
         },
       };
       makeTestPlugin(PLUGIN_A_MANIFEST);
-      const result = await validatePluginManifest(PLUGIN_A_MANIFEST);
+      const result = await validatePluginManifest(PLUGIN_A_MANIFEST, readPluginManifest);
       expect(result).toEqual({
         status: "error",
         message:
@@ -810,7 +825,7 @@ describe("plugincreator", () => {
         },
       };
       makeTestPlugin(PLUGIN_A_MANIFEST);
-      const result = await validatePluginManifest(PLUGIN_A_MANIFEST);
+      const result = await validatePluginManifest(PLUGIN_A_MANIFEST, readPluginManifest);
       expect(result).toEqual({
         status: "error",
         message:
@@ -841,7 +856,7 @@ describe("plugincreator", () => {
         },
       };
       makeTestPlugin(PLUGIN_A_MANIFEST);
-      const result = await validatePluginManifest(PLUGIN_A_MANIFEST);
+      const result = await validatePluginManifest(PLUGIN_A_MANIFEST, readPluginManifest);
       expect(result).toEqual({
         status: "error",
         message:
@@ -925,7 +940,7 @@ describe("plugincreator", () => {
       };
       makeTestPlugin(PLUGIN_B_MANIFEST);
 
-      const code = await generateTypeScriptAPI(PLUGIN_B_MANIFEST, true);
+      const code = await generateTypeScriptAPI(PLUGIN_B_MANIFEST, true, readPluginManifest);
       expect(code).toEqual(SNAPSHOT_1_WITH_REACT);
     });
   });

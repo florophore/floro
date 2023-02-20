@@ -52,7 +52,7 @@ const writeDefaultFiles = (isReset = false) => {
 
   // FILES
   // ~/.floro/config/cors.txt
-  if (isReset || !fs.existsSync(vConfigRemotePath)) { 
+  if (isReset || !fs.existsSync(vConfigRemotePath)) {
     fs.writeFileSync(vConfigRemotePath, `
     # Add the remote origin against which to run floro.
     https://floro.io
@@ -61,7 +61,7 @@ const writeDefaultFiles = (isReset = false) => {
 
   // FILES
   // ~/.floro/config/plugins.json
-  if (isReset || !fs.existsSync(vConfigPluginsPath)) { 
+  if (isReset || !fs.existsSync(vConfigPluginsPath)) {
     fs.writeFileSync(vConfigPluginsPath, JSON.stringify({ plugins: {}}, null, 2));
   }
 }
@@ -128,9 +128,9 @@ export const buildFloroFilestructure = (): void => {
 
 export const clean = (): void => {
 
-} 
+}
 
-export const reset = (): void => {
+export const reset = async (): Promise<void> => {
 
   // FILES
   // ~/.floro/config/cors.txt
@@ -233,6 +233,15 @@ export const getPluginsJsonAsync = async (): Promise<{plugins: {[key: string]: {
     return JSON.parse(remotePluginsJSON);
   } catch(e) {
     return {plugins: {}};
+  }
+}
+export const writePluginsJsonAsync = async (plugins: {[key: string]: { proxy?: boolean, host?: string}}): Promise<void> => {
+  try {
+    const str = JSON.stringify(plugins, null, 2);
+    await fs.promises.writeFile(vConfigPluginsPath, str);
+    return;
+  } catch(e) {
+    return;
   }
 }
 

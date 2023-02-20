@@ -8,6 +8,7 @@ const memfs_1 = require("memfs");
 const tar_1 = __importDefault(require("tar"));
 const filestructure_1 = require("../src/filestructure");
 const plugincreator_1 = require("../src/plugincreator");
+const plugins_1 = require("../src/plugins");
 const fsmocks_1 = require("./helpers/fsmocks");
 const pluginmocks_1 = require("./helpers/pluginmocks");
 const realFS = jest.requireActual('fs');
@@ -117,9 +118,9 @@ describe("plugincreator", () => {
                 store: {},
             };
             (0, fsmocks_1.makeTestPlugin)(PLUGIN_C_MANIFEST, true);
-            const bDeps = await (0, plugincreator_1.getDependenciesForManifest)(PLUGIN_B_MANIFEST);
+            const bDeps = await (0, plugins_1.getDependenciesForManifest)(PLUGIN_B_MANIFEST, plugins_1.readPluginManifest);
             expect(bDeps.deps).toEqual([PLUGIN_A_MANIFEST]);
-            const cDeps = await (0, plugincreator_1.getDependenciesForManifest)(PLUGIN_C_MANIFEST);
+            const cDeps = await (0, plugins_1.getDependenciesForManifest)(PLUGIN_C_MANIFEST, plugins_1.readPluginManifest);
             expect(cDeps.deps).toEqual([PLUGIN_B_MANIFEST, PLUGIN_A_MANIFEST]);
         });
         test("discovers cyclic dependency errors", async () => {
@@ -189,7 +190,7 @@ describe("plugincreator", () => {
                 },
             };
             (0, fsmocks_1.makeTestPlugin)(PLUGIN_C_MANIFEST);
-            const depListResponse = await (0, plugincreator_1.getDependenciesForManifest)(PLUGIN_C_MANIFEST);
+            const depListResponse = await (0, plugins_1.getDependenciesForManifest)(PLUGIN_C_MANIFEST, plugins_1.readPluginManifest);
             expect(depListResponse).toEqual({
                 status: "error",
                 reason: "cyclic dependency imports in A",
@@ -262,8 +263,8 @@ describe("plugincreator", () => {
                 },
             };
             (0, fsmocks_1.makeTestPlugin)(PLUGIN_C_MANIFEST);
-            const depListResponse = await (0, plugincreator_1.getDependenciesForManifest)(PLUGIN_C_MANIFEST);
-            const validationResponse = await (0, plugincreator_1.verifyPluginDependencyCompatability)(depListResponse.deps);
+            const depListResponse = await (0, plugins_1.getDependenciesForManifest)(PLUGIN_C_MANIFEST, plugins_1.readPluginManifest);
+            const validationResponse = await (0, plugins_1.verifyPluginDependencyCompatability)(depListResponse.deps, plugins_1.readPluginManifest);
             expect(validationResponse.isValid).toEqual(true);
         });
         test("discovers compatability errors when manifests are incompatabile", async () => {
@@ -329,8 +330,8 @@ describe("plugincreator", () => {
                 },
             };
             (0, fsmocks_1.makeTestPlugin)(PLUGIN_C_MANIFEST);
-            const depListResponse = await (0, plugincreator_1.getDependenciesForManifest)(PLUGIN_C_MANIFEST);
-            const validationResponse = await (0, plugincreator_1.verifyPluginDependencyCompatability)(depListResponse.deps);
+            const depListResponse = await (0, plugins_1.getDependenciesForManifest)(PLUGIN_C_MANIFEST, plugins_1.readPluginManifest);
+            const validationResponse = await (0, plugins_1.verifyPluginDependencyCompatability)(depListResponse.deps, plugins_1.readPluginManifest);
             expect(validationResponse).toEqual({
                 isValid: false,
                 status: "error",
@@ -407,7 +408,7 @@ describe("plugincreator", () => {
                 },
             };
             (0, fsmocks_1.makeTestPlugin)(PLUGIN_C_MANIFEST);
-            const depListResponse = await (0, plugincreator_1.getSchemaMapForCreationManifest)(PLUGIN_C_MANIFEST);
+            const depListResponse = await (0, plugincreator_1.getSchemaMapForCreationManifest)(PLUGIN_C_MANIFEST, plugins_1.readPluginManifest);
             expect(depListResponse).toEqual({
                 'A': PLUGIN_A_1_MANIFEST,
                 'B': PLUGIN_B_MANIFEST,
@@ -464,7 +465,7 @@ describe("plugincreator", () => {
                 },
             };
             (0, fsmocks_1.makeTestPlugin)(PLUGIN_B_MANIFEST);
-            const result = await (0, plugincreator_1.validatePluginManifest)(PLUGIN_B_MANIFEST);
+            const result = await (0, plugins_1.validatePluginManifest)(PLUGIN_B_MANIFEST, plugins_1.readPluginManifest);
             expect(result).toEqual({ status: "ok" });
         });
         test("throws multi key exception on sets", async () => {
@@ -492,7 +493,7 @@ describe("plugincreator", () => {
                 },
             };
             (0, fsmocks_1.makeTestPlugin)(PLUGIN_A_MANIFEST);
-            const result = await (0, plugincreator_1.validatePluginManifest)(PLUGIN_A_MANIFEST);
+            const result = await (0, plugins_1.validatePluginManifest)(PLUGIN_A_MANIFEST, plugins_1.readPluginManifest);
             expect(result).toEqual({
                 status: "error",
                 message: "Sets cannot contain multiple key types. Multiple key types found at '$(A).aObjects'.",
@@ -521,7 +522,7 @@ describe("plugincreator", () => {
                 },
             };
             (0, fsmocks_1.makeTestPlugin)(PLUGIN_A_MANIFEST);
-            const result = await (0, plugincreator_1.validatePluginManifest)(PLUGIN_A_MANIFEST);
+            const result = await (0, plugins_1.validatePluginManifest)(PLUGIN_A_MANIFEST, plugins_1.readPluginManifest);
             expect(result).toEqual({
                 status: "error",
                 message: "Sets must contain one (and only one) key type. No key type found at '$(A).aObjects'.",
@@ -556,7 +557,7 @@ describe("plugincreator", () => {
                 },
             };
             (0, fsmocks_1.makeTestPlugin)(PLUGIN_A_MANIFEST);
-            const result = await (0, plugincreator_1.validatePluginManifest)(PLUGIN_A_MANIFEST);
+            const result = await (0, plugins_1.validatePluginManifest)(PLUGIN_A_MANIFEST, plugins_1.readPluginManifest);
             expect(result).toEqual({
                 status: "error",
                 message: "Arrays cannot contain keyed set descendents. Found at '$(A).aArray'."
@@ -586,7 +587,7 @@ describe("plugincreator", () => {
                 },
             };
             (0, fsmocks_1.makeTestPlugin)(PLUGIN_A_MANIFEST);
-            const result = await (0, plugincreator_1.validatePluginManifest)(PLUGIN_A_MANIFEST);
+            const result = await (0, plugins_1.validatePluginManifest)(PLUGIN_A_MANIFEST, plugins_1.readPluginManifest);
             expect(result).toEqual({
                 status: "error",
                 message: "Arrays cannot contain keyed values. Found at '$(A).aArray'."
@@ -611,7 +612,7 @@ describe("plugincreator", () => {
                 },
             };
             (0, fsmocks_1.makeTestPlugin)(PLUGIN_A_MANIFEST);
-            const result = await (0, plugincreator_1.validatePluginManifest)(PLUGIN_A_MANIFEST);
+            const result = await (0, plugins_1.validatePluginManifest)(PLUGIN_A_MANIFEST, plugins_1.readPluginManifest);
             expect(result).toEqual({
                 status: "error",
                 message: "Only sets may contain key types. Invalid key type found at '$(A)'."
@@ -639,7 +640,7 @@ describe("plugincreator", () => {
                 },
             };
             (0, fsmocks_1.makeTestPlugin)(PLUGIN_A_MANIFEST);
-            const result = await (0, plugincreator_1.validatePluginManifest)(PLUGIN_A_MANIFEST);
+            const result = await (0, plugins_1.validatePluginManifest)(PLUGIN_A_MANIFEST, plugins_1.readPluginManifest);
             expect(result).toEqual({
                 status: "error",
                 message: "Invalid key 'mainKey'. Key types cannot be nullable. Found at '$(A).aObjects.mainKey'.",
@@ -676,7 +677,7 @@ describe("plugincreator", () => {
                 },
             };
             (0, fsmocks_1.makeTestPlugin)(PLUGIN_A_MANIFEST);
-            const result = await (0, plugincreator_1.validatePluginManifest)(PLUGIN_A_MANIFEST);
+            const result = await (0, plugins_1.validatePluginManifest)(PLUGIN_A_MANIFEST, plugins_1.readPluginManifest);
             expect(result).toEqual({
                 status: "error",
                 message: "Invalid key 'mainKey'. Key types that are refs cannot have a cascaded onDelete values of nullify. Found at '$(A).aObjects.mainKey'.",
@@ -703,7 +704,7 @@ describe("plugincreator", () => {
                 },
             };
             (0, fsmocks_1.makeTestPlugin)(PLUGIN_A_MANIFEST);
-            const result = await (0, plugincreator_1.validatePluginManifest)(PLUGIN_A_MANIFEST);
+            const result = await (0, plugins_1.validatePluginManifest)(PLUGIN_A_MANIFEST, plugins_1.readPluginManifest);
             expect(result).toEqual({
                 status: "error",
                 message: "Invalid reference pointer '$(A).aObjects.values'. Keys that are constrained ref types, cannot be self-referential. Found at '$(A).aObjects.mainKey'.",
@@ -731,7 +732,7 @@ describe("plugincreator", () => {
                 },
             };
             (0, fsmocks_1.makeTestPlugin)(PLUGIN_A_MANIFEST);
-            const result = await (0, plugincreator_1.validatePluginManifest)(PLUGIN_A_MANIFEST);
+            const result = await (0, plugins_1.validatePluginManifest)(PLUGIN_A_MANIFEST, plugins_1.readPluginManifest);
             expect(result).toEqual({
                 status: "error",
                 message: "Invalid prop in schema. Remove 'nullable' from '$(A).aObjects'. Found at '$(A).aObjects.nullable'.",
@@ -810,7 +811,7 @@ describe("plugincreator", () => {
                 },
             };
             (0, fsmocks_1.makeTestPlugin)(PLUGIN_B_MANIFEST);
-            const code = await (0, plugincreator_1.generateTypeScriptAPI)(PLUGIN_B_MANIFEST, true);
+            const code = await (0, plugincreator_1.generateTypeScriptAPI)(PLUGIN_B_MANIFEST, true, plugins_1.readPluginManifest);
             expect(code).toEqual(SNAPSHOT_1_WITH_REACT);
         });
     });

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="36px" height="36px" viewBox="0 0 36 36" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+    <title>pluginmask.unselect.dark</title>
+    <g id="Symbols" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd">
+        <g id="5-Icons/27-Plugin-Mask/1-Unselect/2-Dark-Mode" transform="translate(-2.000000, -2.000000)" stroke="#9B8FF7">
+            <g id="pluginmask.unselect.dark" transform="translate(2.000000, 2.000000)">
+                <path d="M9.22998672,0.45 L26.7700133,0.45 C29.852042,0.45 30.9759846,0.754997109 32.104425,1.35849367 C33.1981776,1.94343895 34.056561,2.80182238 34.6415063,3.89557495 C35.2450029,5.02401542 35.55,6.14795801 35.55,9.22998672 L35.55,26.7700133 C35.55,29.852042 35.2450029,30.9759846 34.6415063,32.104425 C34.056561,33.1981776 33.1981776,34.056561 32.104425,34.6415063 C30.9759846,35.2450029 29.852042,35.55 26.7700133,35.55 L9.22998672,35.55 C6.14795801,35.55 5.02401542,35.2450029 3.89557495,34.6415063 C2.80182238,34.056561 1.94343895,33.1981776 1.35849367,32.104425 C0.754997109,30.9759846 0.45,29.852042 0.45,26.7700133 L0.45,9.22998672 C0.45,6.14795801 0.754997109,5.02401542 1.35849367,3.89557495 C1.94343895,2.80182238 2.80182238,1.94343895 3.89557495,1.35849367 C5.02401542,0.754997109 6.14795801,0.45 9.22998672,0.45 Z" id="Background" stroke-width="0.9"></path>
+                <rect id="Rectangle" stroke-width="0.5" x="2.95" y="2.95" width="30.1" height="30.1"></rect>
+                <circle id="Oval" stroke-width="0.5" cx="18" cy="18" r="15.05"></circle>
+                <circle id="Oval" stroke-width="0.5" cx="18" cy="18" r="8.75"></circle>
+                <circle id="Oval" stroke-width="0.5" cx="18" cy="18" r="6.05"></circle>
+                <line x1="18.5816891" y1="-4.36662368" x2="18.054707" y2="39.7302276" id="Line" stroke-width="0.5" transform="translate(18.318198, 17.681802) rotate(44.315316) translate(-18.318198, -17.681802) "></line>
+                <line x1="2.7" y1="2.7" x2="33.2470129" y2="33.2470129" id="Line" stroke-width="0.5"></line>
+                <line x1="0.9" y1="24.3" x2="35.1" y2="24.3" id="Line-2" stroke-width="0.5" stroke-linecap="square"></line>
+                <line x1="0.9" y1="18" x2="35.1" y2="18" id="Line-2" stroke-width="0.5" stroke-linecap="square"></line>
+                <line x1="0.9" y1="11.7" x2="35.1" y2="11.7" id="Line-2" stroke-width="0.5" stroke-linecap="square"></line>
+                <line x1="24.3" y1="35.1" x2="24.3" y2="0.9" id="Line-2" stroke-width="0.5" stroke-linecap="square"></line>
+                <line x1="18" y1="35.1" x2="18" y2="0.9" id="Line-2" stroke-width="0.5" stroke-linecap="square"></line>
+                <line x1="11.7" y1="35.1" x2="11.7" y2="0.9" id="Line-2" stroke-width="0.5" stroke-linecap="square"></line>
+            </g>
+        </g>
+    </g>
+</svg>

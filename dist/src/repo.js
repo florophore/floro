@@ -504,7 +504,7 @@ const buildStateStore = async (state) => {
     for (let pluginName in state.store) {
         if (pluginsMap[pluginName]) {
             const kv = state?.store?.[pluginName] ?? [];
-            const manifest = await (0, plugins_1.getPluginManifest)(pluginName, state?.plugins ?? []);
+            const manifest = await (0, plugins_1.getPluginManifest)(pluginName, state?.plugins ?? [], plugins_1.readPluginManifest);
             const pluginState = (0, plugins_1.getStateFromKVForPlugin)(pluginsMap, kv, pluginName);
             out[pluginName] = pluginState;
         }

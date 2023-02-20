@@ -1,0 +1,17 @@
+{
+  "version": "0.0.0",
+  "name": "PLUGIN_NAME",
+  "displayName": "PLUGIN_DISPLAY_NAME",
+  "description": "PLUGIN_DESCRIPTION",
+  "icon": {
+    "light": "./plugin_default.unselected.light.svg",
+    "dark": "./plugin_default.unselected.dark.svg",
+    "selected": {
+      "light": "./plugin_default.selected.light.svg",
+      "dark": "./plugin_default.selected.dark.svg"
+    }
+  },
+  "imports": {},
+  "types": {},
+  "store": {}
+}

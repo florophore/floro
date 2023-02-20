@@ -6,112 +6,147 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const pm2_1 = __importDefault(require("pm2"));
 const filestructure_1 = require("./filestructure");
-const command_line_args_1 = __importDefault(require("command-line-args"));
 const daemon_1 = require("./daemon");
-const inquirer_1 = __importDefault(require("inquirer"));
 const login_1 = require("./login");
 const plugincreator_1 = require("./plugincreator");
-const { exec, spawn } = require('child_process');
 const cli_color_1 = __importDefault(require("cli-color"));
-/* first - parse the main command */
-const mainDefinitions = [{ name: "command", defaultOption: true }];
-const mainOptions = (0, command_line_args_1.default)(mainDefinitions, {
-    stopAtFirstUnknown: true,
-});
-const argv = mainOptions._unknown || [];
+const yargs_1 = __importDefault(require("yargs"));
 (0, filestructure_1.buildFloroFilestructure)();
-(async function main() {
-    const args = process.argv.splice(2);
-    const arg = args[0];
-    if (mainOptions.command == "start") {
+yargs_1.default
+    .command({
+    command: "start",
+    describe: "Start the floro daemon",
+    handler: async () => {
         await (0, daemon_1.startDaemon)();
-        return;
-    }
-    if (mainOptions.command == "kill") {
+        pm2_1.default.disconnect();
+    },
+})
+    .command({
+    command: "kill",
+    describe: "Kill the floro daemon",
+    handler: async () => {
         await (0, daemon_1.killDaemon)();
-        return;
-    }
-    if (mainOptions.command == "restart") {
+        pm2_1.default.disconnect();
+    },
+})
+    .command({
+    command: "restart",
+    describe: "Restart the floro daemon",
+    handler: async () => {
         await (0, daemon_1.killDaemon)();
         await (0, daemon_1.startDaemon)();
-        return;
-    }
-    if (mainOptions.command == "plugin") {
-        if (argv[0] == "push") {
-            if (argv[1] == "--staging" || argv[1] == "-s") {
-                const didSucceed = await (0, plugincreator_1.exportPluginToDev)(process.cwd());
-                if (didSucceed) {
-                    console.log(cli_color_1.default.cyanBright.bgBlack.underline("Successfully pushed to staging!"));
+        pm2_1.default.disconnect();
+    },
+})
+    .command({
+    command: "reset-disk",
+    describe: "Removes local .floro from disk (Caution)",
+    handler: async () => {
+        await (0, login_1.logout)();
+        await (0, daemon_1.killDaemon)();
+        await (0, filestructure_1.reset)();
+        pm2_1.default.disconnect();
+    },
+})
+    .command({
+    command: "login",
+    describe: "Login to floro via cli",
+    handler: async () => {
+        await (0, login_1.promptEmail)();
+    },
+})
+    .command({
+    command: "logout",
+    describe: "Logout from floro via cli",
+    handler: async () => {
+        await (0, login_1.logout)();
+    },
+})
+    .command({
+    command: "create-plugin [plugin]",
+    describe: "Local plugin development commands",
+    builder: (yargs) => {
+        return yargs.positional('plugin', {
+            type: 'string'
+        });
+    },
+    handler: async (options) => {
+        await (0, plugincreator_1.buildFloroTemplate)(process.cwd(), options.plugin);
+        await (0, daemon_1.killDaemon)();
+        await (0, daemon_1.startDaemon)();
+        pm2_1.default.disconnect();
+        console.log(cli_color_1.default.cyanBright.bgBlack.underline("Done"));
+    },
+})
+    .command({
+    command: "plugin",
+    describe: "Local plugin development commands",
+    builder: (yargs) => {
+        return yargs
+            .command({
+            command: "push",
+            describe: "Builds and pushes plugin to environment",
+            builder: (yargs) => {
+                return yargs.options({
+                    staging: {
+                        alias: "s",
+                        describe: `Push build to local staging`,
+                    },
+                    production: {
+                        alias: "p",
+                        describe: `Push build to production review`,
+                    },
+                });
+            },
+            handler: async (options) => {
+                if (!options?.staging && !options.production) {
+                    console.log(cli_color_1.default.redBright.bgBlack.underline("Please specify the environment to push to by specifying staging (-s) or production (-p)"));
                     return;
                 }
-                console.log(cli_color_1.default.redBright.bgBlack.underline("Failed to push to staging..."));
-                return;
-            }
-            if (argv[1] == "--prod" || argv[1] == "-p") {
-                const tarPath = await (0, plugincreator_1.tarCreationPlugin)(process.cwd());
-                if (!tarPath) {
+                if (options?.staging && options.production) {
+                    console.log(cli_color_1.default.redBright.bgBlack.underline("Please specify only one environment to push to"));
+                    return;
                 }
-                console.log(`tar created at ${tarPath}`);
-                (0, plugincreator_1.uploadPluginTar)(tarPath);
-                //if (didSucceed) {
-                //  console.log(clc.cyanBright.bgBlack.underline("Successfully pushed to production!"));
-                //  return;
-                //}
-                return;
-            }
-        }
-        return;
-    }
-    if (mainOptions.command == "config") {
-        const response = await inquirer_1.default.prompt([
-            {
-                type: "list",
-                name: "config",
-                message: "Choose a configuration option",
-                choices: ["cors", "plugins", "reset", "quit"],
+                if (options?.staging) {
+                    const didSucceed = await (0, plugincreator_1.exportPluginToDev)(process.cwd());
+                    if (didSucceed) {
+                        console.log(cli_color_1.default.cyanBright.bgBlack.underline("Successfully pushed to staging!"));
+                        return;
+                    }
+                    console.log(cli_color_1.default.redBright.bgBlack.underline("Failed to push to staging..."));
+                    return;
+                }
+                if (options?.production) {
+                    const tarPath = await (0, plugincreator_1.tarCreationPlugin)(process.cwd());
+                    if (!tarPath) {
+                    }
+                    console.log(`tar created at ${tarPath}`);
+                    const didSucceed = (0, plugincreator_1.uploadPluginTar)(tarPath);
+                    if (didSucceed) {
+                        console.log(cli_color_1.default.cyanBright.bgBlack.underline("Successfully pushed to production!"));
+                        return;
+                    }
+                    console.log(cli_color_1.default.redBright.bgBlack.underline("Failed to push to staging..."));
+                    return;
+                }
             },
-        ]);
-        if (response.config == "cors") {
-            const vim = spawn('vi', [filestructure_1.vConfigCORSPath], { stdio: 'inherit' });
-            vim.on('exit', () => {
-                console.log("done");
-            });
-            return;
-        }
-        //if (response.config == "remote") {
-        //    const vim = spawn('vi', [vConfigRemotePath], {stdio: 'inherit'})
-        //    vim.on('exit', () => {
-        //        console.log("done");
-        //    })
-        //    return;
-        //}
-        if (response.config == "plugins") {
-            const vim = spawn('vi', [filestructure_1.vConfigPluginsPath], { stdio: 'inherit' });
-            vim.on('exit', () => {
-                console.log("done");
-            });
-            return;
-        }
-        if (response.config == "reset") {
-            console.log("resetting");
-            (0, filestructure_1.reset)();
-            return;
-        }
-    }
-    if (mainOptions.command == "login") {
-        await (0, login_1.promptEmail)();
-        return;
-    }
-    if (mainOptions.command == "logout") {
-        await (0, login_1.logout)();
-        return;
-    }
-    console.log(!arg
-        ? "please enter either `floro-server start` or `floro-server kill`"
-        : "unknown command: " +
-            arg +
-            " please enter either `floro-server start` or `floro-server kill`");
-    pm2_1.default.disconnect();
-    return;
-})();
+        })
+            .command({
+            command: "pull",
+            describe: "Installs dependies from floro.manifest.json",
+            handler: () => {
+                console.log("Handle deps");
+            },
+        })
+            .command({
+            command: "install",
+            describe: "Installs remote dependency and saves into floro.manifest.json",
+            handler: () => {
+                console.log("Handle install");
+            },
+        });
+    },
+    handler: null,
+})
+    .help().argv;
 //# sourceMappingURL=command.js.map
