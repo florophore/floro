@@ -95,7 +95,7 @@ export declare const defaultVoidedState: (schemaMap: {
     [key: string]: Manifest;
 }, stateMap: {
     [key: string]: object;
-}) => any[];
+}, pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>) => Promise<any[]>;
 export declare const writePathString: (pathParts: Array<DiffElement | string>) => string;
 export declare const decodeSchemaPath: (pathString: string) => Array<DiffElement | string>;
 export declare const getStateId: (schema: TypeStruct, state: object) => string;
@@ -118,14 +118,14 @@ export declare const getRootSchemaForPlugin: (schemaMap: {
 }, pluginName: string) => TypeStruct;
 export declare const getRootSchemaMap: (schemaMap: {
     [key: string]: Manifest;
-}) => {
+}, pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>) => Promise<{
     [key: string]: TypeStruct;
-};
+}>;
 export declare const getKVStateForPlugin: (schema: {
     [key: string]: Manifest;
 }, pluginName: string, stateMap: {
     [key: string]: object;
-}) => Array<DiffElement>;
+}, pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>) => Promise<Array<DiffElement>>;
 /***
  * cascading is heavy but infrequent. It only needs to be
  * called when updating state. Not called when applying diffs
@@ -134,25 +134,25 @@ export declare const cascadePluginState: (schemaMap: {
     [key: string]: Manifest;
 }, stateMap: {
     [key: string]: object;
-}, pluginName: string, rootSchemaMap?: {
+}, pluginName: string, pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>, rootSchemaMap?: {
     [key: string]: TypeStruct;
 }, memo?: {
     [key: string]: {
         [key: string]: object;
     };
-}) => {
+}) => Promise<{
     [key: string]: object;
-};
+}>;
 export declare const validatePluginState: (schemaMap: {
     [key: string]: Manifest;
 }, stateMap: {
     [key: string]: object;
-}, pluginName: string) => boolean;
+}, pluginName: string, pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>) => Promise<boolean>;
 export declare const pluginManifestIsSubsetOfManifest: (currentSchemaMap: {
     [key: string]: Manifest;
 }, nextSchemaMap: {
     [key: string]: Manifest;
-}, pluginName: string) => boolean;
+}, pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>) => Promise<boolean>;
 export declare const isTopologicalSubset: (oldSchemaMap: {
     [key: string]: Manifest;
 }, oldStateMap: {
@@ -161,7 +161,7 @@ export declare const isTopologicalSubset: (oldSchemaMap: {
     [key: string]: Manifest;
 }, newStateMap: {
     [key: string]: object;
-}, pluginName: string) => boolean;
+}, pluginName: string, pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>) => Promise<boolean>;
 export declare const isTopologicalSubsetValid: (oldSchemaMap: {
     [key: string]: Manifest;
 }, oldStateMap: {
@@ -170,7 +170,7 @@ export declare const isTopologicalSubsetValid: (oldSchemaMap: {
     [key: string]: Manifest;
 }, newStateMap: {
     [key: string]: object;
-}, pluginName: string) => boolean;
+}, pluginName: string, pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>) => Promise<boolean>;
 export interface SchemaValidationResponse {
     status: "ok" | "error";
     message?: string;

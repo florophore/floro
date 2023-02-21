@@ -198,7 +198,7 @@ const inspectLocalManifest = async (cwd, expand = false, pluginFetch) => {
         const manifest = JSON.parse(floroManifestString.toString());
         const schemaMap = await (0, exports.getSchemaMapForCreationManifest)(manifest, pluginFetch);
         if (expand) {
-            const rootSchemaMap = (0, plugins_1.getRootSchemaMap)(schemaMap);
+            const rootSchemaMap = await (0, plugins_1.getRootSchemaMap)(schemaMap, pluginFetch);
             return JSON.stringify(rootSchemaMap, null, 2);
         }
         return JSON.stringify(schemaMap, null, 2);
@@ -536,7 +536,7 @@ const generateLocalTypescriptAPI = async (cwd, useReact = true, pluginFetch) => 
 exports.generateLocalTypescriptAPI = generateLocalTypescriptAPI;
 const generateTypeScriptAPI = async (manifest, useReact = true, pluginFetch) => {
     const schemaMap = await (0, exports.getSchemaMapForCreationManifest)(manifest, pluginFetch);
-    const rootSchemaMap = (0, plugins_1.getRootSchemaMap)(schemaMap);
+    const rootSchemaMap = await (0, plugins_1.getRootSchemaMap)(schemaMap, pluginFetch);
     const referenceKeys = (0, plugins_1.collectKeyRefs)(rootSchemaMap);
     const expandedTypes = (0, plugins_1.getExpandedTypesForPlugin)(schemaMap, manifest.name);
     const referenceReturnTypeMap = (0, plugins_1.buildPointerReturnTypeMap)(rootSchemaMap, expandedTypes, referenceKeys);

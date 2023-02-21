@@ -191,17 +191,15 @@ const pluginManifestsAreCompatibleForUpdate = async (oldManifest, newManifest, p
     if (!newSchemaMap) {
         return null;
     }
-    return Object.keys(newSchemaMap)
-        .map((k) => newSchemaMap[k])
-        .reduce((isCompatible, newManifest) => {
+    return await asyncReduce(true, Object.keys(newSchemaMap).map((k) => newSchemaMap[k]), async (isCompatible, newManifest) => {
         if (!isCompatible) {
             return false;
         }
         if (!oldSchemaMap[newManifest.name]) {
             return true;
         }
-        return (0, exports.pluginManifestIsSubsetOfManifest)(oldSchemaMap, newSchemaMap, newManifest.name);
-    }, true);
+        return await (0, exports.pluginManifestIsSubsetOfManifest)(oldSchemaMap, newSchemaMap, pluginFetch);
+    });
 };
 exports.pluginManifestsAreCompatibleForUpdate = pluginManifestsAreCompatibleForUpdate;
 const getPluginManifests = async (pluginList, pluginFetch) => {
@@ -414,7 +412,7 @@ const verifyPluginDependencyCompatability = async (deps, pluginFetch) => {
                 nextManifest,
                 ...nextDeps.deps,
             ]);
-            const areCompatible = (0, exports.pluginManifestIsSubsetOfManifest)(lastSchemaMap, nextSchemaMap, pluginName);
+            const areCompatible = await (0, exports.pluginManifestIsSubsetOfManifest)(lastSchemaMap, nextSchemaMap, pluginFetch);
             if (!areCompatible) {
                 return {
                     isValid: false,
@@ -651,7 +649,7 @@ const validatePluginManifest = async (manifest, pluginFetch) => {
             };
         }
         const expandedTypes = (0, exports.getExpandedTypesForPlugin)(schemaMap, manifest.name);
-        const rootSchemaMap = (0, exports.getRootSchemaMap)(schemaMap);
+        const rootSchemaMap = (await (0, exports.getRootSchemaMap)(schemaMap, pluginFetch)) ?? {};
         const hasValidPropsType = (0, exports.invalidSchemaPropsCheck)(schemaMap[manifest.name].store, rootSchemaMap[manifest.name], [`$(${manifest.name})`]);
         if (hasValidPropsType.status == "error") {
             return hasValidPropsType;
@@ -799,8 +797,8 @@ const constructRootSchema = (schema, struct, pluginName) => {
     }
     return out;
 };
-const defaultVoidedState = (schemaMap, stateMap) => {
-    const rootSchemaMap = (0, exports.getRootSchemaMap)(schemaMap);
+const defaultVoidedState = async (schemaMap, stateMap, pluginFetch) => {
+    const rootSchemaMap = (await (0, exports.getRootSchemaMap)(schemaMap, pluginFetch)) ?? {};
     return Object.keys(rootSchemaMap).reduce((acc, pluginName) => {
         const struct = rootSchemaMap[pluginName];
         const state = stateMap?.[pluginName] ?? {};
@@ -1453,10 +1451,14 @@ const getRootSchemaForPlugin = (schemaMap, pluginName) => {
     }, schemaWithStores, pluginName);
 };
 exports.getRootSchemaForPlugin = getRootSchemaForPlugin;
-const getRootSchemaMap = (schemaMap) => {
+const getRootSchemaMap = async (schemaMap, pluginFetch) => {
+    // need to top sort
     const rootSchemaMap = {};
     for (const pluginName in schemaMap) {
-        rootSchemaMap[pluginName] = (0, exports.getRootSchemaForPlugin)(schemaMap, pluginName);
+        const manifest = schemaMap[pluginName];
+        const upsteamDeps = await (0, exports.getUpstreamDependencyManifests)(manifest, pluginFetch);
+        const subSchemaMap = (0, exports.manifestListToSchemaMap)(upsteamDeps);
+        rootSchemaMap[pluginName] = (0, exports.getRootSchemaForPlugin)(subSchemaMap, pluginName);
     }
     return traverseSchemaMapForRefKeyTypes(rootSchemaMap, rootSchemaMap);
 };
@@ -1512,9 +1514,9 @@ const traverseSchemaMapForRefKeyTypes = (schemaMap, rootSchemaMap) => {
     }
     return out;
 };
-const getKVStateForPlugin = (schema, pluginName, stateMap) => {
+const getKVStateForPlugin = async (schema, pluginName, stateMap, pluginFetch) => {
     const rootUpsteamSchema = (0, exports.getRootSchemaForPlugin)(schema, pluginName);
-    const state = (0, exports.defaultVoidedState)(schema, stateMap);
+    const state = await (0, exports.defaultVoidedState)(schema, stateMap, pluginFetch);
     return generateKVFromStateWithRootSchema(rootUpsteamSchema, pluginName, state?.[pluginName]);
 };
 exports.getKVStateForPlugin = getKVStateForPlugin;
@@ -1558,18 +1560,26 @@ const refSetFromKey = (key) => {
     }
     return out;
 };
+const asyncReduce = async (initVal, list, callback) => {
+    let out = initVal;
+    for (let i = 0; i < list.length; ++i) {
+        const element = list[i];
+        out = await callback(out, element, i);
+    }
+    return out;
+};
 /***
  * cascading is heavy but infrequent. It only needs to be
  * called when updating state. Not called when applying diffs
  */
-const cascadePluginState = (schemaMap, stateMap, pluginName, rootSchemaMap, memo = {}) => {
+const cascadePluginState = async (schemaMap, stateMap, pluginName, pluginFetch, rootSchemaMap, memo = {}) => {
     if (!rootSchemaMap) {
-        rootSchemaMap = (0, exports.getRootSchemaMap)(schemaMap);
+        rootSchemaMap = (await (0, exports.getRootSchemaMap)(schemaMap, pluginFetch)) ?? {};
     }
     if (!memo) {
         memo = {};
     }
-    const kvs = (0, exports.getKVStateForPlugin)(schemaMap, pluginName, stateMap);
+    const kvs = await (0, exports.getKVStateForPlugin)(schemaMap, pluginName, stateMap, pluginFetch);
     const removedRefs = new Set();
     const next = [];
     for (const kv of kvs) {
@@ -1623,10 +1633,10 @@ const cascadePluginState = (schemaMap, stateMap, pluginName, rootSchemaMap, memo
     const newPluginState = (0, exports.getStateFromKVForPlugin)(schemaMap, next, pluginName);
     const nextStateMap = { ...stateMap, [pluginName]: newPluginState };
     if (next.length != kvs.length) {
-        return (0, exports.cascadePluginState)(schemaMap, { ...stateMap, [pluginName]: newPluginState }, pluginName, rootSchemaMap, memo);
+        return (0, exports.cascadePluginState)(schemaMap, { ...stateMap, [pluginName]: newPluginState }, pluginName, pluginFetch, rootSchemaMap, memo);
     }
     const downstreamDeps = getDownstreamDepsInSchemaMap(schemaMap, pluginName);
-    const result = downstreamDeps.reduce((stateMap, dependentPluginName) => {
+    const result = await asyncReduce(nextStateMap, downstreamDeps, async (stateMap, dependentPluginName) => {
         if (memo[`${pluginName}:${dependentPluginName}`]) {
             return {
                 ...stateMap,
@@ -1635,18 +1645,18 @@ const cascadePluginState = (schemaMap, stateMap, pluginName, rootSchemaMap, memo
         }
         const result = {
             ...stateMap,
-            ...(0, exports.cascadePluginState)(schemaMap, stateMap, dependentPluginName, rootSchemaMap, memo),
+            ...(await (0, exports.cascadePluginState)(schemaMap, stateMap, dependentPluginName, pluginFetch, rootSchemaMap, memo)),
         };
         memo[`${pluginName}:${dependentPluginName}`] = result;
         return result;
-    }, nextStateMap);
+    });
     return result;
 };
 exports.cascadePluginState = cascadePluginState;
-const validatePluginState = (schemaMap, stateMap, pluginName) => {
-    const rootSchemaMap = (0, exports.getRootSchemaMap)(schemaMap);
+const validatePluginState = async (schemaMap, stateMap, pluginName, pluginFetch) => {
+    const rootSchemaMap = (await (0, exports.getRootSchemaMap)(schemaMap, pluginFetch)) ?? {};
     // ignore $(store)
-    const [, ...kvs] = (0, exports.getKVStateForPlugin)(schemaMap, pluginName, stateMap);
+    const [, ...kvs] = await (0, exports.getKVStateForPlugin)(schemaMap, pluginName, stateMap, pluginFetch);
     for (const { key, value } of kvs) {
         const subSchema = getSchemaAtPath(rootSchemaMap[pluginName], key);
         for (const prop in subSchema) {
@@ -1678,6 +1688,12 @@ const objectIsSubsetOfObject = (current, next) => {
     }
     const nested = [];
     for (const prop in current) {
+        if (!!current[prop] && !next[prop]) {
+            return false;
+        }
+        if (!current[prop] && !!next[prop]) {
+            continue;
+        }
         if (typeof current[prop] == "object" && typeof next[prop] == "object") {
             nested.push([current[prop], next[prop]]);
             continue;
@@ -1693,41 +1709,29 @@ const objectIsSubsetOfObject = (current, next) => {
         return objectIsSubsetOfObject(c, n);
     }, true);
 };
-const pluginManifestIsSubsetOfManifest = (currentSchemaMap, nextSchemaMap, pluginName) => {
-    const currentDeps = [
-        pluginName,
-        ...getUpstreamDepsInSchemaMap(currentSchemaMap, pluginName),
-    ];
-    const currentGraph = currentDeps.reduce((graph, plugin) => {
-        return {
-            ...graph,
-            [plugin]: (0, exports.getRootSchemaForPlugin)(currentSchemaMap, plugin),
-        };
-    }, {});
-    const nextDeps = [
-        pluginName,
-        ...getUpstreamDepsInSchemaMap(nextSchemaMap, pluginName),
-    ];
-    const nextGraph = nextDeps.reduce((graph, plugin) => {
-        return {
-            ...graph,
-            [plugin]: (0, exports.getRootSchemaForPlugin)(nextSchemaMap, plugin),
-        };
-    }, {});
-    return objectIsSubsetOfObject(currentGraph, nextGraph);
+const pluginManifestIsSubsetOfManifest = async (currentSchemaMap, nextSchemaMap, pluginFetch) => {
+    const oldRootSchema = await (0, exports.getRootSchemaMap)(currentSchemaMap, pluginFetch);
+    const nextRootSchema = await (0, exports.getRootSchemaMap)(nextSchemaMap, pluginFetch);
+    if (!oldRootSchema) {
+        return false;
+    }
+    if (!nextRootSchema) {
+        return false;
+    }
+    return objectIsSubsetOfObject(oldRootSchema, nextRootSchema);
 };
 exports.pluginManifestIsSubsetOfManifest = pluginManifestIsSubsetOfManifest;
-const isTopologicalSubset = (oldSchemaMap, oldStateMap, newSchemaMap, newStateMap, pluginName) => {
+const isTopologicalSubset = async (oldSchemaMap, oldStateMap, newSchemaMap, newStateMap, pluginName, pluginFetch) => {
     if (!oldSchemaMap[pluginName] && !newSchemaMap[pluginName]) {
         return true;
     }
     if (oldSchemaMap[pluginName] && !newSchemaMap[pluginName]) {
         return false;
     }
-    if (!(0, exports.pluginManifestIsSubsetOfManifest)(oldSchemaMap, newSchemaMap, pluginName)) {
+    if (!(await (0, exports.pluginManifestIsSubsetOfManifest)(oldSchemaMap, newSchemaMap, pluginFetch))) {
         return false;
     }
-    const oldKVs = (0, exports.getKVStateForPlugin)(oldSchemaMap, pluginName, oldStateMap)
+    const oldKVs = await (await (0, exports.getKVStateForPlugin)(oldSchemaMap, pluginName, oldStateMap, pluginFetch))
         ?.map?.(({ key }) => key)
         ?.filter?.((key) => {
         // remove array refs, since unstable
@@ -1736,7 +1740,7 @@ const isTopologicalSubset = (oldSchemaMap, oldStateMap, newSchemaMap, newStateMa
         }
         return true;
     }) ?? [];
-    const newKVs = (0, exports.getKVStateForPlugin)(newSchemaMap, pluginName, newStateMap).map(({ key }) => key);
+    const newKVs = (await (0, exports.getKVStateForPlugin)(newSchemaMap, pluginName, newStateMap, pluginFetch)).map(({ key }) => key);
     const newKVsSet = new Set(newKVs);
     for (const key of oldKVs) {
         if (!newKVsSet.has(key)) {
@@ -1746,19 +1750,19 @@ const isTopologicalSubset = (oldSchemaMap, oldStateMap, newSchemaMap, newStateMa
     return true;
 };
 exports.isTopologicalSubset = isTopologicalSubset;
-const isTopologicalSubsetValid = (oldSchemaMap, oldStateMap, newSchemaMap, newStateMap, pluginName) => {
-    if (!(0, exports.isTopologicalSubset)(oldSchemaMap, oldStateMap, newSchemaMap, newStateMap, pluginName)) {
+const isTopologicalSubsetValid = async (oldSchemaMap, oldStateMap, newSchemaMap, newStateMap, pluginName, pluginFetch) => {
+    if (!(await (0, exports.isTopologicalSubset)(oldSchemaMap, oldStateMap, newSchemaMap, newStateMap, pluginName, pluginFetch))) {
         return false;
     }
     // we need to apply old schema against new data to ensure valid/safe
     // otherwise we would examine props outside of the subspace that may
     // be invalid in the new version but dont exist in the old version
-    const oldRootSchemaMap = (0, exports.getRootSchemaMap)(oldSchemaMap);
+    const oldRootSchemaMap = (await (0, exports.getRootSchemaMap)(oldSchemaMap, pluginFetch)) ?? {};
     // ignore $(store)
-    const [, ...oldKVs] = (0, exports.getKVStateForPlugin)(oldSchemaMap, pluginName, oldStateMap).map(({ key }) => key);
+    const [, ...oldKVs] = (await (0, exports.getKVStateForPlugin)(oldSchemaMap, pluginName, oldStateMap, pluginFetch)).map(({ key }) => key);
     const oldKVsSet = new Set(oldKVs);
     // ignore $(store)
-    const [, ...newKVs] = (0, exports.getKVStateForPlugin)(newSchemaMap, pluginName, newStateMap).filter(({ key }) => oldKVsSet.has(key));
+    const [, ...newKVs] = (await (0, exports.getKVStateForPlugin)(newSchemaMap, pluginName, newStateMap, pluginFetch)).filter(({ key }) => oldKVsSet.has(key));
     // we can check against newKV since isTopologicalSubset check ensures the key
     // intersection already exists. Here we just have to ensure the new values are
     // compatible against the old schema

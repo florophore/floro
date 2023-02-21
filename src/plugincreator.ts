@@ -256,7 +256,7 @@ export const inspectLocalManifest = async (
       pluginFetch
     );
     if (expand) {
-      const rootSchemaMap = getRootSchemaMap(schemaMap);
+      const rootSchemaMap = await getRootSchemaMap(schemaMap, pluginFetch);
       return JSON.stringify(rootSchemaMap, null, 2);
     }
     return JSON.stringify(schemaMap, null, 2);
@@ -674,7 +674,7 @@ export const generateTypeScriptAPI = async (
     manifest,
     pluginFetch
   );
-  const rootSchemaMap = getRootSchemaMap(schemaMap);
+  const rootSchemaMap = await getRootSchemaMap(schemaMap, pluginFetch);
   const referenceKeys = collectKeyRefs(rootSchemaMap);
   const expandedTypes = getExpandedTypesForPlugin(schemaMap, manifest.name);
   const referenceReturnTypeMap = buildPointerReturnTypeMap(

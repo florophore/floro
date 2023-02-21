@@ -39,8 +39,8 @@ describe("plugins", () => {
         });
     });
     describe("getKVStateForPlugin", () => {
-        test("flatten simple object", () => {
-            const kvs = (0, plugins_1.getKVStateForPlugin)({
+        test("flatten simple object", async () => {
+            const kvs = await (0, plugins_1.getKVStateForPlugin)({
                 [pluginmocks_1.SIMPLE_PLUGIN_MANIFEST.name]: pluginmocks_1.SIMPLE_PLUGIN_MANIFEST,
             }, pluginmocks_1.SIMPLE_PLUGIN_MANIFEST.name, {
                 [pluginmocks_1.SIMPLE_PLUGIN_MANIFEST.name]: {
@@ -55,6 +55,8 @@ describe("plugins", () => {
                         },
                     ],
                 },
+            }, async () => {
+                return pluginmocks_1.SIMPLE_PLUGIN_MANIFEST;
             });
             expect(kvs[0].key).toEqual("$(simple)");
             expect(kvs[0].value).toEqual({});
@@ -69,7 +71,7 @@ describe("plugins", () => {
                 value: "second",
             });
         });
-        test("obeys key lexical order", () => {
+        test("obeys key lexical order", async () => {
             const PLUGIN_A_MANIFEST = {
                 name: "A",
                 version: "0.0.0",
@@ -104,7 +106,7 @@ describe("plugins", () => {
                     },
                 },
             };
-            const kvs = (0, plugins_1.getKVStateForPlugin)({
+            const kvs = await (0, plugins_1.getKVStateForPlugin)({
                 [PLUGIN_A_MANIFEST.name]: PLUGIN_A_MANIFEST,
             }, PLUGIN_A_MANIFEST.name, {
                 [PLUGIN_A_MANIFEST.name]: {
@@ -129,6 +131,8 @@ describe("plugins", () => {
                         },
                     ],
                 },
+            }, async () => {
+                return PLUGIN_A_MANIFEST;
             });
             const s1 = (0, plugins_1.getStateFromKVForPlugin)({ [PLUGIN_A_MANIFEST.name]: PLUGIN_A_MANIFEST }, kvs, PLUGIN_A_MANIFEST.name);
             expect(s1).toEqual({
@@ -154,7 +158,7 @@ describe("plugins", () => {
                 ],
             });
         });
-        test("can handle references that are key types", () => {
+        test("can handle references that are key types", async () => {
             const PLUGIN_A_MANIFEST = {
                 name: "A",
                 version: "0.0.0",
@@ -192,7 +196,7 @@ describe("plugins", () => {
                     },
                 },
             };
-            const kvs = (0, plugins_1.getKVStateForPlugin)({
+            const kvs = await (0, plugins_1.getKVStateForPlugin)({
                 [PLUGIN_A_MANIFEST.name]: PLUGIN_A_MANIFEST,
             }, PLUGIN_A_MANIFEST.name, {
                 [PLUGIN_A_MANIFEST.name]: {
@@ -221,6 +225,8 @@ describe("plugins", () => {
                         },
                     ],
                 },
+            }, async () => {
+                return PLUGIN_A_MANIFEST;
             });
             const s1 = (0, plugins_1.getStateFromKVForPlugin)({ [PLUGIN_A_MANIFEST.name]: PLUGIN_A_MANIFEST }, kvs, PLUGIN_A_MANIFEST.name);
             expect(s1).toEqual({
@@ -250,7 +256,7 @@ describe("plugins", () => {
                 ],
             });
         });
-        test("can serialize array and set primitive array or set state", () => {
+        test("can serialize array and set primitive array or set state", async () => {
             const ARRAY_PLUGIN_MANIFEST = {
                 version: "0.0.0",
                 name: "simple",
@@ -278,7 +284,7 @@ describe("plugins", () => {
                     },
                 },
             };
-            const kvs = (0, plugins_1.getKVStateForPlugin)({ [ARRAY_PLUGIN_MANIFEST.name]: ARRAY_PLUGIN_MANIFEST }, ARRAY_PLUGIN_MANIFEST.name, {
+            const kvs = await (0, plugins_1.getKVStateForPlugin)({ [ARRAY_PLUGIN_MANIFEST.name]: ARRAY_PLUGIN_MANIFEST }, ARRAY_PLUGIN_MANIFEST.name, {
                 [ARRAY_PLUGIN_MANIFEST.name]: {
                     objects: [
                         {
@@ -295,10 +301,14 @@ describe("plugins", () => {
                         },
                     ],
                 },
+            }, async () => {
+                return ARRAY_PLUGIN_MANIFEST;
             });
             const s1 = (0, plugins_1.getStateFromKVForPlugin)({ [ARRAY_PLUGIN_MANIFEST.name]: ARRAY_PLUGIN_MANIFEST }, kvs, ARRAY_PLUGIN_MANIFEST.name);
-            const kv2 = (0, plugins_1.getKVStateForPlugin)({ [ARRAY_PLUGIN_MANIFEST.name]: ARRAY_PLUGIN_MANIFEST }, ARRAY_PLUGIN_MANIFEST.name, {
+            const kv2 = await (0, plugins_1.getKVStateForPlugin)({ [ARRAY_PLUGIN_MANIFEST.name]: ARRAY_PLUGIN_MANIFEST }, ARRAY_PLUGIN_MANIFEST.name, {
                 [ARRAY_PLUGIN_MANIFEST.name]: s1,
+            }, async () => {
+                return ARRAY_PLUGIN_MANIFEST;
             });
             const s2 = (0, plugins_1.getStateFromKVForPlugin)({ [ARRAY_PLUGIN_MANIFEST.name]: ARRAY_PLUGIN_MANIFEST }, kv2, ARRAY_PLUGIN_MANIFEST.name);
             expect(s1).toEqual(s2);
@@ -319,7 +329,7 @@ describe("plugins", () => {
                 ],
             });
         });
-        test("serializes and hashes array state and dehashes state", () => {
+        test("serializes and hashes array state and dehashes state", async () => {
             const ARRAY_PLUGIN_MANIFEST = {
                 version: "0.0.0",
                 name: "simple",
@@ -351,7 +361,7 @@ describe("plugins", () => {
                     },
                 },
             };
-            const kvs = (0, plugins_1.getKVStateForPlugin)({ [ARRAY_PLUGIN_MANIFEST.name]: ARRAY_PLUGIN_MANIFEST }, ARRAY_PLUGIN_MANIFEST.name, {
+            const kvs = await (0, plugins_1.getKVStateForPlugin)({ [ARRAY_PLUGIN_MANIFEST.name]: ARRAY_PLUGIN_MANIFEST }, ARRAY_PLUGIN_MANIFEST.name, {
                 [ARRAY_PLUGIN_MANIFEST.name]: {
                     objects: [
                         {
@@ -377,10 +387,14 @@ describe("plugins", () => {
                         },
                     ],
                 },
+            }, async () => {
+                return ARRAY_PLUGIN_MANIFEST;
             });
             const s1 = (0, plugins_1.getStateFromKVForPlugin)({ [ARRAY_PLUGIN_MANIFEST.name]: ARRAY_PLUGIN_MANIFEST }, kvs, ARRAY_PLUGIN_MANIFEST.name);
-            const kv2 = (0, plugins_1.getKVStateForPlugin)({ [ARRAY_PLUGIN_MANIFEST.name]: ARRAY_PLUGIN_MANIFEST }, ARRAY_PLUGIN_MANIFEST.name, {
+            const kv2 = await (0, plugins_1.getKVStateForPlugin)({ [ARRAY_PLUGIN_MANIFEST.name]: ARRAY_PLUGIN_MANIFEST }, ARRAY_PLUGIN_MANIFEST.name, {
                 [ARRAY_PLUGIN_MANIFEST.name]: s1,
+            }, async () => {
+                return ARRAY_PLUGIN_MANIFEST;
             });
             const s2 = (0, plugins_1.getStateFromKVForPlugin)({ [ARRAY_PLUGIN_MANIFEST.name]: ARRAY_PLUGIN_MANIFEST }, kv2, ARRAY_PLUGIN_MANIFEST.name);
             expect(kv2).toEqual(kvs);
@@ -413,7 +427,7 @@ describe("plugins", () => {
         });
     });
     describe("can stich schemas", () => {
-        test("getRootSchemaForPlugin", () => {
+        test("getRootSchemaForPlugin", async () => {
             const A_PLUGIN_MANIFEST = {
                 version: "0.0.0",
                 name: "a-plugin",
@@ -513,7 +527,9 @@ describe("plugins", () => {
                 "b-plugin": B_PLUGIN_MANIFEST,
                 "c-plugin": C_PLUGIN_MANIFEST,
             };
-            const rootSchemaMap = (0, plugins_1.getRootSchemaMap)(schemaMap);
+            const rootSchemaMap = await (0, plugins_1.getRootSchemaMap)(schemaMap, async (pluginName) => {
+                return schemaMap[pluginName];
+            });
             expect(rootSchemaMap).toEqual({
                 "a-plugin": {
                     aObjects: {
@@ -586,7 +602,7 @@ describe("plugins", () => {
         });
     });
     describe("pluginManifestIsSubsetOfManifest", () => {
-        test("returns true when ordering of rootSchema keys change", () => {
+        test("returns true when ordering of rootSchema keys change", async () => {
             const CURRENT_A_PLUGIN_MANIFEST = {
                 version: "0.0.0",
                 name: "a-plugin",
@@ -618,7 +634,7 @@ describe("plugins", () => {
                 },
             };
             const NEXT_A_PLUGIN_MANIFEST = {
-                version: "0.0.0",
+                version: "0.0.1",
                 name: "a-plugin",
                 displayName: "A",
                 icon: {
@@ -656,10 +672,15 @@ describe("plugins", () => {
             const nextSchemaMap = {
                 "a-plugin": NEXT_A_PLUGIN_MANIFEST,
             };
-            const isSubset = (0, plugins_1.pluginManifestIsSubsetOfManifest)(currentSchemaMap, nextSchemaMap, "a-plugin");
+            const isSubset = await (0, plugins_1.pluginManifestIsSubsetOfManifest)(currentSchemaMap, nextSchemaMap, async (pluginName, pluginVersion) => {
+                if (pluginVersion == "0.0.0") {
+                    return currentSchemaMap[pluginName];
+                }
+                return nextSchemaMap[pluginName];
+            });
             expect(isSubset).toBe(true);
         });
-        test("returns true when current rootSchema is subset of next rootSchema", () => {
+        test("returns true when current rootSchema is subset of next rootSchema", async () => {
             const CURRENT_A_PLUGIN_MANIFEST = {
                 version: "0.0.0",
                 name: "a-plugin",
@@ -714,7 +735,7 @@ describe("plugins", () => {
                 },
             };
             const NEXT_A_PLUGIN_MANIFEST = {
-                version: "0.0.0",
+                version: "0.0.1",
                 name: "a-plugin",
                 displayName: "A",
                 icon: {
@@ -741,7 +762,7 @@ describe("plugins", () => {
                 },
             };
             const NEXT_B_PLUGIN_MANIFEST = {
-                version: "0.0.0",
+                version: "0.0.1",
                 name: "b-plugin",
                 displayName: "Simple",
                 icon: {
@@ -780,10 +801,15 @@ describe("plugins", () => {
                 "a-plugin": NEXT_A_PLUGIN_MANIFEST,
                 "b-plugin": NEXT_B_PLUGIN_MANIFEST,
             };
-            const isSubset = (0, plugins_1.pluginManifestIsSubsetOfManifest)(currentSchemaMap, nextSchemaMap, "b-plugin");
+            const isSubset = await (0, plugins_1.pluginManifestIsSubsetOfManifest)(currentSchemaMap, nextSchemaMap, async (pluginName, pluginVersion) => {
+                if (pluginVersion == "0.0.0") {
+                    return currentSchemaMap[pluginName];
+                }
+                return nextSchemaMap[pluginName];
+            });
             expect(isSubset).toBe(true);
         });
-        test("returns false when current rootSchema is NOT subset of next rootSchema", () => {
+        test("returns false when current rootSchema is NOT subset of next rootSchema", async () => {
             const CURRENT_A_PLUGIN_MANIFEST = {
                 version: "0.0.0",
                 name: "a-plugin",
@@ -811,37 +837,8 @@ describe("plugins", () => {
                     },
                 },
             };
-            const CURRENT_B_PLUGIN_MANIFEST = {
-                version: "0.0.0",
-                name: "b-plugin",
-                displayName: "Simple",
-                icon: {
-                    light: "./palette-plugin-icon.svg",
-                    dark: "./palette-plugin-icon.svg",
-                },
-                imports: {
-                    "a-plugin": "~0.0.0",
-                },
-                types: {
-                    typeB: {
-                        name: {
-                            type: "string",
-                            isKey: true,
-                        },
-                        a: {
-                            type: "ref<a-plugin.typeA>",
-                        },
-                    },
-                },
-                store: {
-                    bObjects: {
-                        type: "set",
-                        values: "typeB",
-                    },
-                },
-            };
             const NEXT_A_PLUGIN_MANIFEST = {
-                version: "0.0.0",
+                version: "0.0.1",
                 name: "a-plugin",
                 displayName: "A",
                 icon: {
@@ -870,52 +867,23 @@ describe("plugins", () => {
                     },
                 },
             };
-            const NEXT_B_PLUGIN_MANIFEST = {
-                version: "0.0.0",
-                name: "b-plugin",
-                displayName: "Simple",
-                icon: {
-                    light: "./palette-plugin-icon.svg",
-                    dark: "./palette-plugin-icon.svg",
-                },
-                imports: {
-                    "a-plugin": "~0.0.0",
-                },
-                types: {
-                    typeB: {
-                        name: {
-                            type: "string",
-                            isKey: true,
-                        },
-                        a: {
-                            type: "ref<a-plugin.typeA>",
-                        },
-                        newProp: {
-                            type: "int",
-                        },
-                    },
-                },
-                store: {
-                    bObjects: {
-                        type: "set",
-                        values: "typeB",
-                    },
-                },
-            };
             const currentSchemaMap = {
                 "a-plugin": CURRENT_A_PLUGIN_MANIFEST,
-                "b-plugin": CURRENT_B_PLUGIN_MANIFEST,
             };
             const nextSchemaMap = {
                 "a-plugin": NEXT_A_PLUGIN_MANIFEST,
-                "b-plugin": NEXT_B_PLUGIN_MANIFEST,
             };
-            const isSubset = (0, plugins_1.pluginManifestIsSubsetOfManifest)(currentSchemaMap, nextSchemaMap, "b-plugin");
+            const isSubset = await (0, plugins_1.pluginManifestIsSubsetOfManifest)(currentSchemaMap, nextSchemaMap, async (pluginName, pluginVersion) => {
+                if (pluginVersion == "0.0.0") {
+                    return currentSchemaMap[pluginName];
+                }
+                return nextSchemaMap[pluginName];
+            });
             expect(isSubset).toBe(false);
         });
     });
     describe("cascading", () => {
-        test("cascades deletions down plugin chain", () => {
+        test("cascades deletions down plugin chain", async () => {
             const A_PLUGIN_MANIFEST = {
                 version: "0.0.0",
                 name: "a-plugin",
@@ -1020,7 +988,9 @@ describe("plugins", () => {
                     ],
                 },
             };
-            const cascadedAState = (0, plugins_1.cascadePluginState)(schemaMap, stateMap, A_PLUGIN_MANIFEST.name);
+            const cascadedAState = await (0, plugins_1.cascadePluginState)(schemaMap, stateMap, A_PLUGIN_MANIFEST.name, (pluginName) => {
+                return schemaMap[pluginName];
+            });
             expect(cascadedAState).toEqual({
                 "a-plugin": {
                     aObjects: [
@@ -1043,7 +1013,7 @@ describe("plugins", () => {
                 },
             });
         });
-        test("respects nullify", () => {
+        test("respects nullify", async () => {
             const A_PLUGIN_MANIFEST = {
                 version: "0.0.0",
                 name: "a-plugin",
@@ -1150,7 +1120,9 @@ describe("plugins", () => {
                     ],
                 },
             };
-            const cascadedAState = (0, plugins_1.cascadePluginState)(schemaMap, stateMap, A_PLUGIN_MANIFEST.name);
+            const cascadedAState = await (0, plugins_1.cascadePluginState)(schemaMap, stateMap, A_PLUGIN_MANIFEST.name, async (pluginName) => {
+                return schemaMap[pluginName];
+            });
             expect(cascadedAState).toEqual({
                 "a-plugin": {
                     aObjects: [
@@ -1191,7 +1163,7 @@ describe("plugins", () => {
                 },
             });
         });
-        test("can cascade multi chained references", () => {
+        test("can cascade multi chained references", async () => {
             const PLUGIN_A_MANIFEST = {
                 name: "A",
                 version: "0.0.0",
@@ -1257,7 +1229,9 @@ describe("plugins", () => {
                     ],
                 },
             };
-            const cascadedAState = (0, plugins_1.cascadePluginState)(schemaMap, stateMap, PLUGIN_A_MANIFEST.name);
+            const cascadedAState = await (0, plugins_1.cascadePluginState)(schemaMap, stateMap, PLUGIN_A_MANIFEST.name, async (pluginName) => {
+                return schemaMap[pluginName];
+            });
             expect(cascadedAState).toEqual({
                 A: {
                     aObjects: [
@@ -1280,7 +1254,7 @@ describe("plugins", () => {
         });
     });
     describe("state validation", () => {
-        test("returns true when state is valid", () => {
+        test("returns true when state is valid", async () => {
             const A_PLUGIN_MANIFEST = {
                 version: "0.0.0",
                 name: "a-plugin",
@@ -1330,10 +1304,12 @@ describe("plugins", () => {
                     ],
                 },
             };
-            const validState = (0, plugins_1.validatePluginState)(schemaMap, validStateMap, A_PLUGIN_MANIFEST.name);
+            const validState = await (0, plugins_1.validatePluginState)(schemaMap, validStateMap, A_PLUGIN_MANIFEST.name, async (pluginName) => {
+                return schemaMap[pluginName];
+            });
             expect(validState).toEqual(true);
         });
-        test("returns false when state is invalid", () => {
+        test("returns false when state is invalid", async () => {
             const A_PLUGIN_MANIFEST = {
                 version: "0.0.0",
                 name: "a-plugin",
@@ -1383,10 +1359,12 @@ describe("plugins", () => {
                     ],
                 },
             };
-            const invalidState = (0, plugins_1.validatePluginState)(schemaMap, invalidStateMap, A_PLUGIN_MANIFEST.name);
+            const invalidState = await (0, plugins_1.validatePluginState)(schemaMap, invalidStateMap, A_PLUGIN_MANIFEST.name, async (pluginName) => {
+                return schemaMap[pluginName];
+            });
             expect(invalidState).toEqual(false);
         });
-        test("returns true when empty array is emptyable", () => {
+        test("returns true when empty array is emptyable", async () => {
             const A_PLUGIN_MANIFEST = {
                 version: "0.0.0",
                 name: "a-plugin",
@@ -1437,10 +1415,12 @@ describe("plugins", () => {
                     ],
                 },
             };
-            const validState = (0, plugins_1.validatePluginState)(schemaMap, validStateMap, A_PLUGIN_MANIFEST.name);
+            const validState = await (0, plugins_1.validatePluginState)(schemaMap, validStateMap, A_PLUGIN_MANIFEST.name, async (pluginName) => {
+                return schemaMap[pluginName];
+            });
             expect(validState).toEqual(true);
         });
-        test("returns false when empty array is not emptyable", () => {
+        test("returns false when empty array is not emptyable", async () => {
             const A_PLUGIN_MANIFEST = {
                 version: "0.0.0",
                 name: "a-plugin",
@@ -1487,12 +1467,14 @@ describe("plugins", () => {
                     ],
                 },
             };
-            const invalidState = (0, plugins_1.validatePluginState)(schemaMap, invalidStateMap, A_PLUGIN_MANIFEST.name);
+            const invalidState = await (0, plugins_1.validatePluginState)(schemaMap, invalidStateMap, A_PLUGIN_MANIFEST.name, async (pluginName) => {
+                return schemaMap[pluginName];
+            });
             expect(invalidState).toEqual(false);
         });
     });
     describe("topological subset", () => {
-        test("returns true when is not a valid subset", () => {
+        test("returns true when is not a valid subset", async () => {
             const BEFORE_PLUGIN_MANIFEST = {
                 version: "0.0.0",
                 name: "a-plugin",
@@ -1538,7 +1520,7 @@ describe("plugins", () => {
                 },
             };
             const AFTER_PLUGIN_MANIFEST = {
-                version: "0.0.0",
+                version: "0.0.1",
                 name: "a-plugin",
                 displayName: "A",
                 icon: {
@@ -1591,10 +1573,15 @@ describe("plugins", () => {
                     ],
                 },
             };
-            const isTopSubset = (0, plugins_1.isTopologicalSubsetValid)(beforeSchemaMap, beforeStateMap, afterSchemaMap, afterStateMap, BEFORE_PLUGIN_MANIFEST.name);
+            const isTopSubset = await (0, plugins_1.isTopologicalSubsetValid)(beforeSchemaMap, beforeStateMap, afterSchemaMap, afterStateMap, BEFORE_PLUGIN_MANIFEST.name, async (pluginName, pluginVersion) => {
+                if (pluginVersion == "0.0.0") {
+                    return beforeSchemaMap[pluginName];
+                }
+                return afterSchemaMap[pluginName];
+            });
             expect(isTopSubset).toEqual(true);
         });
-        test("returns false when is NOT a valid subset", () => {
+        test("returns false when is NOT a valid subset", async () => {
             const BEFORE_PLUGIN_MANIFEST = {
                 version: "0.0.0",
                 name: "a-plugin",
@@ -1640,7 +1627,7 @@ describe("plugins", () => {
                 },
             };
             const AFTER_PLUGIN_MANIFEST = {
-                version: "0.0.0",
+                version: "0.0.1",
                 name: "a-plugin",
                 displayName: "A",
                 icon: {
@@ -1688,10 +1675,15 @@ describe("plugins", () => {
                     ],
                 },
             };
-            const isTopSubset = (0, plugins_1.isTopologicalSubsetValid)(beforeSchemaMap, beforeStateMap, afterSchemaMap, afterStateMap, BEFORE_PLUGIN_MANIFEST.name);
+            const isTopSubset = await (0, plugins_1.isTopologicalSubsetValid)(beforeSchemaMap, beforeStateMap, afterSchemaMap, afterStateMap, BEFORE_PLUGIN_MANIFEST.name, async (pluginName, pluginVersion) => {
+                if (pluginVersion == "0.0.0") {
+                    return beforeSchemaMap[pluginName];
+                }
+                return afterSchemaMap[pluginName];
+            });
             expect(isTopSubset).toEqual(false);
             const B_AFTER_PLUGIN_MANIFEST = {
-                version: "0.0.0",
+                version: "0.0.1",
                 name: "a-plugin",
                 displayName: "A",
                 icon: {
@@ -1744,8 +1736,18 @@ describe("plugins", () => {
                     ],
                 },
             };
-            expect((0, plugins_1.validatePluginState)(bAfterSchemaMap, bAfterStateMap, BEFORE_PLUGIN_MANIFEST.name)).toBe(true);
-            const bIsTopSubset = (0, plugins_1.isTopologicalSubsetValid)(beforeSchemaMap, beforeStateMap, bAfterSchemaMap, bAfterStateMap, BEFORE_PLUGIN_MANIFEST.name);
+            expect(await (0, plugins_1.validatePluginState)(bAfterSchemaMap, bAfterStateMap, BEFORE_PLUGIN_MANIFEST.name, async (pluginName, pluginVersion) => {
+                if (pluginVersion == "0.0.0") {
+                    return beforeSchemaMap[pluginName];
+                }
+                return afterSchemaMap[pluginName];
+            })).toBe(true);
+            const bIsTopSubset = await (0, plugins_1.isTopologicalSubsetValid)(beforeSchemaMap, beforeStateMap, bAfterSchemaMap, bAfterStateMap, BEFORE_PLUGIN_MANIFEST.name, async (pluginName, pluginVersion) => {
+                if (pluginVersion == "0.0.0") {
+                    return beforeSchemaMap[pluginName];
+                }
+                return afterSchemaMap[pluginName];
+            });
             expect(bIsTopSubset).toEqual(false);
         });
     });
