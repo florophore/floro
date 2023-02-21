@@ -17,6 +17,10 @@ import semver from "semver";
 import { broadcastAllDevices } from "./multiplexer";
 import tar from "tar";
 
+axios.defaults.validateStatus = function () {
+  return true;
+};
+
 export interface PluginElement {
   key: string;
   value: string;
@@ -196,8 +200,8 @@ export const downloadPlugin = async (
     for (const dependency of installResponse.dependencies) {
       const pluginManifestPath = path.join(
         vPluginsPath,
-        pluginName,
-        pluginVersion,
+        dependency.name,
+        dependency.version,
         "floro",
         "floro.manifest.json"
       );
@@ -211,7 +215,7 @@ export const downloadPlugin = async (
         dependency.link,
         dependency.hash
       );
-      if (dependencyManifest) {
+      if (!dependencyManifest) {
         return null;
       }
       const stillExistsLocallly = await existsAsync(pluginManifestPath);
@@ -276,6 +280,7 @@ export const pluginManifestsAreCompatibleForUpdate = async (
 ): Promise<boolean | null> => {
   const oldSchemaMap = await getSchemaMapForManifest(oldManifest, pluginFetch);
   const newSchemaMap = await getSchemaMapForManifest(newManifest, pluginFetch);
+
   if (!oldSchemaMap) {
     return null;
   }
@@ -641,6 +646,175 @@ export const getSchemaMapForManifest = async (
   return out;
 };
 
+export const schemaManifestHasInvalidSyntax = (
+  schema: Manifest
+): SyntaxValidation => {
+  if (!schema?.store) {
+    return {
+      isInvalid: true,
+      error: "Store cannot be empty"
+    };
+  }
+  if (typeof schema?.store != "object") {
+    return {
+      isInvalid: true,
+      error: "Store must be an object"
+    };
+  }
+  if ( Object.keys(schema.store).length == 0) {
+    return {
+      isInvalid: true,
+      error: "Store cannot be empty"
+    };
+  }
+  if (!schema?.types) {
+    return {
+      isInvalid: true,
+      error: "Types cannot be empty"
+    };
+  }
+  if (typeof schema?.types != "object") {
+    return {
+      isInvalid: true,
+      error: "Types must be an object"
+    };
+  }
+  if (!schema?.imports) {
+    return {
+      isInvalid: true,
+      error: "Imports cannot be empty"
+    };
+  }
+  if (typeof schema?.imports != "object") {
+    return {
+      isInvalid: true,
+      error: "Imports must be an object"
+    };
+  }
+  return schemaHasInvalidTypeSytax(schema, schema.store);
+}
+
+export interface SyntaxValidation {
+  isInvalid: boolean;
+  error?: string;
+}
+
+export const schemaHasInvalidTypeSytax = (
+  schema: Manifest,
+  struct: TypeStruct,
+  visited = {}
+): SyntaxValidation => {
+  for (const prop in struct) {
+    if (visited[struct[prop]?.type as string]) {
+      continue;
+    }
+    if (typeof struct[prop].type == "string" && (struct[prop]?.type as string)?.startsWith("$")) {
+        return {
+          isInvalid: true,
+          error: `${prop} in \n${JSON.stringify(
+            struct,
+            null,
+            2
+          )}\n type value cannot start with $`,
+        };
+    }
+
+    if (
+      (struct[prop].type as string) == "set" ||
+      ((struct[prop].type as string) == "array")
+    ) {
+      if (typeof struct[prop].values == "string" && (struct[prop]?.values as string)?.startsWith("$")) {
+          return {
+            isInvalid: true,
+            error: `${prop} in \n${JSON.stringify(
+              struct,
+              null,
+              2
+            )}\n values value cannot start with $`,
+          };
+      }
+      if (typeof struct[prop].values == "string" && primitives.has(struct[prop].values as string)) {
+        continue;
+      }
+      if (typeof struct[prop].values != "string") {
+        const syntaxCheck = schemaHasInvalidTypeSytax(
+          schema,
+          struct[prop].values as TypeStruct,
+          {
+            ...visited,
+          }
+        )
+        if (syntaxCheck.isInvalid) {
+          return syntaxCheck;
+        }
+        continue;
+      }
+      if (
+        typeof struct[prop].values == "string" &&
+        schema.types[struct[prop].values as string]
+      ) {
+        const syntaxCheck = schemaHasInvalidTypeSytax(
+          schema,
+          schema.types[struct[prop].values as string] as TypeStruct,
+          {
+            ...visited,
+            [struct[prop].values as string]: true,
+          }
+        )
+        if (syntaxCheck.isInvalid) {
+          return syntaxCheck;
+        }
+      }
+      continue;
+    }
+    if (schema.types[struct[prop].type as string]) {
+      const syntaxCheck = schemaHasInvalidTypeSytax(
+          schema,
+          schema.types[struct[prop].type as string] as TypeStruct,
+          {
+            ...visited,
+            [struct[prop].type as string]: true,
+          }
+      );
+      if (
+        syntaxCheck.isInvalid
+      ) {
+        return syntaxCheck;
+      }
+      continue;
+    }
+    if (!struct[prop]?.type) {
+      if (typeof struct[prop] == "string") {
+        return {
+          isInvalid: true,
+          error: `${prop} in \n${JSON.stringify(
+            struct,
+            null,
+            2
+          )}\n canot be a string value, found "${
+            struct[prop]
+          }". Perhaps try changing to type \n${JSON.stringify(
+            { ...struct, [prop]: { type: struct[prop] } },
+            null,
+            2
+          )}`,
+        };
+      }
+      const syntaxCheck = schemaHasInvalidTypeSytax(
+        schema,
+        struct[prop] as TypeStruct,
+        {
+          ...visited,
+        }
+      );
+      if (syntaxCheck.isInvalid) {
+        return syntaxCheck;
+      }
+    }
+  }
+  return { isInvalid: false};
+}
+
 export const containsCyclicTypes = (
   schema: Manifest,
   struct: TypeStruct,
@@ -673,7 +847,7 @@ export const containsCyclicTypes = (
           schema.types[struct[prop].type as string] as TypeStruct,
           {
             ...visited,
-            [schema.types[struct[prop].type as string] as unknown as string]:
+            [struct[prop].type as string]:
               true,
           }
         )
@@ -698,6 +872,13 @@ export const validatePluginManifest = async (
   pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>
 ) => {
   try {
+    const syntaxCheck = schemaManifestHasInvalidSyntax(manifest);
+    if (syntaxCheck.isInvalid) {
+      return {
+        status: "error",
+        message: syntaxCheck.error,
+      };
+    }
     if (containsCyclicTypes(manifest, manifest.store)) {
       return {
         status: "error",
@@ -2418,7 +2599,7 @@ export const isSchemaValid = (
       const formattedPath = [`$(${root})`, ...rest].join(".");
       return {
         status: "error",
-        message: `Arrays cannot contain keyed set descendents. Found at '${formattedPath}'.`,
+        message: `Arrays cannot contain keyed set descendents. Found at '${formattedPath}.values'.`,
       };
     }
 
@@ -2427,7 +2608,7 @@ export const isSchemaValid = (
       const formattedPath = [`$(${root})`, ...rest].join(".");
       return {
         status: "error",
-        message: `Arrays cannot contain keyed values. Found at '${formattedPath}'.`,
+        message: `Arrays cannot contain keyed values. Found at '${formattedPath}.values'.`,
       };
     }
 
@@ -2436,7 +2617,7 @@ export const isSchemaValid = (
       const formattedPath = [`$(${root})`, ...rest].join(".");
       return {
         status: "error",
-        message: `Sets cannot contain multiple key types. Multiple key types found at '${formattedPath}'.`,
+        message: `Sets cannot contain multiple key types. Multiple key types found at '${formattedPath}.values'.`,
       };
     }
 
@@ -2445,7 +2626,7 @@ export const isSchemaValid = (
       const formattedPath = [`$(${root})`, ...rest].join(".");
       return {
         status: "error",
-        message: `Sets must contain one (and only one) key type. No key type found at '${formattedPath}'.`,
+        message: `Sets must contain one (and only one) key type. No key type found at '${formattedPath}.values'.`,
       };
     }
 
@@ -2468,12 +2649,12 @@ export const isSchemaValid = (
         }
         const refStruct = typeStruct[refProp] as ManifestNode;
         if (refStruct?.refType?.startsWith("$")) {
+          const [root, ...rest] = path;
           const pluginName =
             /^\$\((.+)\)$/.exec(
               refStruct?.refType.split(".")[0] as string
-            )?.[1] ?? null;
+            )?.[1] ?? (refStruct?.refType.split(".")[0] == "$" ? root : null);
           if (!pluginName) {
-            const [root, ...rest] = path;
             const formattedPath = [`$(${root})`, ...rest, refProp].join(".");
             return {
               status: "error",
@@ -2497,7 +2678,7 @@ export const isSchemaValid = (
             const formattedPath = [`$(${root})`, ...rest, refProp].join(".");
             return {
               status: "error",
-              message: `Invalid reference pointer '${refStruct.refType}'. Keys that are constrained ref types, cannot be self-referential. Found at '${formattedPath}'.`,
+              message: `Invalid reference pointer '${refStruct.refType}'. Keys that are constrained ref types cannot be schematically self-referential. Found at '${formattedPath}'.`,
             };
           }
           const containsKey = Object.keys(referencedType).reduce(
@@ -2657,7 +2838,7 @@ export const invalidSchemaPropsCheck = (
       const formattedPath = [...path, prop].join(".");
       return {
         status: "error",
-        message: `Invalid prop in schema. Remove '${prop}' from '${path.join(
+        message: `Invalid prop in schema. Remove or change '${prop}=${typeStruct[prop]}' from '${path.join(
           "."
         )}'. Found at '${formattedPath}'.`,
       };
@@ -3029,12 +3210,12 @@ export const drawMakeQueryRef = (
         return s + `, arg${index}: ${argType}`;
       }, `query: '${replaceRefVarsWithWildcards(query)}'`);
 
-      code += `export function useMakeQueryRef(${params}): QueryTypes['${replaceRefVarsWithWildcards(
+      code += `export function useQueryRef(${params}): QueryTypes['${replaceRefVarsWithWildcards(
         query
       )}'];\n`;
     }
 
-    code += `export function useMakeQueryRef(query: ${globalQueryParam}, ${globalParams.join(
+    code += `export function useQueryRef(query: ${globalQueryParam}, ${globalParams.join(
       ", "
     )}): ${globalQueryReturn}|null {\n`;
     code += `  return useMemo(() => {\n`;
@@ -3281,8 +3462,8 @@ const decodeSchemaPath = (
   });
 };
 
-export const getObjectInStateMap = (stateMap: object, path: string): object | null => {
-  let current: null | undefined | object = null;
+export const getObjectInStateMap = (stateMap: object&{[key: string]: object}, path: string): object | null => {
+  let current: null | undefined | object&{[key: string]: object}| unknown = null;
   const [pluginWrapper, ...decodedPath] = decodeSchemaPath(path);
   const pluginName = /^$((.+))$/.exec(pluginWrapper as string)?.[1] ?? null;
   if (!pluginName) {
@@ -3302,7 +3483,7 @@ export const getObjectInStateMap = (stateMap: object, path: string): object | nu
         return null;
       }
     } else {
-      current = current[part];
+      current = (current as {[key: string]: object|unknown})[part];
     }
   }
   return current ?? null;

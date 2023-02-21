@@ -80,6 +80,12 @@ export declare const verifyPluginDependencyCompatability: (deps: Array<Manifest>
 export declare const getSchemaMapForManifest: (manifest: Manifest, pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>) => Promise<{
     [key: string]: Manifest;
 }>;
+export declare const schemaManifestHasInvalidSyntax: (schema: Manifest) => SyntaxValidation;
+export interface SyntaxValidation {
+    isInvalid: boolean;
+    error?: string;
+}
+export declare const schemaHasInvalidTypeSytax: (schema: Manifest, struct: TypeStruct, visited?: {}) => SyntaxValidation;
 export declare const containsCyclicTypes: (schema: Manifest, struct: TypeStruct, visited?: {}) => boolean;
 export declare const validatePluginManifest: (manifest: Manifest, pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>) => Promise<SchemaValidationResponse | {
     status: string;

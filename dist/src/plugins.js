@@ -26,7 +26,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.drawGetPluginStore = exports.drawGetReferencedObject = exports.drawRefReturnTypes = exports.drawSchemaRoot = exports.drawMakeQueryRef = exports.buildPointerArgsMap = exports.buildPointerReturnTypeMap = exports.typestructsAreEquivalent = exports.replaceRawRefsInExpandedType = exports.replaceRefVarsWithWildcards = exports.collectKeyRefs = exports.invalidSchemaPropsCheck = exports.isSchemaValid = exports.isTopologicalSubsetValid = exports.isTopologicalSubset = exports.pluginManifestIsSubsetOfManifest = exports.validatePluginState = exports.cascadePluginState = exports.getKVStateForPlugin = exports.getRootSchemaMap = exports.getRootSchemaForPlugin = exports.getExpandedTypesForPlugin = exports.getStateFromKVForPlugin = exports.buildObjectsAtPath = exports.indexArrayDuplicates = exports.flattenStateToSchemaPathKV = exports.getStateId = exports.decodeSchemaPath = exports.writePathString = exports.defaultVoidedState = exports.validatePluginManifest = exports.containsCyclicTypes = exports.getSchemaMapForManifest = exports.verifyPluginDependencyCompatability = exports.coalesceDependencyVersions = exports.getUpstreamDependencyManifests = exports.getDependenciesForManifest = exports.hasPluginManifest = exports.hasPlugin = exports.manifestListToSchemaMap = exports.pluginMapToList = exports.pluginListToMap = exports.getPluginManifests = exports.pluginManifestsAreCompatibleForUpdate = exports.getPluginManifest = exports.readPluginManifest = exports.downloadPlugin = exports.readDevPluginManifest = void 0;
+exports.drawGetPluginStore = exports.drawGetReferencedObject = exports.drawRefReturnTypes = exports.drawSchemaRoot = exports.drawMakeQueryRef = exports.buildPointerArgsMap = exports.buildPointerReturnTypeMap = exports.typestructsAreEquivalent = exports.replaceRawRefsInExpandedType = exports.replaceRefVarsWithWildcards = exports.collectKeyRefs = exports.invalidSchemaPropsCheck = exports.isSchemaValid = exports.isTopologicalSubsetValid = exports.isTopologicalSubset = exports.pluginManifestIsSubsetOfManifest = exports.validatePluginState = exports.cascadePluginState = exports.getKVStateForPlugin = exports.getRootSchemaMap = exports.getRootSchemaForPlugin = exports.getExpandedTypesForPlugin = exports.getStateFromKVForPlugin = exports.buildObjectsAtPath = exports.indexArrayDuplicates = exports.flattenStateToSchemaPathKV = exports.getStateId = exports.decodeSchemaPath = exports.writePathString = exports.defaultVoidedState = exports.validatePluginManifest = exports.containsCyclicTypes = exports.schemaHasInvalidTypeSytax = exports.schemaManifestHasInvalidSyntax = exports.getSchemaMapForManifest = exports.verifyPluginDependencyCompatability = exports.coalesceDependencyVersions = exports.getUpstreamDependencyManifests = exports.getDependenciesForManifest = exports.hasPluginManifest = exports.hasPlugin = exports.manifestListToSchemaMap = exports.pluginMapToList = exports.pluginListToMap = exports.getPluginManifests = exports.pluginManifestsAreCompatibleForUpdate = exports.getPluginManifest = exports.readPluginManifest = exports.downloadPlugin = exports.readDevPluginManifest = void 0;
 const filestructure_1 = require("./filestructure");
 const axios_1 = __importDefault(require("axios"));
 const path_1 = __importDefault(require("path"));
@@ -35,6 +35,9 @@ const cryptojs_1 = require("cryptojs");
 const semver_1 = __importDefault(require("semver"));
 const multiplexer_1 = require("./multiplexer");
 const tar_1 = __importDefault(require("tar"));
+axios_1.default.defaults.validateStatus = function () {
+    return true;
+};
 const primitives = new Set(["int", "float", "boolean", "string"]);
 const readDevPluginManifest = async (pluginName, pluginVersion) => {
     const pluginsJSON = await (0, filestructure_1.getPluginsJsonAsync)();
@@ -133,13 +136,13 @@ const downloadPlugin = async (pluginName, pluginVersion) => {
     if (request.status == 200) {
         const installResponse = request.data;
         for (const dependency of installResponse.dependencies) {
-            const pluginManifestPath = path_1.default.join(filestructure_1.vPluginsPath, pluginName, pluginVersion, "floro", "floro.manifest.json");
+            const pluginManifestPath = path_1.default.join(filestructure_1.vPluginsPath, dependency.name, dependency.version, "floro", "floro.manifest.json");
             const existsLocallly = await (0, filestructure_1.existsAsync)(pluginManifestPath);
             if (existsLocallly) {
                 continue;
             }
             const dependencyManifest = await pullTar(dependency.name, dependency.version, dependency.link, dependency.hash);
-            if (dependencyManifest) {
+            if (!dependencyManifest) {
                 return null;
             }
             const stillExistsLocallly = await (0, filestructure_1.existsAsync)(pluginManifestPath);
@@ -453,6 +456,123 @@ const getSchemaMapForManifest = async (manifest, pluginFetch) => {
     return out;
 };
 exports.getSchemaMapForManifest = getSchemaMapForManifest;
+const schemaManifestHasInvalidSyntax = (schema) => {
+    if (!schema?.store) {
+        return {
+            isInvalid: true,
+            error: "Store cannot be empty"
+        };
+    }
+    if (typeof schema?.store != "object") {
+        return {
+            isInvalid: true,
+            error: "Store must be an object"
+        };
+    }
+    if (Object.keys(schema.store).length == 0) {
+        return {
+            isInvalid: true,
+            error: "Store cannot be empty"
+        };
+    }
+    if (!schema?.types) {
+        return {
+            isInvalid: true,
+            error: "Types cannot be empty"
+        };
+    }
+    if (typeof schema?.types != "object") {
+        return {
+            isInvalid: true,
+            error: "Types must be an object"
+        };
+    }
+    if (!schema?.imports) {
+        return {
+            isInvalid: true,
+            error: "Imports cannot be empty"
+        };
+    }
+    if (typeof schema?.imports != "object") {
+        return {
+            isInvalid: true,
+            error: "Imports must be an object"
+        };
+    }
+    return (0, exports.schemaHasInvalidTypeSytax)(schema, schema.store);
+};
+exports.schemaManifestHasInvalidSyntax = schemaManifestHasInvalidSyntax;
+const schemaHasInvalidTypeSytax = (schema, struct, visited = {}) => {
+    for (const prop in struct) {
+        if (visited[struct[prop]?.type]) {
+            continue;
+        }
+        if (typeof struct[prop].type == "string" && struct[prop]?.type?.startsWith("$")) {
+            return {
+                isInvalid: true,
+                error: `${prop} in \n${JSON.stringify(struct, null, 2)}\n type value cannot start with $`,
+            };
+        }
+        if (struct[prop].type == "set" ||
+            (struct[prop].type == "array")) {
+            if (typeof struct[prop].values == "string" && struct[prop]?.values?.startsWith("$")) {
+                return {
+                    isInvalid: true,
+                    error: `${prop} in \n${JSON.stringify(struct, null, 2)}\n values value cannot start with $`,
+                };
+            }
+            if (typeof struct[prop].values == "string" && primitives.has(struct[prop].values)) {
+                continue;
+            }
+            if (typeof struct[prop].values != "string") {
+                const syntaxCheck = (0, exports.schemaHasInvalidTypeSytax)(schema, struct[prop].values, {
+                    ...visited,
+                });
+                if (syntaxCheck.isInvalid) {
+                    return syntaxCheck;
+                }
+                continue;
+            }
+            if (typeof struct[prop].values == "string" &&
+                schema.types[struct[prop].values]) {
+                const syntaxCheck = (0, exports.schemaHasInvalidTypeSytax)(schema, schema.types[struct[prop].values], {
+                    ...visited,
+                    [struct[prop].values]: true,
+                });
+                if (syntaxCheck.isInvalid) {
+                    return syntaxCheck;
+                }
+            }
+            continue;
+        }
+        if (schema.types[struct[prop].type]) {
+            const syntaxCheck = (0, exports.schemaHasInvalidTypeSytax)(schema, schema.types[struct[prop].type], {
+                ...visited,
+                [struct[prop].type]: true,
+            });
+            if (syntaxCheck.isInvalid) {
+                return syntaxCheck;
+            }
+            continue;
+        }
+        if (!struct[prop]?.type) {
+            if (typeof struct[prop] == "string") {
+                return {
+                    isInvalid: true,
+                    error: `${prop} in \n${JSON.stringify(struct, null, 2)}\n canot be a string value, found "${struct[prop]}". Perhaps try changing to type \n${JSON.stringify({ ...struct, [prop]: { type: struct[prop] } }, null, 2)}`,
+                };
+            }
+            const syntaxCheck = (0, exports.schemaHasInvalidTypeSytax)(schema, struct[prop], {
+                ...visited,
+            });
+            if (syntaxCheck.isInvalid) {
+                return syntaxCheck;
+            }
+        }
+    }
+    return { isInvalid: false };
+};
+exports.schemaHasInvalidTypeSytax = schemaHasInvalidTypeSytax;
 const containsCyclicTypes = (schema, struct, visited = {}) => {
     for (const prop in struct) {
         if (struct[prop].type == "set" ||
@@ -470,7 +590,7 @@ const containsCyclicTypes = (schema, struct, visited = {}) => {
             if (visited[struct[prop].type] ||
                 (0, exports.containsCyclicTypes)(schema, schema.types[struct[prop].type], {
                     ...visited,
-                    [schema.types[struct[prop].type]]: true,
+                    [struct[prop].type]: true,
                 })) {
                 return true;
             }
@@ -488,6 +608,13 @@ const containsCyclicTypes = (schema, struct, visited = {}) => {
 exports.containsCyclicTypes = containsCyclicTypes;
 const validatePluginManifest = async (manifest, pluginFetch) => {
     try {
+        const syntaxCheck = (0, exports.schemaManifestHasInvalidSyntax)(manifest);
+        if (syntaxCheck.isInvalid) {
+            return {
+                status: "error",
+                message: syntaxCheck.error,
+            };
+        }
         if ((0, exports.containsCyclicTypes)(manifest, manifest.store)) {
             return {
                 status: "error",
@@ -1782,7 +1909,7 @@ const isSchemaValid = (typeStruct, schemaMap, rootSchemaMap, expandedTypes, isDi
             const formattedPath = [`$(${root})`, ...rest].join(".");
             return {
                 status: "error",
-                message: `Arrays cannot contain keyed set descendents. Found at '${formattedPath}'.`,
+                message: `Arrays cannot contain keyed set descendents. Found at '${formattedPath}.values'.`,
             };
         }
         if (isDirectParentArray && keyCount > 1) {
@@ -1790,7 +1917,7 @@ const isSchemaValid = (typeStruct, schemaMap, rootSchemaMap, expandedTypes, isDi
             const formattedPath = [`$(${root})`, ...rest].join(".");
             return {
                 status: "error",
-                message: `Arrays cannot contain keyed values. Found at '${formattedPath}'.`,
+                message: `Arrays cannot contain keyed values. Found at '${formattedPath}.values'.`,
             };
         }
         if (isDirectParentSet && keyCount > 1) {
@@ -1798,7 +1925,7 @@ const isSchemaValid = (typeStruct, schemaMap, rootSchemaMap, expandedTypes, isDi
             const formattedPath = [`$(${root})`, ...rest].join(".");
             return {
                 status: "error",
-                message: `Sets cannot contain multiple key types. Multiple key types found at '${formattedPath}'.`,
+                message: `Sets cannot contain multiple key types. Multiple key types found at '${formattedPath}.values'.`,
             };
         }
         if (isDirectParentSet && keyCount == 0) {
@@ -1806,7 +1933,7 @@ const isSchemaValid = (typeStruct, schemaMap, rootSchemaMap, expandedTypes, isDi
             const formattedPath = [`$(${root})`, ...rest].join(".");
             return {
                 status: "error",
-                message: `Sets must contain one (and only one) key type. No key type found at '${formattedPath}'.`,
+                message: `Sets must contain one (and only one) key type. No key type found at '${formattedPath}.values'.`,
             };
         }
         if (!isDirectParentArray && !isDirectParentSet && keyCount > 0) {
@@ -1823,9 +1950,9 @@ const isSchemaValid = (typeStruct, schemaMap, rootSchemaMap, expandedTypes, isDi
             }
             const refStruct = typeStruct[refProp];
             if (refStruct?.refType?.startsWith("$")) {
-                const pluginName = /^\$\((.+)\)$/.exec(refStruct?.refType.split(".")[0])?.[1] ?? null;
+                const [root, ...rest] = path;
+                const pluginName = /^\$\((.+)\)$/.exec(refStruct?.refType.split(".")[0])?.[1] ?? (refStruct?.refType.split(".")[0] == "$" ? root : null);
                 if (!pluginName) {
-                    const [root, ...rest] = path;
                     const formattedPath = [`$(${root})`, ...rest, refProp].join(".");
                     return {
                         status: "error",
@@ -1846,7 +1973,7 @@ const isSchemaValid = (typeStruct, schemaMap, rootSchemaMap, expandedTypes, isDi
                     const formattedPath = [`$(${root})`, ...rest, refProp].join(".");
                     return {
                         status: "error",
-                        message: `Invalid reference pointer '${refStruct.refType}'. Keys that are constrained ref types, cannot be self-referential. Found at '${formattedPath}'.`,
+                        message: `Invalid reference pointer '${refStruct.refType}'. Keys that are constrained ref types cannot be schematically self-referential. Found at '${formattedPath}'.`,
                     };
                 }
                 const containsKey = Object.keys(referencedType).reduce((contains, prop) => {
@@ -1941,7 +2068,7 @@ const invalidSchemaPropsCheck = (typeStruct, rootSchema, path = []) => {
             const formattedPath = [...path, prop].join(".");
             return {
                 status: "error",
-                message: `Invalid prop in schema. Remove '${prop}' from '${path.join(".")}'. Found at '${formattedPath}'.`,
+                message: `Invalid prop in schema. Remove or change '${prop}=${typeStruct[prop]}' from '${path.join(".")}'. Found at '${formattedPath}'.`,
             };
         }
         if (typeof typeStruct[prop] == "object") {
@@ -2220,9 +2347,9 @@ const drawMakeQueryRef = (argMap, useReact = false) => {
                     .join("|");
                 return s + `, arg${index}: ${argType}`;
             }, `query: '${(0, exports.replaceRefVarsWithWildcards)(query)}'`);
-            code += `export function useMakeQueryRef(${params}): QueryTypes['${(0, exports.replaceRefVarsWithWildcards)(query)}'];\n`;
+            code += `export function useQueryRef(${params}): QueryTypes['${(0, exports.replaceRefVarsWithWildcards)(query)}'];\n`;
         }
-        code += `export function useMakeQueryRef(query: ${globalQueryParam}, ${globalParams.join(", ")}): ${globalQueryReturn}|null {\n`;
+        code += `export function useQueryRef(query: ${globalQueryParam}, ${globalParams.join(", ")}): ${globalQueryReturn}|null {\n`;
         code += `  return useMemo(() => {\n`;
         for (const query in argMap) {
             const args = argMap[query];
@@ -2406,8 +2533,8 @@ const decodeSchemaPath = (
   });
 };
 
-export const getObjectInStateMap = (stateMap: object, path: string): object | null => {
-  let current: null | undefined | object = null;
+export const getObjectInStateMap = (stateMap: object&{[key: string]: object}, path: string): object | null => {
+  let current: null | undefined | object&{[key: string]: object}| unknown = null;
   const [pluginWrapper, ...decodedPath] = decodeSchemaPath(path);
   const pluginName = /^$((.+))$/.exec(pluginWrapper as string)?.[1] ?? null;
   if (!pluginName) {
@@ -2427,7 +2554,7 @@ export const getObjectInStateMap = (stateMap: object, path: string): object | nu
         return null;
       }
     } else {
-      current = current[part];
+      current = (current as {[key: string]: object|unknown})[part];
     }
   }
   return current ?? null;

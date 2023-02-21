@@ -13,6 +13,7 @@
     "moduleResolution": "Node",
     "resolveJsonModule": true,
     "isolatedModules": false,
+    "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
     "noEmit": false,
     "jsx": "react-jsx"

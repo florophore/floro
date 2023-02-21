@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.generateTypeScriptAPI = exports.getSchemaMapForCreationManifest = exports.uploadPluginTar = exports.tarCreationPlugin = exports.installDependency = exports.exportPluginToDev = exports.canExportPlugin = exports.isCreationDistDirectoryValid = exports.buildFloroTemplate = exports.checkDirectoryIsPluginWorkingDirectory = exports.PLUGIN_REGEX = void 0;
+exports.generateTypeScriptAPI = exports.generateLocalTypescriptAPI = exports.getSchemaMapForCreationManifest = exports.uploadPluginTar = exports.tarCreationPlugin = exports.installDependency = exports.exportPluginToDev = exports.pullLocalDeps = exports.inspectLocalManifest = exports.getLocalManifestReadFunction = exports.validateLocalManifest = exports.canExportPlugin = exports.isCreationDistDirectoryValid = exports.buildFloroTemplate = exports.checkDirectoryIsPluginWorkingDirectory = exports.PLUGIN_REGEX = void 0;
 const fs_1 = __importDefault(require("fs"));
 const path_1 = __importDefault(require("path"));
 const tar_1 = __importDefault(require("tar"));
@@ -14,8 +14,10 @@ const semver_1 = __importDefault(require("semver"));
 const child_process_1 = require("child_process");
 const axios_1 = __importDefault(require("axios"));
 const form_data_1 = __importDefault(require("form-data"));
-const buffer_1 = require("buffer");
 const inquirer_1 = __importDefault(require("inquirer"));
+axios_1.default.defaults.validateStatus = function () {
+    return true;
+};
 exports.PLUGIN_REGEX = /^[a-z0-9-][a-z0-9-_]{2,20}$/;
 const checkDirectoryIsPluginWorkingDirectory = async (cwd) => {
     const floroManifestPath = path_1.default.join(cwd, "floro", "floro.manifest.json");
@@ -140,6 +142,93 @@ const canExportPlugin = async (cwd) => {
     return true;
 };
 exports.canExportPlugin = canExportPlugin;
+const validateLocalManifest = async (cwd) => {
+    const isPluginDir = await (0, exports.checkDirectoryIsPluginWorkingDirectory)(cwd);
+    if (!isPluginDir) {
+        console.log(cli_color_1.default.redBright.bgBlack.underline("Invalid floro plugin directory"));
+        return false;
+    }
+    try {
+        const floroManifestPath = path_1.default.join(cwd, "floro", "floro.manifest.json");
+        const floroManifestString = await fs_1.default.promises.readFile(floroManifestPath);
+        const manifest = JSON.parse(floroManifestString.toString());
+        const result = await (0, plugins_1.validatePluginManifest)(manifest, plugins_1.readPluginManifest);
+        if (result.status == "error") {
+            console.log(result.message);
+            return false;
+        }
+        return true;
+    }
+    catch (e) {
+        return false;
+    }
+};
+exports.validateLocalManifest = validateLocalManifest;
+const getLocalManifestReadFunction = async (cwd) => {
+    const isPluginDir = await (0, exports.checkDirectoryIsPluginWorkingDirectory)(cwd);
+    if (!isPluginDir) {
+        console.log(cli_color_1.default.redBright.bgBlack.underline("Invalid floro plugin directory"));
+        return null;
+    }
+    try {
+        const floroManifestPath = path_1.default.join(cwd, "floro", "floro.manifest.json");
+        const floroManifestString = await fs_1.default.promises.readFile(floroManifestPath);
+        const manifest = JSON.parse(floroManifestString.toString());
+        return async (pluginName, pluginVersion) => {
+            if (pluginName == manifest.name && pluginVersion == manifest.version) {
+                return manifest;
+            }
+            return await (0, plugins_1.readPluginManifest)(pluginName, pluginVersion);
+        };
+    }
+    catch (e) {
+        return null;
+    }
+};
+exports.getLocalManifestReadFunction = getLocalManifestReadFunction;
+const inspectLocalManifest = async (cwd, expand = false, pluginFetch) => {
+    const isPluginDir = await (0, exports.checkDirectoryIsPluginWorkingDirectory)(cwd);
+    if (!isPluginDir) {
+        console.log(cli_color_1.default.redBright.bgBlack.underline("Invalid floro plugin directory"));
+        return null;
+    }
+    try {
+        const floroManifestPath = path_1.default.join(cwd, "floro", "floro.manifest.json");
+        const floroManifestString = await fs_1.default.promises.readFile(floroManifestPath);
+        const manifest = JSON.parse(floroManifestString.toString());
+        const schemaMap = await (0, exports.getSchemaMapForCreationManifest)(manifest, pluginFetch);
+        if (expand) {
+            const rootSchemaMap = (0, plugins_1.getRootSchemaMap)(schemaMap);
+            return JSON.stringify(rootSchemaMap, null, 2);
+        }
+        return JSON.stringify(schemaMap, null, 2);
+    }
+    catch (e) {
+        return null;
+    }
+};
+exports.inspectLocalManifest = inspectLocalManifest;
+const pullLocalDeps = async (cwd, pluginFetch) => {
+    const isPluginDir = await (0, exports.checkDirectoryIsPluginWorkingDirectory)(cwd);
+    if (!isPluginDir) {
+        console.log(cli_color_1.default.redBright.bgBlack.underline("Invalid floro plugin directory"));
+        return false;
+    }
+    try {
+        const floroManifestPath = path_1.default.join(cwd, "floro", "floro.manifest.json");
+        const floroManifestString = await fs_1.default.promises.readFile(floroManifestPath);
+        const manifest = JSON.parse(floroManifestString.toString());
+        const imports = manifest?.imports ?? {};
+        for (let depName in imports) {
+            await pluginFetch(depName, imports[depName]);
+        }
+        return true;
+    }
+    catch (e) {
+        return false;
+    }
+};
+exports.pullLocalDeps = pullLocalDeps;
 const exportPluginToDev = async (cwd) => {
     const canExport = (0, exports.canExportPlugin)(cwd);
     if (!canExport) {
@@ -147,12 +236,14 @@ const exportPluginToDev = async (cwd) => {
     }
     try {
         await new Promise((resolve, reject) => {
-            console.log("packaging plugin...");
             if (process.env.NODE_ENV == "test") {
                 resolve("testing");
                 return;
             }
-            (0, child_process_1.exec)("CDN_HOST=http://localhost:63403 npm run build", { cwd }, (err, stdout) => {
+            else {
+                console.log("packaging plugin...");
+            }
+            (0, child_process_1.exec)("CDN_HOST=http://localhost:63403 npm run floro:package", { cwd }, (err, stdout) => {
                 if (err) {
                     console.error("something went wrong while packaging!");
                     reject(err);
@@ -162,7 +253,9 @@ const exportPluginToDev = async (cwd) => {
                 resolve(stdout);
             });
         });
-        console.log("done packaging");
+        if (process.env.NODE_ENV != "test") {
+            console.log("done packaging");
+        }
         const floroManifestPath = path_1.default.join(cwd, "floro", "floro.manifest.json");
         const floroManifestString = await fs_1.default.promises.readFile(floroManifestPath);
         const floroManifest = JSON.parse(floroManifestString.toString());
@@ -191,7 +284,7 @@ const exportPluginToDev = async (cwd) => {
     }
 };
 exports.exportPluginToDev = exportPluginToDev;
-const installDependency = async (cwd, depname) => {
+const installDependency = async (cwd, depname, pluginFetch) => {
     const floroManifestPath = path_1.default.join(cwd, "floro", "floro.manifest.json");
     const floroManifestString = await fs_1.default.promises.readFile(floroManifestPath);
     const manifest = JSON.parse(floroManifestString.toString());
@@ -219,7 +312,7 @@ const installDependency = async (cwd, depname) => {
         return null;
     }
     const dependencyManifests = await (0, plugins_1.getUpstreamDependencyManifests)(depManifest, async (pluginName, version) => {
-        const localCopy = await (0, plugins_1.readPluginManifest)(pluginName, version);
+        const localCopy = await pluginFetch(pluginName, version);
         if (localCopy) {
             return localCopy;
         }
@@ -244,23 +337,25 @@ const installDependency = async (cwd, depname) => {
     const areCompatible = await (0, plugins_1.pluginManifestsAreCompatibleForUpdate)(manifest, proposedManifest, plugins_1.readPluginManifest);
     if (!areCompatible) {
         console.log(cli_color_1.default.redBright.bgBlack.underline(depname +
-            "is incompatible with other dependencies. Please specifiy a different version or remove conflicting dependencies."));
+            " is incompatible with other dependencies. Please specifiy a different version or remove conflicting dependencies."));
         return null;
     }
-    const imports = [...Object.keys(manifest.imports), depManifest.name].sort().reduce((acc, pluginName) => {
+    const imports = [...Object.keys(manifest.imports), depManifest.name]
+        .sort()
+        .reduce((acc, pluginName) => {
         if (pluginName == depManifest.name) {
             return {
                 ...acc,
-                [pluginName]: depManifest.version
+                [pluginName]: depManifest.version,
             };
         }
         return {
             ...acc,
-            [pluginName]: manifest.imports[pluginName]
+            [pluginName]: manifest.imports[pluginName],
         };
     }, {});
     manifest.imports = imports;
-    await fs_1.default.promises.writeFile(floroManifestPath, JSON.stringify(manifest, null, 2), 'utf-8');
+    await fs_1.default.promises.writeFile(floroManifestPath, JSON.stringify(manifest, null, 2), "utf-8");
     return manifest;
 };
 exports.installDependency = installDependency;
@@ -271,7 +366,9 @@ const tarCreationPlugin = async (cwd) => {
     }
     try {
         await new Promise((resolve, reject) => {
-            console.log("packaging plugin...");
+            if (process.env.NODE_ENV != "test") {
+                console.log("packaging plugin...");
+            }
             if (process.env.NODE_ENV == "test") {
                 resolve("testing");
                 return;
@@ -286,7 +383,9 @@ const tarCreationPlugin = async (cwd) => {
                 resolve(stdout);
             });
         });
-        console.log("done packaging");
+        if (process.env.NODE_ENV != "test") {
+            console.log("done packaging");
+        }
         const floroManifestPath = path_1.default.join(cwd, "floro", "floro.manifest.json");
         const floroManifestString = await fs_1.default.promises.readFile(floroManifestPath);
         const floroManifest = JSON.parse(floroManifestString.toString());
@@ -335,20 +434,31 @@ const uploadPluginTar = async (tarPath) => {
         const remote = await (0, filestructure_1.getRemoteHostAsync)();
         const session = await (0, filestructure_1.getUserSessionAsync)();
         const formData = new form_data_1.default();
-        const buffer = await fs_1.default.promises.readFile(tarPath);
-        const blob = new buffer_1.Blob([Uint8Array.from(buffer)]);
         formData.append("file", fs_1.default.createReadStream(tarPath));
-        await axios_1.default.post(`${remote}/api/plugin/upload`, formData, {
+        const didSucceed = await axios_1.default
+            .post(`${remote}/api/plugin/upload`, formData, {
             headers: {
                 ["session_key"]: session?.clientKey,
                 "Content-Type": "multipart/form-data",
             },
+        })
+            .then((response) => {
+            if (response.status == 200) {
+                return true;
+            }
+            if (response?.data?.message) {
+                console.log(response?.data?.message);
+            }
+            else {
+                console.log("Unknown upload error");
+            }
+            return false;
         });
-        console.log("HERE");
-        ///reader.readAsBinaryString(new Blob([await fs.promises.readFile(tarPath)]))
+        return didSucceed;
     }
     catch (e) {
-        console.log("e", e);
+        console.log("Unknown upload error");
+        return false;
     }
 };
 exports.uploadPluginTar = uploadPluginTar;
@@ -398,6 +508,32 @@ const getSchemaMapForCreationManifest = async (manifest, pluginFetch) => {
     return out;
 };
 exports.getSchemaMapForCreationManifest = getSchemaMapForCreationManifest;
+const generateLocalTypescriptAPI = async (cwd, useReact = true, pluginFetch) => {
+    const isPluginDir = await (0, exports.checkDirectoryIsPluginWorkingDirectory)(cwd);
+    if (!isPluginDir) {
+        console.log(cli_color_1.default.redBright.bgBlack.underline("Invalid floro plugin directory"));
+        return false;
+    }
+    try {
+        const floroManifestPath = path_1.default.join(cwd, "floro", "floro.manifest.json");
+        const floroManifestString = await fs_1.default.promises.readFile(floroManifestPath);
+        const manifest = JSON.parse(floroManifestString.toString());
+        const code = await (0, exports.generateTypeScriptAPI)(manifest, useReact, pluginFetch);
+        if (code) {
+            const writeApiPath = path_1.default.join(cwd, "src", "floro-schema-api.ts");
+            if (await (0, filestructure_1.existsAsync)(writeApiPath)) {
+                await fs_1.default.promises.rm(writeApiPath);
+            }
+            await fs_1.default.promises.writeFile(writeApiPath, code, "utf-8");
+            return true;
+        }
+        return false;
+    }
+    catch (e) {
+        return false;
+    }
+};
+exports.generateLocalTypescriptAPI = generateLocalTypescriptAPI;
 const generateTypeScriptAPI = async (manifest, useReact = true, pluginFetch) => {
     const schemaMap = await (0, exports.getSchemaMapForCreationManifest)(manifest, pluginFetch);
     const rootSchemaMap = (0, plugins_1.getRootSchemaMap)(schemaMap);

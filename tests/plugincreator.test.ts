@@ -15,12 +15,13 @@ import {
   tarCreationPlugin,
   generateTypeScriptAPI,
 } from "../src/plugincreator";
-import { Manifest,
+import {
+  Manifest,
   /** MOVE */
   validatePluginManifest,
   verifyPluginDependencyCompatability,
   getDependenciesForManifest,
-  readPluginManifest
+  readPluginManifest,
 } from "../src/plugins";
 import {
   makePluginCreationDirectory,
@@ -29,8 +30,11 @@ import {
 } from "./helpers/fsmocks";
 import { SIMPLE_PLUGIN_MANIFEST } from "./helpers/pluginmocks";
 
-const realFS = jest.requireActual('fs');
-const SNAPSHOT_1_WITH_REACT = realFS.readFileSync(path.join(__dirname, 'snapshots', 'codegen.1.with_react.snapshot'), 'utf-8')
+const realFS = jest.requireActual("fs");
+const SNAPSHOT_1_WITH_REACT = realFS.readFileSync(
+  path.join(__dirname, "snapshots", "codegen.1.with_react.snapshot"),
+  "utf-8"
+);
 
 jest.mock("fs");
 jest.mock("fs/promises");
@@ -165,9 +169,15 @@ describe("plugincreator", () => {
         store: {},
       };
       makeTestPlugin(PLUGIN_C_MANIFEST, true);
-      const bDeps = await getDependenciesForManifest(PLUGIN_B_MANIFEST, readPluginManifest);
+      const bDeps = await getDependenciesForManifest(
+        PLUGIN_B_MANIFEST,
+        readPluginManifest
+      );
       expect(bDeps.deps).toEqual([PLUGIN_A_MANIFEST]);
-      const cDeps = await getDependenciesForManifest(PLUGIN_C_MANIFEST, readPluginManifest);
+      const cDeps = await getDependenciesForManifest(
+        PLUGIN_C_MANIFEST,
+        readPluginManifest
+      );
       expect(cDeps.deps).toEqual([PLUGIN_B_MANIFEST, PLUGIN_A_MANIFEST]);
     });
 
@@ -503,14 +513,72 @@ describe("plugincreator", () => {
         readPluginManifest
       );
       expect(depListResponse).toEqual({
-        'A': PLUGIN_A_1_MANIFEST,
-        'B': PLUGIN_B_MANIFEST,
-        'C': PLUGIN_C_MANIFEST,
+        A: PLUGIN_A_1_MANIFEST,
+        B: PLUGIN_B_MANIFEST,
+        C: PLUGIN_C_MANIFEST,
       });
     });
   });
 
   describe("validate schema", () => {
+    test("refuses validation on an invalid schema", async () => {
+      const PLUGIN_A_MANIFEST: Manifest = {
+        name: "A",
+        version: "0.0.0",
+        displayName: "A",
+        icon: "",
+        imports: {},
+        types: {
+          SubSetObj: {
+            key: {
+              isKey: true,
+              type: "string",
+            },
+            nested: {
+              thing: "string" as any,
+            },
+          },
+        },
+        store: {
+          a: {
+            objSet: {
+              type: "set",
+              values: {
+                id: {
+                  isKey: true,
+                  type: "string",
+                },
+                subSet: {
+                  type: "set",
+                  values: "SubSetObj",
+                },
+              },
+            },
+          },
+        },
+      };
+
+      makeTestPlugin(PLUGIN_A_MANIFEST);
+
+      const result = await validatePluginManifest(
+        PLUGIN_A_MANIFEST,
+        readPluginManifest
+      );
+      expect(result).toEqual({
+        status: "error",
+        message:
+          "thing in \n" +
+          "{\n" +
+          '  "thing": "string"\n' +
+          "}\n" +
+          ' canot be a string value, found "string". Perhaps try changing to type \n' +
+          "{\n" +
+          '  "thing": {\n' +
+          '    "type": "string"\n' +
+          "  }\n" +
+          "}",
+      });
+    });
     test("validates a valid schema", async () => {
       const PLUGIN_A_0_MANIFEST: Manifest = {
         name: "A",
@@ -522,7 +590,7 @@ describe("plugincreator", () => {
           typeA: {
             aKey: {
               type: "string",
-              isKey: true
+              isKey: true,
             },
           },
         },
@@ -542,7 +610,7 @@ describe("plugincreator", () => {
         displayName: "B",
         icon: "",
         imports: {
-          "A": "0.0.0"
+          A: "0.0.0",
         },
         types: {},
         store: {
@@ -551,11 +619,11 @@ describe("plugincreator", () => {
             values: {
               mainKey: {
                 type: "string",
-                isKey: true
+                isKey: true,
               },
               aRef: {
-                type: "ref<A.typeA>"
-              }
+                type: "ref<A.typeA>",
+              },
             },
           },
         },
@@ -566,7 +634,7 @@ describe("plugincreator", () => {
         PLUGIN_B_MANIFEST,
         readPluginManifest
       );
-      expect(result).toEqual({status: "ok"})
+      expect(result).toEqual({ status: "ok" });
     });
 
     test("throws multi key exception on sets", async () => {
@@ -575,8 +643,7 @@ describe("plugincreator", () => {
         version: "0.0.0",
         displayName: "A",
         icon: "",
-        imports: {
-        },
+        imports: {},
         types: {},
         store: {
           aObjects: {
@@ -589,7 +656,7 @@ describe("plugincreator", () => {
               secondKey: {
                 isKey: true,
                 type: "string",
-              }
+              },
             },
           },
         },
@@ -602,7 +669,7 @@ describe("plugincreator", () => {
       expect(result).toEqual({
         status: "error",
         message:
-          "Sets cannot contain multiple key types. Multiple key types found at '$(A).aObjects'.",
+          "Sets cannot contain multiple key types. Multiple key types found at '$(A).aObjects.values'.",
       });
     });
 
@@ -612,8 +679,7 @@ describe("plugincreator", () => {
         version: "0.0.0",
         displayName: "A",
         icon: "",
-        imports: {
-        },
+        imports: {},
         types: {},
         store: {
           aObjects: {
@@ -624,17 +690,20 @@ describe("plugincreator", () => {
               },
               secondKey: {
                 type: "string",
-              }
+              },
             },
           },
         },
       };
       makeTestPlugin(PLUGIN_A_MANIFEST);
-      const result = await validatePluginManifest(PLUGIN_A_MANIFEST, readPluginManifest);
+      const result = await validatePluginManifest(
+        PLUGIN_A_MANIFEST,
+        readPluginManifest
+      );
       expect(result).toEqual({
         status: "error",
         message:
-          "Sets must contain one (and only one) key type. No key type found at '$(A).aObjects'.",
+          "Sets must contain one (and only one) key type. No key type found at '$(A).aObjects.values'.",
       });
     });
 
@@ -667,11 +736,14 @@ describe("plugincreator", () => {
         },
       };
       makeTestPlugin(PLUGIN_A_MANIFEST);
-      const result = await validatePluginManifest(PLUGIN_A_MANIFEST, readPluginManifest);
+      const result = await validatePluginManifest(
+        PLUGIN_A_MANIFEST,
+        readPluginManifest
+      );
       expect(result).toEqual({
         status: "error",
         message:
-        "Arrays cannot contain keyed set descendents. Found at '$(A).aArray'."
+          "Arrays cannot contain keyed set descendents. Found at '$(A).aArray.values'.",
       });
     });
 
@@ -699,14 +771,15 @@ describe("plugincreator", () => {
         },
       };
       makeTestPlugin(PLUGIN_A_MANIFEST);
-      const result = await validatePluginManifest(PLUGIN_A_MANIFEST, readPluginManifest);
+      const result = await validatePluginManifest(
+        PLUGIN_A_MANIFEST,
+        readPluginManifest
+      );
       expect(result).toEqual({
         status: "error",
-        message:
-        "Arrays cannot contain keyed values. Found at '$(A).aArray'."
+        message: "Arrays cannot contain keyed values. Found at '$(A).aArray.values'.",
       });
     });
-
 
     test("throws no keys on non-sets exception", async () => {
       const PLUGIN_A_MANIFEST: Manifest = {
@@ -727,11 +800,14 @@ describe("plugincreator", () => {
         },
       };
       makeTestPlugin(PLUGIN_A_MANIFEST);
-      const result = await validatePluginManifest(PLUGIN_A_MANIFEST, readPluginManifest);
+      const result = await validatePluginManifest(
+        PLUGIN_A_MANIFEST,
+        readPluginManifest
+      );
       expect(result).toEqual({
         status: "error",
         message:
-        "Only sets may contain key types. Invalid key type found at '$(A)'."
+          "Only sets may contain key types. Invalid key type found at '$(A)'.",
       });
     });
 
@@ -757,7 +833,10 @@ describe("plugincreator", () => {
         },
       };
       makeTestPlugin(PLUGIN_A_MANIFEST);
-      const result = await validatePluginManifest(PLUGIN_A_MANIFEST, readPluginManifest);
+      const result = await validatePluginManifest(
+        PLUGIN_A_MANIFEST,
+        readPluginManifest
+      );
       expect(result).toEqual({
         status: "error",
         message:
@@ -780,7 +859,7 @@ describe("plugincreator", () => {
               mainKey: {
                 isKey: true,
                 type: "ref<$(A).aSetObjects.values>",
-                onDelete: "nullify"
+                onDelete: "nullify",
               },
             },
           },
@@ -789,14 +868,17 @@ describe("plugincreator", () => {
             values: {
               mainKey: {
                 isKey: true,
-                type: "string"
+                type: "string",
               },
             },
           },
         },
       };
       makeTestPlugin(PLUGIN_A_MANIFEST);
-      const result = await validatePluginManifest(PLUGIN_A_MANIFEST, readPluginManifest);
+      const result = await validatePluginManifest(
+        PLUGIN_A_MANIFEST,
+        readPluginManifest
+      );
       expect(result).toEqual({
         status: "error",
         message:
@@ -825,11 +907,14 @@ describe("plugincreator", () => {
         },
       };
       makeTestPlugin(PLUGIN_A_MANIFEST);
-      const result = await validatePluginManifest(PLUGIN_A_MANIFEST, readPluginManifest);
+      const result = await validatePluginManifest(
+        PLUGIN_A_MANIFEST,
+        readPluginManifest
+      );
       expect(result).toEqual({
         status: "error",
         message:
-          "Invalid reference pointer '$(A).aObjects.values'. Keys that are constrained ref types, cannot be self-referential. Found at '$(A).aObjects.mainKey'.",
+          "Invalid reference pointer '$(A).aObjects.values'. Keys that are constrained ref types cannot be schematically self-referential. Found at '$(A).aObjects.mainKey'."
       });
     });
 
@@ -839,8 +924,7 @@ describe("plugincreator", () => {
         version: "0.0.0",
         displayName: "A",
         icon: "",
-        imports: {
-        },
+        imports: {},
         types: {},
         store: {
           aObjects: {
@@ -848,19 +932,22 @@ describe("plugincreator", () => {
             values: {
               mainKey: {
                 type: "string",
-                isKey: true
+                isKey: true,
               },
             },
-            nullable: true
+            nullable: true,
           },
         },
       };
       makeTestPlugin(PLUGIN_A_MANIFEST);
-      const result = await validatePluginManifest(PLUGIN_A_MANIFEST, readPluginManifest);
+      const result = await validatePluginManifest(
+        PLUGIN_A_MANIFEST,
+        readPluginManifest
+      );
       expect(result).toEqual({
         status: "error",
         message:
-          "Invalid prop in schema. Remove 'nullable' from '$(A).aObjects'. Found at '$(A).aObjects.nullable'.",
+          "Invalid prop in schema. Remove or change 'nullable=true' from '$(A).aObjects'. Found at '$(A).aObjects.nullable'.",
       });
     });
   });
@@ -876,16 +963,16 @@ describe("plugincreator", () => {
         types: {
           subA: {
             someRef: {
-              type: "ref<typeA>"
+              type: "ref<typeA>",
             },
           },
           typeA: {
             aKey: {
               type: "int",
-              isKey: true
+              isKey: true,
             },
             something: {
-              type: "subA"
+              type: "subA",
             },
             nestedValue: {
               nestedSet: {
@@ -894,11 +981,11 @@ describe("plugincreator", () => {
                   nestedSetKey: {
                     type: "ref<typeA>",
                     isKey: true,
-                    onDelete: "nullify"
-                  }
-                }
-              }
-            }
+                    onDelete: "nullify",
+                  },
+                },
+              },
+            },
           },
         },
         store: {
@@ -917,7 +1004,7 @@ describe("plugincreator", () => {
         displayName: "B",
         icon: "",
         imports: {
-          "A": "0.0.0"
+          A: "0.0.0",
         },
         types: {},
         store: {
@@ -926,13 +1013,13 @@ describe("plugincreator", () => {
             values: {
               mainKey: {
                 type: "string",
-                isKey: true
+                isKey: true,
               },
               aRef: {
-                type: "ref<A.typeA>"
+                type: "ref<A.typeA>",
               },
               aConstrainedRef: {
-                type: "ref<$(A).aObjects.values.nestedValue.nestedSet.values>"
+                type: "ref<$(A).aObjects.values.nestedValue.nestedSet.values>",
               },
             },
           },
@@ -940,7 +1027,11 @@ describe("plugincreator", () => {
       };
       makeTestPlugin(PLUGIN_B_MANIFEST);
 
-      const code = await generateTypeScriptAPI(PLUGIN_B_MANIFEST, true, readPluginManifest);
+      const code = await generateTypeScriptAPI(
+        PLUGIN_B_MANIFEST,
+        true,
+        readPluginManifest
+      );
       expect(code).toEqual(SNAPSHOT_1_WITH_REACT);
     });
   });

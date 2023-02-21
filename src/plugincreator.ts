@@ -13,17 +13,10 @@ import {
   writePluginsJsonAsync,
 } from "./filestructure";
 import {
-  getPluginManifest,
   getDependenciesForManifest,
   Manifest,
-  manifestListToSchemaMap,
-  pluginManifestIsSubsetOfManifest,
-  pluginMapToList,
-  containsCyclicTypes,
   getRootSchemaMap,
   getExpandedTypesForPlugin,
-  isSchemaValid,
-  invalidSchemaPropsCheck,
   collectKeyRefs,
   buildPointerReturnTypeMap,
   buildPointerArgsMap,
@@ -36,16 +29,20 @@ import {
   getUpstreamDependencyManifests,
   pluginManifestsAreCompatibleForUpdate,
   readPluginManifest,
+  validatePluginManifest,
 } from "./plugins";
 import clc from "cli-color";
 import semver from "semver";
 import { exec } from "child_process";
 import axios from "axios";
 import FormData from "form-data";
-import { Blob } from "buffer";
 import inquirer from "inquirer";
 
-export const PLUGIN_REGEX = /^[a-z0-9-][a-z0-9-_]{2,20}$/
+axios.defaults.validateStatus = function () {
+  return true;
+};
+
+export const PLUGIN_REGEX = /^[a-z0-9-][a-z0-9-_]{2,20}$/;
 
 export const checkDirectoryIsPluginWorkingDirectory = async (
   cwd: string
@@ -54,7 +51,10 @@ export const checkDirectoryIsPluginWorkingDirectory = async (
   return await existsAsync(floroManifestPath);
 };
 
-export const buildFloroTemplate = async (cwd: string, name: string): Promise<void> => {
+export const buildFloroTemplate = async (
+  cwd: string,
+  name: string
+): Promise<void> => {
   if (!name || !PLUGIN_REGEX.test(name)) {
     console.log(clc.redBright.bgBlack.underline("Invalid plugin name"));
     return;
@@ -155,12 +155,8 @@ export const buildFloroTemplate = async (cwd: string, name: string): Promise<voi
     host: "http://localhost:" + defaultPort,
   };
   await writePluginsJsonAsync(pluginsJSON);
-  console.log(
-    clc.cyanBright.bgBlack.underline("Successfully added " + name)
-  );
-  console.log(
-    clc.cyanBright.bgBlack.underline("Restarting daemon.")
-  )
+  console.log(clc.cyanBright.bgBlack.underline("Successfully added " + name));
+  console.log(clc.cyanBright.bgBlack.underline("Restarting daemon."));
 };
 
 export const isCreationDistDirectoryValid = async (
@@ -191,6 +187,109 @@ export const canExportPlugin = async (cwd: string): Promise<boolean> => {
   return true;
 };
 
+export const validateLocalManifest = async (cwd: string) => {
+  const isPluginDir = await checkDirectoryIsPluginWorkingDirectory(cwd);
+  if (!isPluginDir) {
+    console.log(
+      clc.redBright.bgBlack.underline("Invalid floro plugin directory")
+    );
+    return false;
+  }
+  try {
+    const floroManifestPath = path.join(cwd, "floro", "floro.manifest.json");
+    const floroManifestString = await fs.promises.readFile(floroManifestPath);
+    const manifest = JSON.parse(floroManifestString.toString());
+    const result = await validatePluginManifest(
+      manifest as Manifest,
+      readPluginManifest
+    );
+    if (result.status == "error") {
+      console.log(result.message);
+      return false;
+    }
+    return true;
+  } catch (e) {
+    return false;
+  }
+};
+
+export const getLocalManifestReadFunction = async (cwd: string) => {
+  const isPluginDir = await checkDirectoryIsPluginWorkingDirectory(cwd);
+  if (!isPluginDir) {
+    console.log(
+      clc.redBright.bgBlack.underline("Invalid floro plugin directory")
+    );
+    return null;
+  }
+  try {
+    const floroManifestPath = path.join(cwd, "floro", "floro.manifest.json");
+    const floroManifestString = await fs.promises.readFile(floroManifestPath);
+    const manifest = JSON.parse(floroManifestString.toString());
+    return async (pluginName, pluginVersion) => {
+      if (pluginName == manifest.name && pluginVersion == manifest.version) {
+        return manifest;
+      }
+      return await readPluginManifest(pluginName, pluginVersion);
+    };
+  } catch (e) {
+    return null;
+  }
+};
+export const inspectLocalManifest = async (
+  cwd: string,
+  expand = false,
+  pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>
+): Promise<string | null> => {
+  const isPluginDir = await checkDirectoryIsPluginWorkingDirectory(cwd);
+  if (!isPluginDir) {
+    console.log(
+      clc.redBright.bgBlack.underline("Invalid floro plugin directory")
+    );
+    return null;
+  }
+  try {
+    const floroManifestPath = path.join(cwd, "floro", "floro.manifest.json");
+    const floroManifestString = await fs.promises.readFile(floroManifestPath);
+    const manifest = JSON.parse(floroManifestString.toString());
+    const schemaMap = await getSchemaMapForCreationManifest(
+      manifest,
+      pluginFetch
+    );
+    if (expand) {
+      const rootSchemaMap = getRootSchemaMap(schemaMap);
+      return JSON.stringify(rootSchemaMap, null, 2);
+    }
+    return JSON.stringify(schemaMap, null, 2);
+  } catch (e) {
+    return null;
+  }
+};
+
+export const pullLocalDeps = async (
+  cwd: string,
+  pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>
+) => {
+  const isPluginDir = await checkDirectoryIsPluginWorkingDirectory(cwd);
+  if (!isPluginDir) {
+    console.log(
+      clc.redBright.bgBlack.underline("Invalid floro plugin directory")
+    );
+    return false;
+  }
+  try {
+    const floroManifestPath = path.join(cwd, "floro", "floro.manifest.json");
+    const floroManifestString = await fs.promises.readFile(floroManifestPath);
+    const manifest = JSON.parse(floroManifestString.toString());
+    const imports = manifest?.imports ?? {};
+    for (let depName in imports) {
+      await pluginFetch(depName, imports[depName]);
+    }
+    return true;
+  } catch (e) {
+    return false;
+  }
+};
+
 export const exportPluginToDev = async (cwd: string) => {
   const canExport = canExportPlugin(cwd);
   if (!canExport) {
@@ -198,13 +297,14 @@ export const exportPluginToDev = async (cwd: string) => {
   }
   try {
     await new Promise((resolve, reject) => {
-      console.log("packaging plugin...");
       if (process.env.NODE_ENV == "test") {
         resolve("testing");
         return;
+      } else {
+        console.log("packaging plugin...");
       }
       exec(
-        "CDN_HOST=http://localhost:63403 npm run build",
+        "CDN_HOST=http://localhost:63403 npm run floro:package",
         { cwd },
         (err, stdout) => {
           if (err) {
@@ -217,7 +317,9 @@ export const exportPluginToDev = async (cwd: string) => {
         }
       );
     });
-    console.log("done packaging");
+    if (process.env.NODE_ENV != "test") {
+      console.log("done packaging");
+    }
 
     const floroManifestPath = path.join(cwd, "floro", "floro.manifest.json");
     const floroManifestString = await fs.promises.readFile(floroManifestPath);
@@ -248,98 +350,108 @@ export const exportPluginToDev = async (cwd: string) => {
 
 export const installDependency = async (
   cwd: string,
-  depname: string
-): Promise<Manifest|null> => {
-    const floroManifestPath = path.join(cwd, "floro", "floro.manifest.json");
-    const floroManifestString = await fs.promises.readFile(floroManifestPath);
-    const manifest = JSON.parse(floroManifestString.toString());
-    const [pluginName, version] = depname.split("@");
-    let depManifest: Manifest|undefined;
-    const remote = await getRemoteHostAsync();
-    const session = await getUserSessionAsync();
-    const manifestRequest = await axios.get(
-      `${remote}/api/plugin/${pluginName}/${version ?? "last"}/manifest`,
-      {
-        headers: {
-          ["session_key"]: session?.clientKey,
-        },
+  depname: string,
+  pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>
+): Promise<Manifest | null> => {
+  const floroManifestPath = path.join(cwd, "floro", "floro.manifest.json");
+  const floroManifestString = await fs.promises.readFile(floroManifestPath);
+  const manifest = JSON.parse(floroManifestString.toString());
+  const [pluginName, version] = depname.split("@");
+  let depManifest: Manifest | undefined;
+  const remote = await getRemoteHostAsync();
+  const session = await getUserSessionAsync();
+  const manifestRequest = await axios.get(
+    `${remote}/api/plugin/${pluginName}/${version ?? "last"}/manifest`,
+    {
+      headers: {
+        ["session_key"]: session?.clientKey,
+      },
+    }
+  );
+  if (manifestRequest.status == 403) {
+    console.log(
+      clc.redBright.bgBlack.underline("Forbidden access to " + depname)
+    );
+    return null;
+  }
+  if (manifestRequest.status == 404) {
+    console.log(clc.redBright.bgBlack.underline("Could not find " + depname));
+    return null;
+  }
+  if (manifestRequest.status == 200) {
+    depManifest = manifestRequest.data;
+  }
+  if (!depManifest) {
+    return null;
+  }
+  const dependencyManifests = await getUpstreamDependencyManifests(
+    depManifest,
+    async (pluginName, version) => {
+      const localCopy = await pluginFetch(pluginName, version);
+      if (localCopy) {
+        return localCopy;
       }
-    );
-    if (manifestRequest.status == 403) {
-      console.log(
-        clc.redBright.bgBlack.underline("Forbidden access to " + depname)
+      const request = await axios.get(
+        `${remote}/api/plugin/${pluginName}/${version}/manifest`,
+        {
+          headers: {
+            ["session_key"]: session?.clientKey,
+          },
+        }
       );
-      return null;
-    }
-    if (manifestRequest.status == 404) {
-      console.log(clc.redBright.bgBlack.underline("Could not find " + depname));
-      return null;
-    }
-    if (manifestRequest.status == 200) {
-      depManifest = manifestRequest.data;
-    }
-    if (!depManifest) {
-      return null;
-    }
-    const dependencyManifests = await getUpstreamDependencyManifests(
-      depManifest,
-      async (pluginName, version) => {
-        const localCopy = await readPluginManifest(pluginName, version);
-        if (localCopy) {
-          return localCopy;
-        }
-        const request = await axios.get(
-          `${remote}/api/plugin/${pluginName}/${version}/manifest`,
-          {
-            headers: {
-              ["session_key"]: session?.clientKey,
-            },
-          }
-        );
-        if (request.status == 200) {
-          return request.data;
-        }
-        return null;
+      if (request.status == 200) {
+        return request.data;
       }
-    );
-    if (!dependencyManifests) {
-      console.log(clc.redBright.bgBlack.underline("Failed to fetch deps for " + depname));
       return null;
     }
-    const proposedManifest = { ...manifest, imports: { ...manifest.imports } };
-    for (const upstreamManifest of dependencyManifests) {
-      proposedManifest.imports[upstreamManifest.name] = upstreamManifest.version;
-    }
-    const areCompatible = await pluginManifestsAreCompatibleForUpdate(
-      manifest,
-      proposedManifest,
-      readPluginManifest
+  );
+  if (!dependencyManifests) {
+    console.log(
+      clc.redBright.bgBlack.underline("Failed to fetch deps for " + depname)
     );
-    if (!areCompatible) {
-      console.log(
-        clc.redBright.bgBlack.underline(
-          depname +
-            "is incompatible with other dependencies. Please specifiy a different version or remove conflicting dependencies."
-        )
-      );
-      return null;
-    }
-    const imports = [...Object.keys(manifest.imports), depManifest.name].sort().reduce((acc, pluginName) => {
+    return null;
+  }
+  const proposedManifest = { ...manifest, imports: { ...manifest.imports } };
+  for (const upstreamManifest of dependencyManifests) {
+    proposedManifest.imports[upstreamManifest.name] = upstreamManifest.version;
+  }
+
+  const areCompatible = await pluginManifestsAreCompatibleForUpdate(
+    manifest,
+    proposedManifest,
+    readPluginManifest
+  );
+  if (!areCompatible) {
+    console.log(
+      clc.redBright.bgBlack.underline(
+        depname +
+          " is incompatible with other dependencies. Please specifiy a different version or remove conflicting dependencies."
+      )
+    );
+    return null;
+  }
+  const imports = [...Object.keys(manifest.imports), depManifest.name]
+    .sort()
+    .reduce((acc, pluginName) => {
       if (pluginName == depManifest.name) {
         return {
           ...acc,
-          [pluginName]: depManifest.version
-        }
+          [pluginName]: depManifest.version,
+        };
       }
       return {
         ...acc,
-        [pluginName]: manifest.imports[pluginName]
-      }
-    }, {})
-    manifest.imports = imports;
-    await fs.promises.writeFile(floroManifestPath, JSON.stringify(manifest, null, 2), 'utf-8');
-    return manifest;
-}
+        [pluginName]: manifest.imports[pluginName],
+      };
+    }, {});
+  manifest.imports = imports;
+  await fs.promises.writeFile(
+    floroManifestPath,
+    JSON.stringify(manifest, null, 2),
+    "utf-8"
+  );
+  return manifest;
+};
 
 export const tarCreationPlugin = async (
   cwd: string
@@ -350,7 +462,9 @@ export const tarCreationPlugin = async (
   }
   try {
     await new Promise((resolve, reject) => {
-      console.log("packaging plugin...");
+      if (process.env.NODE_ENV != "test") {
+        console.log("packaging plugin...");
+      }
       if (process.env.NODE_ENV == "test") {
         resolve("testing");
         return;
@@ -369,7 +483,9 @@ export const tarCreationPlugin = async (
         }
       );
     });
-    console.log("done packaging");
+    if (process.env.NODE_ENV != "test") {
+      console.log("done packaging");
+    }
     const floroManifestPath = path.join(cwd, "floro", "floro.manifest.json");
     const floroManifestString = await fs.promises.readFile(floroManifestPath);
     const floroManifest = JSON.parse(floroManifestString.toString());
@@ -428,19 +544,29 @@ export const uploadPluginTar = async (tarPath: string) => {
     const remote = await getRemoteHostAsync();
     const session = await getUserSessionAsync();
     const formData = new FormData();
-    const buffer = await fs.promises.readFile(tarPath);
-    const blob = new Blob([Uint8Array.from(buffer)]);
     formData.append("file", fs.createReadStream(tarPath));
-    await axios.post(`${remote}/api/plugin/upload`, formData, {
-      headers: {
-        ["session_key"]: session?.clientKey,
-        "Content-Type": "multipart/form-data",
-      },
-    });
-    console.log("HERE");
-    ///reader.readAsBinaryString(new Blob([await fs.promises.readFile(tarPath)]))
+    const didSucceed = await axios
+      .post(`${remote}/api/plugin/upload`, formData, {
+        headers: {
+          ["session_key"]: session?.clientKey,
+          "Content-Type": "multipart/form-data",
+        },
+      })
+      .then((response) => {
+        if (response.status == 200) {
+          return true;
+        }
+        if (response?.data?.message) {
+          console.log(response?.data?.message);
+        } else {
+          console.log("Unknown upload error");
+        }
+        return false;
+      });
+    return didSucceed;
   } catch (e) {
-    console.log("e", e);
+    console.log("Unknown upload error");
+    return false;
   }
 };
 
@@ -508,10 +634,40 @@ export const getSchemaMapForCreationManifest = async (
   return out;
 };
 
+export const generateLocalTypescriptAPI = async (
+  cwd: string,
+  useReact = true,
+  pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>
+): Promise<boolean> => {
+  const isPluginDir = await checkDirectoryIsPluginWorkingDirectory(cwd);
+  if (!isPluginDir) {
+    console.log(
+      clc.redBright.bgBlack.underline("Invalid floro plugin directory")
+    );
+    return false;
+  }
+  try {
+    const floroManifestPath = path.join(cwd, "floro", "floro.manifest.json");
+    const floroManifestString = await fs.promises.readFile(floroManifestPath);
+    const manifest = JSON.parse(floroManifestString.toString());
+    const code = await generateTypeScriptAPI(manifest, useReact, pluginFetch);
+    if (code) {
+      const writeApiPath = path.join(cwd, "src", "floro-schema-api.ts");
+      if (await existsAsync(writeApiPath)) {
+        await fs.promises.rm(writeApiPath);
+      }
+      await fs.promises.writeFile(writeApiPath, code, "utf-8");
+      return true;
+    }
+    return false;
+  } catch (e) {
+    return false;
+  }
+};
+
 export const generateTypeScriptAPI = async (
   manifest: Manifest,
   useReact = true,
-
   pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>
 ): Promise<string> => {
   const schemaMap = await getSchemaMapForCreationManifest(

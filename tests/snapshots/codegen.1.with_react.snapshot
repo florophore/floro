@@ -22,10 +22,10 @@ export function makeQueryRef(query: '$(A).aObjects.aKey<?>'|'$(A).aObjects.aKey<
   return null;
 };
 
-export function useMakeQueryRef(query: '$(A).aObjects.aKey<?>', arg0: number): QueryTypes['$(A).aObjects.aKey<?>'];
-export function useMakeQueryRef(query: '$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>', arg0: number, arg1: QueryTypes['$(A).aObjects.aKey<?>']): QueryTypes['$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>'];
-export function useMakeQueryRef(query: '$(B).bObjects.mainKey<?>', arg0: string): QueryTypes['$(B).bObjects.mainKey<?>'];
-export function useMakeQueryRef(query: '$(A).aObjects.aKey<?>'|'$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>'|'$(B).bObjects.mainKey<?>', arg0: number|string, arg1?: QueryTypes['$(A).aObjects.aKey<?>']): QueryTypes['$(A).aObjects.aKey<?>']|QueryTypes['$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>']|QueryTypes['$(B).bObjects.mainKey<?>']|null {
+export function useQueryRef(query: '$(A).aObjects.aKey<?>', arg0: number): QueryTypes['$(A).aObjects.aKey<?>'];
+export function useQueryRef(query: '$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>', arg0: number, arg1: QueryTypes['$(A).aObjects.aKey<?>']): QueryTypes['$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>'];
+export function useQueryRef(query: '$(B).bObjects.mainKey<?>', arg0: string): QueryTypes['$(B).bObjects.mainKey<?>'];
+export function useQueryRef(query: '$(A).aObjects.aKey<?>'|'$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>'|'$(B).bObjects.mainKey<?>', arg0: number|string, arg1?: QueryTypes['$(A).aObjects.aKey<?>']): QueryTypes['$(A).aObjects.aKey<?>']|QueryTypes['$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>']|QueryTypes['$(B).bObjects.mainKey<?>']|null {
   return useMemo(() => {
     if (query == '$(A).aObjects.aKey<?>') {
       return makeQueryRef(query, arg0 as number);
@@ -163,8 +163,8 @@ const decodeSchemaPath = (
   });
 };
 
-export const getObjectInStateMap = (stateMap: object, path: string): object | null => {
-  let current: null | undefined | object = null;
+export const getObjectInStateMap = (stateMap: object&{[key: string]: object}, path: string): object | null => {
+  let current: null | undefined | object&{[key: string]: object}| unknown = null;
   const [pluginWrapper, ...decodedPath] = decodeSchemaPath(path);
   const pluginName = /^$((.+))$/.exec(pluginWrapper as string)?.[1] ?? null;
   if (!pluginName) {
@@ -184,7 +184,7 @@ export const getObjectInStateMap = (stateMap: object, path: string): object | nu
         return null;
       }
     } else {
-      current = current[part];
+      current = (current as {[key: string]: object|unknown})[part];
     }
   }
   return current ?? null;

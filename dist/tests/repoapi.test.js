@@ -101,7 +101,7 @@ describe("repoapi", () => {
         });
     });
     describe("update plugins", () => {
-        test.only("adds upstream plugins", async () => {
+        test("adds upstream plugins", async () => {
             const PLUGIN_A_MANIFEST = {
                 name: "A",
                 version: "1.0.0",

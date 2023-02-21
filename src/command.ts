@@ -13,14 +13,22 @@ import { startDaemon, killDaemon } from "./daemon";
 import { logout, promptEmail } from "./login";
 import {
   buildFloroTemplate,
+  canExportPlugin,
   checkDirectoryIsPluginWorkingDirectory,
   exportPluginToDev,
+  generateLocalTypescriptAPI,
+  generateTypeScriptAPI,
+  getLocalManifestReadFunction,
+  inspectLocalManifest,
   installDependency,
+  pullLocalDeps,
   tarCreationPlugin,
   uploadPluginTar,
+  validateLocalManifest,
 } from "./plugincreator";
 import clc from "cli-color";
 import yargs from "yargs";
+import { readPluginManifest } from "./plugins";
 
 buildFloroFilestructure();
 
@@ -76,7 +84,7 @@ yargs
   })
   .command({
     command: "create-plugin [plugin]",
-    describe: "Local plugin development commands",
+    describe: "Generates floro plugin scaffolding",
     builder: (yargs) => {
       return yargs.positional('plugin', {
         type: 'string'
@@ -150,17 +158,22 @@ yargs
               if (!tarPath) {
               }
               console.log(`tar created at ${tarPath}`);
-              const didSucceed = uploadPluginTar(tarPath);
-              if (didSucceed) {
-                console.log(
-                  clc.cyanBright.bgBlack.underline(
-                    "Successfully pushed to production!"
-                  )
-                );
-                return;
+              const isValid = await validateLocalManifest(process.cwd());
+              if (isValid) {
+                const didSucceed = await uploadPluginTar(tarPath);
+                if (didSucceed) {
+                  console.log(
+                    clc.cyanBright.bgBlack.underline(
+                      "Successfully pushed to production!"
+                    )
+                  );
+                  return;
+                }
               }
               console.log(
-                clc.redBright.bgBlack.underline("Failed to push to staging...")
+                clc.redBright.bgBlack.underline(
+                  "Failed to push to production..."
+                )
               );
               return;
             }
@@ -169,44 +182,73 @@ yargs
         .command({
           command: "pull-deps",
           describe: "Installs dependies from floro.manifest.json",
-          handler: () => {
-            console.log("Handle deps");
+          handler: async () => {
+            const readFunction = await getLocalManifestReadFunction(process.cwd());
+            if (!readFunction) {
+              return;
+            }
+            const didSucceed = await pullLocalDeps(process.cwd(), readFunction);
+            if (didSucceed) {
+              console.log(
+                clc.cyanBright.bgBlack.underline(
+                  "Successfully pulled dependencies!"
+                )
+              );
+              return;
+            }
+            console.log(
+              clc.redBright.bgBlack.underline(
+                "Failed to pull dependencies"
+              )
+            );
           },
         })
         .command({
           command: "install [dependency]",
           describe:
             "Installs remote dependency and saves into floro.manifest.json",
-          builder: yargs => {
-            return yargs.positional('dependency', {
-              type: 'string'
+          builder: (yargs) => {
+            return yargs.positional("dependency", {
+              type: "string",
             });
           },
           handler: async (options) => {
+            const readFunction = await getLocalManifestReadFunction(process.cwd());
+            if (!readFunction) {
+              return;
+            }
             if (!options.dependency) {
               console.log(
                 clc.redBright.bgBlack.underline("No dependency specified")
               );
               return;
             }
-            const isValidCWD = await checkDirectoryIsPluginWorkingDirectory(process.cwd());
+            const isValidCWD = await checkDirectoryIsPluginWorkingDirectory(
+              process.cwd()
+            );
             if (!isValidCWD) {
               console.log(
-                clc.redBright.bgBlack.underline("Invalid working directory: " + process.cwd())
+                clc.redBright.bgBlack.underline(
+                  "Invalid working directory: " + process.cwd()
+                )
               );
               console.log(
-                clc.redBright.bgBlack.underline("Please try again from your floro plugin's root directory.")
+                clc.redBright.bgBlack.underline(
+                  "Please try again from your floro plugin's root directory."
+                )
               );
               return;
             }
-            const updatedManifest = await installDependency(process.cwd(), options.dependency);
+            const updatedManifest = await installDependency(
+              process.cwd(),
+              options.dependency,
+              readFunction
+            );
             if (!updatedManifest) {
-              console.log(
-                clc.redBright.bgBlack.underline("Install failed")
-              );
+              console.log(clc.redBright.bgBlack.underline("Install failed"));
               return;
             }
-            const [depName,] = options.dependency.split("@");
+            const [depName] = options.dependency.split("@");
             console.log(
               clc.cyanBright.bgBlack.underline(
                 "Successfully installed " +
@@ -219,7 +261,87 @@ yargs
               )
             );
           },
-        });
+        })
+        .command({
+          command: "validate",
+          describe: "Validates schema from floro.manifest.json",
+          handler: async () => {
+            const didSucceed = await validateLocalManifest(process.cwd());
+            if (didSucceed) {
+              console.log(
+                clc.cyanBright.bgBlack.underline(
+                  "Manifest is valid."
+                )
+              );
+              return;
+            }
+            console.log(
+              clc.redBright.bgBlack.underline(
+                "Manifest has manifest errors."
+              )
+            );
+          },
+        })
+        .command({
+          command: "inspect",
+          describe: "Validates schema from floro.manifest.json",
+          builder: yargs => {
+            return yargs.option('expanded', {
+              alias: 'e',
+              type: "boolean"
+            })
+          },
+          handler: async (options) => {
+            const readFunction = await getLocalManifestReadFunction(process.cwd());
+            if (readFunction != null) {
+              const out = await inspectLocalManifest(process.cwd(), options?.expanded ?? false, readFunction);
+              if (out) {
+                console.log(
+                  out
+                );
+                return;
+              }
+            }
+            console.log(
+              clc.redBright.bgBlack.underline(
+                "Manifest inspect failed."
+              )
+            );
+          },
+        })
+        .command({
+          command: "gen-api",
+          describe: "Generates Typescript API from floro.manifest.json schema",
+          handler: async (options) => {
+            const readFunction = await getLocalManifestReadFunction(process.cwd());
+            if (!readFunction) {
+              return;
+            }
+            const didSucceed = await validateLocalManifest(process.cwd());
+            if (!didSucceed) {
+              console.log(
+                clc.cyanBright.bgBlack.underline(
+                  "Manifest is invalid."
+                )
+              );
+              return;
+            }
+            const apiGenSucceed = await generateLocalTypescriptAPI(process.cwd(), true, readFunction);
+            if (apiGenSucceed) {
+              console.log(
+                clc.cyanBright.bgBlack.underline(
+                  "Generated API successfully."
+                )
+              );
+              return;
+            }
+            console.log(
+              clc.redBright.bgBlack.underline(
+                "Failed to generate API."
+              )
+            );
+          },
+        })
     },
     handler: null,
   })

@@ -6,7 +6,7 @@
         "start": "NODE_ENV=production node --experimental-specifier-resolution=node --loader ts-node/esm main.ts",
         "dev": "NODE_ENV=development nodemon -e ts --watch ../ --experimental-specifier-resolution=node main.ts",
         "build": "NODE_ENV=production vite build",
-        "floro:package": "npm run build; ",
+        "floro:package": "npm run build; rm -rf dist/floro; cp -R floro dist/floro;",
         "lint": "eslint --ext .ts,.tsx ."
     },
     "dependencies": {

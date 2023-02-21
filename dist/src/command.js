@@ -64,7 +64,7 @@ yargs_1.default
 })
     .command({
     command: "create-plugin [plugin]",
-    describe: "Local plugin development commands",
+    describe: "Generates floro plugin scaffolding",
     builder: (yargs) => {
         return yargs.positional('plugin', {
             type: 'string'
@@ -121,12 +121,15 @@ yargs_1.default
                     if (!tarPath) {
                     }
                     console.log(`tar created at ${tarPath}`);
-                    const didSucceed = (0, plugincreator_1.uploadPluginTar)(tarPath);
-                    if (didSucceed) {
-                        console.log(cli_color_1.default.cyanBright.bgBlack.underline("Successfully pushed to production!"));
-                        return;
+                    const isValid = await (0, plugincreator_1.validateLocalManifest)(process.cwd());
+                    if (isValid) {
+                        const didSucceed = await (0, plugincreator_1.uploadPluginTar)(tarPath);
+                        if (didSucceed) {
+                            console.log(cli_color_1.default.cyanBright.bgBlack.underline("Successfully pushed to production!"));
+                            return;
+                        }
                     }
-                    console.log(cli_color_1.default.redBright.bgBlack.underline("Failed to push to staging..."));
+                    console.log(cli_color_1.default.redBright.bgBlack.underline("Failed to push to production..."));
                     return;
                 }
             },
@@ -134,19 +137,32 @@ yargs_1.default
             .command({
             command: "pull-deps",
             describe: "Installs dependies from floro.manifest.json",
-            handler: () => {
-                console.log("Handle deps");
+            handler: async () => {
+                const readFunction = await (0, plugincreator_1.getLocalManifestReadFunction)(process.cwd());
+                if (!readFunction) {
+                    return;
+                }
+                const didSucceed = await (0, plugincreator_1.pullLocalDeps)(process.cwd(), readFunction);
+                if (didSucceed) {
+                    console.log(cli_color_1.default.cyanBright.bgBlack.underline("Successfully pulled dependencies!"));
+                    return;
+                }
+                console.log(cli_color_1.default.redBright.bgBlack.underline("Failed to pull dependencies"));
             },
         })
             .command({
             command: "install [dependency]",
             describe: "Installs remote dependency and saves into floro.manifest.json",
-            builder: yargs => {
-                return yargs.positional('dependency', {
-                    type: 'string'
+            builder: (yargs) => {
+                return yargs.positional("dependency", {
+                    type: "string",
                 });
             },
             handler: async (options) => {
+                const readFunction = await (0, plugincreator_1.getLocalManifestReadFunction)(process.cwd());
+                if (!readFunction) {
+                    return;
+                }
                 if (!options.dependency) {
                     console.log(cli_color_1.default.redBright.bgBlack.underline("No dependency specified"));
                     return;
@@ -157,12 +173,12 @@ yargs_1.default
                     console.log(cli_color_1.default.redBright.bgBlack.underline("Please try again from your floro plugin's root directory."));
                     return;
                 }
-                const updatedManifest = await (0, plugincreator_1.installDependency)(process.cwd(), options.dependency);
+                const updatedManifest = await (0, plugincreator_1.installDependency)(process.cwd(), options.dependency, readFunction);
                 if (!updatedManifest) {
                     console.log(cli_color_1.default.redBright.bgBlack.underline("Install failed"));
                     return;
                 }
-                const [depName,] = options.dependency.split("@");
+                const [depName] = options.dependency.split("@");
                 console.log(cli_color_1.default.cyanBright.bgBlack.underline("Successfully installed " +
                     depName +
                     "@" +
@@ -170,6 +186,60 @@ yargs_1.default
                     " to " +
                     updatedManifest.name +
                     "!"));
+            },
+        })
+            .command({
+            command: "validate",
+            describe: "Validates schema from floro.manifest.json",
+            handler: async () => {
+                const didSucceed = await (0, plugincreator_1.validateLocalManifest)(process.cwd());
+                if (didSucceed) {
+                    console.log(cli_color_1.default.cyanBright.bgBlack.underline("Manifest is valid."));
+                    return;
+                }
+                console.log(cli_color_1.default.redBright.bgBlack.underline("Manifest has manifest errors."));
+            },
+        })
+            .command({
+            command: "inspect",
+            describe: "Validates schema from floro.manifest.json",
+            builder: yargs => {
+                return yargs.option('expanded', {
+                    alias: 'e',
+                    type: "boolean"
+                });
+            },
+            handler: async (options) => {
+                const readFunction = await (0, plugincreator_1.getLocalManifestReadFunction)(process.cwd());
+                if (readFunction != null) {
+                    const out = await (0, plugincreator_1.inspectLocalManifest)(process.cwd(), options?.expanded ?? false, readFunction);
+                    if (out) {
+                        console.log(out);
+                        return;
+                    }
+                }
+                console.log(cli_color_1.default.redBright.bgBlack.underline("Manifest inspect failed."));
+            },
+        })
+            .command({
+            command: "gen-api",
+            describe: "Generates Typescript API from floro.manifest.json schema",
+            handler: async (options) => {
+                const readFunction = await (0, plugincreator_1.getLocalManifestReadFunction)(process.cwd());
+                if (!readFunction) {
+                    return;
+                }
+                const didSucceed = await (0, plugincreator_1.validateLocalManifest)(process.cwd());
+                if (!didSucceed) {
+                    console.log(cli_color_1.default.cyanBright.bgBlack.underline("Manifest is invalid."));
+                    return;
+                }
+                const apiGenSucceed = await (0, plugincreator_1.generateLocalTypescriptAPI)(process.cwd(), true, readFunction);
+                if (apiGenSucceed) {
+                    console.log(cli_color_1.default.cyanBright.bgBlack.underline("Generated API successfully."));
+                    return;
+                }
+                console.log(cli_color_1.default.redBright.bgBlack.underline("Failed to generate API."));
             },
         });
     },
