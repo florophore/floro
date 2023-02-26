@@ -1,8 +1,8 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 const memfs_1 = require("memfs");
+const datasource_1 = require("../src/datasource");
 const filestructure_1 = require("../src/filestructure");
-const plugins_1 = require("../src/plugins");
 const repo_1 = require("../src/repo");
 const repoapi_1 = require("../src/repoapi");
 const fsmocks_1 = require("./helpers/fsmocks");
@@ -18,35 +18,27 @@ describe("repoapi", () => {
     afterEach(() => {
         memfs_1.vol.reset();
     });
-    describe("repoExists", () => {
-        test("returns true when exists", async () => {
-            const exist = await (0, repoapi_1.repoExists)("abc");
-            expect(exist).toBe(true);
-        });
-        test("returns false when does not exists", async () => {
-            const exist = await (0, repoapi_1.repoExists)("def");
-            expect(exist).toBe(false);
-        });
-    });
     describe("description", () => {
         test("updates repo description", async () => {
-            let description = (await (0, repo_1.getRepoState)("abc", repo_1.getCurrentState)).description.join("");
+            const datasource = (0, datasource_1.makeMemoizedDataSource)();
+            let description = (await (0, repo_1.getRepoState)(datasource, "abc")).description.join("");
             expect(description).toEqual("");
             description = "Initial description.";
-            description = (await (0, repoapi_1.writeRepoDescription)("abc", description)).description.join("");
+            description = (await (0, repoapi_1.writeRepoDescription)(datasource, "abc", description)).description.join("");
             expect(description).toEqual("Initial description.");
-            description = (await (0, repoapi_1.readCurrentState)("abc")).description.join("");
+            description = (await (0, repoapi_1.readCurrentState)(datasource, "abc")).description.join("");
             expect(description).toEqual("Initial description.");
             description = "Initial description. Updated";
-            description = (await (0, repoapi_1.writeRepoDescription)("abc", description)).description.join("");
+            description = (await (0, repoapi_1.writeRepoDescription)(datasource, "abc", description)).description.join("");
             expect(description).toEqual("Initial description. Updated");
-            description = (await (0, repoapi_1.readCurrentState)("abc")).description.join("");
+            description = (await (0, repoapi_1.readCurrentState)(datasource, "abc")).description.join("");
             expect(description).toEqual("Initial description. Updated");
         });
     });
     describe("licenses", () => {
         test("updates repo licenses", async () => {
-            let licenses = await (await (0, repoapi_1.readCurrentState)("abc")).licenses;
+            const datasource = (0, datasource_1.makeMemoizedDataSource)();
+            let licenses = await (await (0, repoapi_1.readCurrentState)(datasource, "abc")).licenses;
             expect(licenses).toEqual([]);
             licenses = [
                 {
@@ -58,7 +50,7 @@ describe("repoapi", () => {
                     value: "MIT License",
                 },
             ];
-            licenses = (await (0, repoapi_1.writeRepoLicenses)("abc", licenses)).licenses;
+            licenses = (await (0, repoapi_1.writeRepoLicenses)(datasource, "abc", licenses)).licenses;
             expect(licenses).toEqual([
                 {
                     key: "gnu_general_public_3",
@@ -69,7 +61,7 @@ describe("repoapi", () => {
                     value: "MIT License",
                 },
             ]);
-            licenses = (await (0, repoapi_1.readCurrentState)("abc")).licenses;
+            licenses = (await (0, repoapi_1.readCurrentState)(datasource, "abc")).licenses;
             expect(licenses).toEqual([
                 {
                     key: "gnu_general_public_3",
@@ -86,14 +78,14 @@ describe("repoapi", () => {
                     value: "MIT License",
                 },
             ];
-            licenses = (await (0, repoapi_1.writeRepoLicenses)("abc", licenses)).licenses;
+            licenses = (await (0, repoapi_1.writeRepoLicenses)(datasource, "abc", licenses)).licenses;
             expect(licenses).toEqual([
                 {
                     key: "mit",
                     value: "MIT License",
                 },
             ]);
-            licenses = (await (0, repoapi_1.readCurrentState)("abc")).licenses;
+            licenses = (await (0, repoapi_1.readCurrentState)(datasource, "abc")).licenses;
             expect(licenses).toEqual([
                 {
                     key: "mit",
@@ -104,6 +96,7 @@ describe("repoapi", () => {
     });
     describe("update plugins", () => {
         test("adds upstream plugins", async () => {
+            const datasource = (0, datasource_1.makeMemoizedDataSource)();
             const PLUGIN_A_MANIFEST = {
                 name: "A",
                 version: "1.0.0",
@@ -158,7 +151,7 @@ describe("repoapi", () => {
                     value: "0.0.0"
                 }
             ];
-            const result = await (0, repoapi_1.updatePlugins)("abc", plugins, plugins_1.readPluginManifest);
+            const result = await (0, repoapi_1.updatePlugins)(datasource, "abc", plugins);
             expect(result).toEqual({
                 description: [],
                 licenses: [],
@@ -180,6 +173,7 @@ describe("repoapi", () => {
             });
         });
         test("reject upstream plugins when schemas are incompatible", async () => {
+            const datasource = (0, datasource_1.makeMemoizedDataSource)();
             const PLUGIN_A_0_MANIFEST = {
                 name: "A",
                 version: "0.0.0",
@@ -261,12 +255,13 @@ describe("repoapi", () => {
                     value: "0.0.0"
                 }
             ];
-            const result = await (0, repoapi_1.updatePlugins)("abc", plugins, plugins_1.readPluginManifest);
+            const result = await (0, repoapi_1.updatePlugins)(datasource, "abc", plugins);
             expect(result).toEqual(null);
         });
     });
     describe("update plugin state", () => {
         test("can update plugin state", async () => {
+            const datasource = (0, datasource_1.makeMemoizedDataSource)();
             const PLUGIN_A_0_MANIFEST = {
                 name: "A",
                 version: "0.0.0",
@@ -308,8 +303,8 @@ describe("repoapi", () => {
                     value: "0.0.0"
                 },
             ];
-            await (0, repoapi_1.updatePlugins)("abc", plugins, plugins_1.readPluginManifest);
-            const result = await (0, repoapi_1.updatePluginState)("abc", "A", state, plugins_1.readPluginManifest);
+            await (0, repoapi_1.updatePlugins)(datasource, "abc", plugins);
+            const result = await (0, repoapi_1.updatePluginState)(datasource, "abc", "A", state);
             expect(result).toEqual({
                 description: [],
                 licenses: [],
@@ -339,34 +334,37 @@ describe("repoapi", () => {
     });
     describe("commits", () => {
         test("description can commit", async () => {
-            let description = (await (0, repoapi_1.readRepoDescription)("abc")).join("");
+            const datasource = (0, datasource_1.makeMemoizedDataSource)();
+            let description = (await (0, repoapi_1.readRepoDescription)(datasource, "abc")).join("");
             expect(description).toEqual("");
             const descriptionA = "Initial description.";
-            await (0, repoapi_1.writeRepoDescription)("abc", descriptionA);
-            const commitA = await (0, repoapi_1.writeRepoCommit)("abc", "A");
+            await (0, repoapi_1.writeRepoDescription)(datasource, "abc", descriptionA);
+            const commitA = await (0, repoapi_1.writeRepoCommit)(datasource, "abc", "A");
             const descriptionB = "Another description. Initial description. Description 2!";
-            await (0, repoapi_1.writeRepoDescription)("abc", descriptionB);
-            const commitB = await (0, repoapi_1.writeRepoCommit)("abc", "B");
-            const readCommitA = await (0, repoapi_1.readCommitState)('abc', commitA.sha);
-            const readCommitB = await (0, repoapi_1.readCommitState)('abc', commitB.sha);
+            await (0, repoapi_1.writeRepoDescription)(datasource, "abc", descriptionB);
+            const commitB = await (0, repoapi_1.writeRepoCommit)(datasource, "abc", "B");
+            const readCommitA = await (0, repoapi_1.readCommitState)(datasource, 'abc', commitA.sha);
+            const readCommitB = await (0, repoapi_1.readCommitState)(datasource, 'abc', commitB.sha);
             expect(descriptionA).toEqual(readCommitA.description.join(""));
             expect(descriptionB).toEqual(readCommitB.description.join(""));
         });
         test("refuses empty commit", async () => {
-            let description = (await (0, repoapi_1.readRepoDescription)("abc")).join("");
+            const datasource = (0, datasource_1.makeMemoizedDataSource)();
+            let description = (await (0, repoapi_1.readRepoDescription)(datasource, "abc")).join("");
             expect(description).toEqual("");
             const descriptionA = "Initial description.";
-            await (0, repoapi_1.writeRepoDescription)("abc", descriptionA);
-            await (0, repoapi_1.writeRepoCommit)("abc", "A");
+            await (0, repoapi_1.writeRepoDescription)(datasource, "abc", descriptionA);
+            await (0, repoapi_1.writeRepoCommit)(datasource, "abc", "A");
             const descriptionB = "Initial description.";
-            await (0, repoapi_1.writeRepoDescription)("abc", descriptionB);
-            const commitB = await (0, repoapi_1.writeRepoCommit)("abc", "B");
+            await (0, repoapi_1.writeRepoDescription)(datasource, "abc", descriptionB);
+            const commitB = await (0, repoapi_1.writeRepoCommit)(datasource, "abc", "B");
             expect(commitB).toEqual(null);
         });
     });
     describe("merge", () => {
-        test.only("creates a new commit if can automerge", async () => {
-            let description = (await (0, repoapi_1.readRepoDescription)("abc")).join("");
+        test("creates a new commit if can automerge", async () => {
+            const datasource = (0, datasource_1.makeMemoizedDataSource)();
+            let description = (await (0, repoapi_1.readRepoDescription)(datasource, "abc")).join("");
             expect(description).toEqual("");
             const PLUGIN_A_0_MANIFEST = {
                 name: "A",
@@ -427,11 +425,10 @@ describe("repoapi", () => {
                     value: "0.0.0"
                 },
             ];
-            await (0, repoapi_1.updatePlugins)("abc", plugins, plugins_1.readPluginManifest);
-            await (0, repoapi_1.updatePluginState)("abc", "A", state1, plugins_1.readPluginManifest);
-            await (0, repoapi_1.writeRepoDescription)("abc", "Testing the waters");
-            const commitA = await (0, repoapi_1.writeRepoCommit)("abc", "A");
-            console.log("CA", commitA);
+            await (0, repoapi_1.updatePlugins)(datasource, "abc", plugins);
+            await (0, repoapi_1.updatePluginState)(datasource, "abc", "A", state1);
+            await (0, repoapi_1.writeRepoDescription)(datasource, "abc", "Testing the waters");
+            const commitA = await (0, repoapi_1.writeRepoCommit)(datasource, "abc", "A");
             const state2 = {
                 aSet: [
                     {
@@ -460,10 +457,10 @@ describe("repoapi", () => {
                     },
                 ],
             };
-            await (0, repoapi_1.updatePluginState)("abc", "A", state2, plugins_1.readPluginManifest);
-            const commitB = await (0, repoapi_1.writeRepoCommit)("abc", "B");
-            await (0, repoapi_1.checkoutSha)("abc", commitA.sha);
-            await (0, repoapi_1.switchRepoBranch)("abc", "new-branch");
+            await (0, repoapi_1.updatePluginState)(datasource, "abc", "A", state2);
+            const commitB = await (0, repoapi_1.writeRepoCommit)(datasource, "abc", "B");
+            await (0, repoapi_1.checkoutSha)(datasource, "abc", commitA.sha);
+            await (0, repoapi_1.switchRepoBranch)(datasource, "abc", "new-branch");
             const state3 = {
                 aSet: [
                     {
@@ -498,8 +495,8 @@ describe("repoapi", () => {
                     },
                 ],
             };
-            await (0, repoapi_1.updatePluginState)("abc", "A", state3, plugins_1.readPluginManifest);
-            const commitC = await (0, repoapi_1.writeRepoCommit)("abc", "C");
+            await (0, repoapi_1.updatePluginState)(datasource, "abc", "A", state3);
+            const commitC = await (0, repoapi_1.writeRepoCommit)(datasource, "abc", "C");
             const state4 = {
                 aSet: [
                     {
@@ -528,8 +525,8 @@ describe("repoapi", () => {
                     },
                 ],
             };
-            await (0, repoapi_1.updatePluginState)("abc", "A", state4, plugins_1.readPluginManifest);
-            const commitD = await (0, repoapi_1.writeRepoCommit)("abc", "D");
+            await (0, repoapi_1.updatePluginState)(datasource, "abc", "A", state4);
+            const commitD = await (0, repoapi_1.writeRepoCommit)(datasource, "abc", "D");
             const state5 = {
                 aSet: [
                     {
@@ -564,41 +561,10 @@ describe("repoapi", () => {
                     },
                 ],
             };
-            await (0, repoapi_1.updatePluginState)("abc", "A", state5, plugins_1.readPluginManifest);
+            await (0, repoapi_1.updatePluginState)(datasource, "abc", "A", state5);
             console.log("WTF", commitB.sha);
-            const out = await (0, repoapi_1.mergeCommit)("abc", commitB.sha, plugins_1.readPluginManifest);
+            const out = await (0, repoapi_1.mergeCommit)(datasource, "abc", commitB.sha);
             console.log("OUT", JSON.stringify(out, null, 2));
-            //const canAutoMergeWithCS = await canAutoMergeOnTopCurrentState(
-            //  "abc",
-            //  commitB.sha,
-            //  readPluginManifest
-            //);
-            //const yourMergeState = await getMergedCommitState(
-            //  "abc",
-            //  commitB.sha,
-            //  commitC.sha,
-            //  readPluginManifest,
-            //  "yours"
-            //);
-            //const theirMergeState = await getMergedCommitState(
-            //  "abc",
-            //  commitB.sha,
-            //  commitC.sha,
-            //  readPluginManifest,
-            //  "theirs"
-            //);
-            //const isAutoMergeable = await canAutoMergeShas(
-            //  "abc",
-            //  commitB.sha,
-            //  commitC.sha,
-            //  readPluginManifest
-            //);
-            //console.log("IS AUTO MERGEABLE", isAutoMergeable)
-            //console.log("WTF 0", JSON.stringify(state1, null, 2));
-            //console.log("WTF 2", JSON.stringify(state2, null, 2));
-            //console.log("WTF 3", JSON.stringify(state3, null, 2));
-            //console.log("Y", JSON.stringify(await buildStateStore(yourMergeState, readPluginManifest), null, 2));
-            //console.log("T", JSON.stringify(await buildStateStore(theirMergeState, readPluginManifest), null, 2));
         });
     });
 });

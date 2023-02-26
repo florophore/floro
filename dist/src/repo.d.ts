@@ -1,6 +1,10 @@
+import { DataSource } from "./datasource";
 import { User } from "./filestructure";
-import { Manifest, PluginElement } from "./plugins";
+import { PluginElement } from "./plugins";
 import { CommitData, Diff, TextDiff } from "./versioncontrol";
+export interface RepoSetting {
+    mainBranch: string;
+}
 export interface RawStore {
     [name: string]: Array<{
         key: string;
@@ -84,63 +88,51 @@ export interface CommitHistory {
     idx: number;
     message: string;
 }
-export declare const getLocalRepos: () => Promise<string[]>;
 export declare const getAddedDeps: (oldPlugins: Array<PluginElement>, newPlugins: Array<PluginElement>) => Array<PluginElement>;
 export declare const getRemovedDeps: (oldPlugins: Array<PluginElement>, newPlugins: Array<PluginElement>) => Array<PluginElement>;
 export declare const cloneRepo: (repoId: string) => Promise<boolean>;
-export declare const getRepoSettings: (repoId: string) => Promise<any>;
-export declare const getCurrentState: (repoId: string) => Promise<State>;
-export declare const getCurrentCommitSha: (repoId: string, fetchCurrentState: (repoId: string) => Promise<State>) => Promise<string | null>;
-export declare const getLocalBranches: (repoId: string) => Promise<Array<Branch>>;
-export declare const getCommitDirPath: (repoId: string, commitSha: string) => string;
+export declare const getCurrentCommitSha: (datasource: DataSource, repoId: string) => Promise<string | null>;
 export declare const diffIsEmpty: (stateDiff: StateDiff) => boolean;
-export declare const canCommit: (repoId: string, user: User, message: string, fetchCurrentState: (repoId: string) => Promise<State>) => Promise<boolean>;
-export declare const readCommit: (repoId: string, commitSha: string) => Promise<CommitData | null>;
+export declare const canCommit: (datasource: DataSource, repoId: string, user: User, message: string) => Promise<boolean>;
 export declare const buildCommitData: (parentSha: string, historicalParent: string, idx: number, diff: StateDiff, userId: string, timestamp: string, message: string) => CommitData;
-export declare const writeCommit: (repoId: string, commitSha: string, commitData: CommitData) => Promise<CommitData>;
-export declare const getHistory: (repoId: string, sha: string | null) => Promise<Array<CommitHistory> | null>;
+export declare const getHistory: (datasource: DataSource, repoId: string, sha: string | null) => Promise<Array<CommitHistory> | null>;
 export declare const getBaseDivergenceSha: (history: Array<CommitHistory>, origin: CommitData) => CommitHistory;
-export declare const getDivergenceOriginSha: (repoId: string, sha1: string, sha2: string) => Promise<string>;
-export declare const getLocalBranch: (repoId: string, branchName: string) => Promise<Branch>;
-export declare const deleteLocalBranch: (repoId: string, branchName: string) => Promise<boolean>;
-export declare const updateLocalBranch: (repoId: string, branchName: string, branchData: Branch) => Promise<Branch | null>;
-export declare const getCommitState: (repoId: string, sha?: string) => Promise<CommitState | null>;
+export declare const getDivergenceOriginSha: (datasource: DataSource, repoId: string, sha1: string, sha2: string) => Promise<string>;
+export declare const getCommitState: (datasource: DataSource, repoId: string, sha?: string) => Promise<CommitState | null>;
 /**
  *  REFACTOR ABOVE WITH FOLLOWINg
  *  */
 export declare const applyStateDiffToCommitState: (commitState: CommitState, stateDiff: StateDiff) => Promise<CommitState>;
-export declare const getCurrentBranch: (repoId: string, fetchCurrentState: (repoId: string) => Promise<State>) => Promise<Branch | null>;
-export declare const getUnstagedCommitState: (repoId: string, fetchCurrentState: (repoId: string) => Promise<State>) => Promise<CommitState>;
-export declare const getRepoState: (repoId: string, fetchCurrentState: (repoId: string) => Promise<State>) => Promise<CommitState>;
-export declare const getProposedStateFromDiffListOnCurrent: (repoId: string, diffList: Array<{
+export declare const getCurrentBranch: (datasource: DataSource, repoId: string) => Promise<Branch | null>;
+export declare const getUnstagedCommitState: (datasource: DataSource, repoId: string) => Promise<CommitState>;
+export declare const getRepoState: (datasource: DataSource, repoId: string) => Promise<CommitState>;
+export declare const getProposedStateFromDiffListOnCurrent: (datasource: DataSource, repoId: string, diffList: Array<{
     diff: Diff | TextDiff;
     namespace: string;
     pluginName?: string;
-}>, fetchCurrentState: (repoId: string) => Promise<State>) => Promise<State | null>;
-export declare const saveDiffListToCurrent: (repoId: string, diffList: Array<{
+}>) => Promise<State | null>;
+export declare const saveDiffListToCurrent: (datasource: DataSource, repoId: string, diffList: Array<{
     diff: Diff | TextDiff;
     namespace: string;
     pluginName?: string;
-}>, fetchCurrentState: (repoId: string) => Promise<State>) => Promise<State | null>;
+}>) => Promise<State | null>;
 /**
- *
  * use when committing against branch or sha
  */
-export declare const updateCurrentCommitSHA: (repoId: string, sha: string, isResolvingMerge: boolean, fetchCurrentState: (repoId: string) => Promise<State>) => Promise<State | null>;
+export declare const updateCurrentCommitSHA: (datasource: DataSource, repoId: string, sha: string, isResolvingMerge: boolean) => Promise<State | null>;
 /**
- *
  * use when HEAD is detached
  */
-export declare const updateCurrentWithSHA: (repoId: string, sha: string, isResolvingMerge: boolean, fetchCurrentState: (repoId: string) => Promise<State>) => Promise<State | null>;
-export declare const updateCurrentWithNewBranch: (repoId: string, branchName: string, fetchCurrentState: (repoId: string) => Promise<State>) => Promise<State | null>;
-export declare const updateCurrentBranch: (repoId: string, branchName: string, fetchCurrentState: (repoId: string) => Promise<State>) => Promise<State | null>;
+export declare const updateCurrentWithSHA: (datasource: DataSource, repoId: string, sha: string, isResolvingMerge: boolean) => Promise<State | null>;
+export declare const updateCurrentWithNewBranch: (datasource: DataSource, repoId: string, branchName: string) => Promise<State | null>;
+export declare const updateCurrentBranch: (datasource: DataSource, repoId: string, branchName: string) => Promise<State | null>;
 export declare const getPluginsToRunUpdatesOn: (pastPlugins: Array<PluginElement>, nextPlugins: Array<PluginElement>) => PluginElement[];
-export declare const buildStateStore: (state: CommitState, pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>) => Promise<{
+export declare const buildStateStore: (datasource: DataSource, state: CommitState) => Promise<{
     [key: string]: object;
 }>;
-export declare const convertStateStoreToKV: (state: CommitState, stateStore: {
+export declare const convertStateStoreToKV: (datasource: DataSource, state: CommitState, stateStore: {
     [key: string]: object;
-}, pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>) => Promise<RawStore>;
+}) => Promise<RawStore>;
 export declare const tokenizeCommitState: (commitState: CommitState) => [TokenizedState, {
     [key: string]: unknown;
 }];
@@ -171,12 +163,12 @@ export declare const renderDiffList: (diffList: Array<{
     namespace: string;
     pluginName?: string;
 }>) => StateDiff;
-export declare const getMergeCommitStates: (repoId: string, sha1: string, sha2: string) => Promise<{
+export declare const getMergeCommitStates: (datasource: DataSource, repoId: string, sha1: string, sha2: string) => Promise<{
     commit1: CommitState;
     commit2: CommitState;
     originCommit: CommitState;
 }>;
-export declare const canAutoMergeCommitStates: (commit1: CommitState, commit2: CommitState, originCommit: CommitState, pluginFetch: (pluginName: string, version: string) => Promise<Manifest>) => Promise<boolean>;
-export declare const getMergedCommitState: (commit1: CommitState, commit2: CommitState, originCommit: CommitState, pluginFetch: (pluginName: string, version: string) => Promise<Manifest>, whose?: "yours" | "theirs") => Promise<CommitState>;
-export declare const canAutoMergeOnTopCurrentState: (repoId: string, mergeSha: string, pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>) => Promise<boolean>;
-export declare const renderCommitState: (state: CommitState, pluginFetch: (pluginName: string, version: string) => Promise<Manifest>) => Promise<RenderedCommitState>;
+export declare const canAutoMergeCommitStates: (datasource: DataSource, commit1: CommitState, commit2: CommitState, originCommit: CommitState) => Promise<boolean>;
+export declare const getMergedCommitState: (datasource: DataSource, commit1: CommitState, commit2: CommitState, originCommit: CommitState, whose?: "yours" | "theirs") => Promise<CommitState>;
+export declare const canAutoMergeOnTopCurrentState: (datasource: DataSource, repoId: string, mergeSha: string) => Promise<boolean>;
+export declare const renderCommitState: (datasource: DataSource, state: CommitState) => Promise<RenderedCommitState>;

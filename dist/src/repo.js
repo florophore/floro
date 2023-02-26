@@ -26,7 +26,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.renderCommitState = exports.canAutoMergeOnTopCurrentState = exports.getMergedCommitState = exports.canAutoMergeCommitStates = exports.getMergeCommitStates = exports.renderDiffList = exports.getCommitStateDiffList = exports.uniqueKV = exports.mergeTokenStores = exports.detokenizeStore = exports.tokenizeCommitState = exports.convertStateStoreToKV = exports.buildStateStore = exports.getPluginsToRunUpdatesOn = exports.updateCurrentBranch = exports.updateCurrentWithNewBranch = exports.updateCurrentWithSHA = exports.updateCurrentCommitSHA = exports.saveDiffListToCurrent = exports.getProposedStateFromDiffListOnCurrent = exports.getRepoState = exports.getUnstagedCommitState = exports.getCurrentBranch = exports.applyStateDiffToCommitState = exports.getCommitState = exports.updateLocalBranch = exports.deleteLocalBranch = exports.getLocalBranch = exports.getDivergenceOriginSha = exports.getBaseDivergenceSha = exports.getHistory = exports.writeCommit = exports.buildCommitData = exports.readCommit = exports.canCommit = exports.diffIsEmpty = exports.getCommitDirPath = exports.getLocalBranches = exports.getCurrentCommitSha = exports.getCurrentState = exports.getRepoSettings = exports.cloneRepo = exports.getRemovedDeps = exports.getAddedDeps = exports.getLocalRepos = void 0;
+exports.renderCommitState = exports.canAutoMergeOnTopCurrentState = exports.getMergedCommitState = exports.canAutoMergeCommitStates = exports.getMergeCommitStates = exports.renderDiffList = exports.getCommitStateDiffList = exports.uniqueKV = exports.mergeTokenStores = exports.detokenizeStore = exports.tokenizeCommitState = exports.convertStateStoreToKV = exports.buildStateStore = exports.getPluginsToRunUpdatesOn = exports.updateCurrentBranch = exports.updateCurrentWithNewBranch = exports.updateCurrentWithSHA = exports.updateCurrentCommitSHA = exports.saveDiffListToCurrent = exports.getProposedStateFromDiffListOnCurrent = exports.getRepoState = exports.getUnstagedCommitState = exports.getCurrentBranch = exports.applyStateDiffToCommitState = exports.getCommitState = exports.getDivergenceOriginSha = exports.getBaseDivergenceSha = exports.getHistory = exports.buildCommitData = exports.canCommit = exports.diffIsEmpty = exports.getCurrentCommitSha = exports.cloneRepo = exports.getRemovedDeps = exports.getAddedDeps = void 0;
 const axios_1 = __importDefault(require("axios"));
 const fs_1 = __importStar(require("fs"));
 const path_1 = __importDefault(require("path"));
@@ -50,13 +50,6 @@ const EMPTY_COMMIT_DIFF = {
     binaries: { add: {}, remove: {} },
 };
 const EMPTY_COMMIT_DIFF_STRING = JSON.stringify(EMPTY_COMMIT_DIFF);
-const getLocalRepos = async () => {
-    const repoDir = await fs_1.default.promises.readdir(filestructure_1.vReposPath);
-    return repoDir?.filter((repoName) => {
-        return /^[0-9a-fA-F]{8}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{12}$/.test(repoName);
-    });
-};
-exports.getLocalRepos = getLocalRepos;
 const getAddedDeps = (oldPlugins, newPlugins) => {
     const oldPluginMap = (0, plugins_1.pluginListToMap)(oldPlugins);
     const out = [];
@@ -139,40 +132,14 @@ const cloneRepo = async (repoId) => {
 };
 exports.cloneRepo = cloneRepo;
 //CHECK
-const getRepoSettings = async (repoId) => {
+const getCurrentCommitSha = async (datasource, repoId) => {
     try {
-        const repoPath = path_1.default.join(filestructure_1.vReposPath, repoId);
-        const settingsPath = path_1.default.join(repoPath, `settings.json`);
-        const settings = await fs_1.default.promises.readFile(settingsPath);
-        return JSON.parse(settings.toString());
-    }
-    catch (e) {
-        return null;
-    }
-};
-exports.getRepoSettings = getRepoSettings;
-//CHECK
-const getCurrentState = async (repoId) => {
-    try {
-        const repoPath = path_1.default.join(filestructure_1.vReposPath, repoId);
-        const currentPath = path_1.default.join(repoPath, `current.json`);
-        const current = await fs_1.default.promises.readFile(currentPath);
-        return JSON.parse(current.toString());
-    }
-    catch (e) {
-        return null;
-    }
-};
-exports.getCurrentState = getCurrentState;
-//CHECK
-const getCurrentCommitSha = async (repoId, fetchCurrentState) => {
-    try {
-        const current = await fetchCurrentState(repoId);
+        const current = await datasource.getCurrentState(repoId);
         if (current.commit) {
             return current.commit;
         }
         if (current.branch) {
-            const branch = await (0, exports.getLocalBranch)(repoId, current.branch);
+            const branch = await datasource.getBranch(repoId, current.branch);
             return branch?.lastCommit ?? null;
         }
         return null;
@@ -182,41 +149,23 @@ const getCurrentCommitSha = async (repoId, fetchCurrentState) => {
     }
 };
 exports.getCurrentCommitSha = getCurrentCommitSha;
-const getLocalBranches = async (repoId) => {
-    const branchesPath = path_1.default.join(filestructure_1.vReposPath, repoId, "branches");
-    const branchesDir = await fs_1.default.promises.readdir(branchesPath);
-    const branches = await Promise.all(branchesDir
-        ?.filter((branchName) => {
-        return /.*\.json$/.test(branchName);
-    })
-        ?.map((branchFileName) => {
-        const branchName = branchFileName.substring(0, branchFileName.length - 5);
-        return (0, exports.getLocalBranch)(repoId, branchName);
-    }));
-    return branches.filter((branch) => branch != null);
-};
-exports.getLocalBranches = getLocalBranches;
-const getCommitDirPath = (repoId, commitSha) => {
-    return path_1.default.join(filestructure_1.vReposPath, repoId, "commits", commitSha.substring(0, 2));
-};
-exports.getCommitDirPath = getCommitDirPath;
 const diffIsEmpty = (stateDiff) => {
     return JSON.stringify(stateDiff) == EMPTY_COMMIT_DIFF_STRING;
 };
 exports.diffIsEmpty = diffIsEmpty;
-const canCommit = async (repoId, user, message, fetchCurrentState) => {
+const canCommit = async (datasource, repoId, user, message) => {
     if (!user || !user.id) {
         return false;
     }
     if ((message ?? "").length == 0) {
         return false;
     }
-    const currentSha = await (0, exports.getCurrentCommitSha)(repoId, fetchCurrentState);
-    const commit = await (0, exports.readCommit)(repoId, currentSha);
+    const currentSha = await (0, exports.getCurrentCommitSha)(datasource, repoId);
+    const commit = await datasource.readCommit(repoId, currentSha);
     if (commit) {
         // ensure safe
     }
-    const currentState = await fetchCurrentState(repoId);
+    const currentState = await datasource.getCurrentState(repoId);
     if (!currentState) {
         return false;
     }
@@ -226,18 +175,6 @@ const canCommit = async (repoId, user, message, fetchCurrentState) => {
     return true;
 };
 exports.canCommit = canCommit;
-const readCommit = async (repoId, commitSha) => {
-    try {
-        const commitDir = (0, exports.getCommitDirPath)(repoId, commitSha);
-        const commitPath = path_1.default.join(commitDir, `${commitSha.substring(2)}.json`);
-        const commitDataString = await fs_1.default.promises.readFile(commitPath);
-        return JSON.parse(commitDataString.toString());
-    }
-    catch (e) {
-        return null;
-    }
-};
-exports.readCommit = readCommit;
 const buildCommitData = (parentSha, historicalParent, idx, diff, userId, timestamp, message) => {
     const commitData = {
         parent: parentSha,
@@ -255,31 +192,15 @@ const buildCommitData = (parentSha, historicalParent, idx, diff, userId, timesta
     };
 };
 exports.buildCommitData = buildCommitData;
-const writeCommit = async (repoId, commitSha, commitData) => {
-    try {
-        const commitDir = (0, exports.getCommitDirPath)(repoId, commitSha);
-        const commitDirExists = await (0, filestructure_1.existsAsync)(commitDir);
-        if (!commitDirExists) {
-            await fs_1.default.promises.mkdir(commitDir, 0o755);
-        }
-        const commitPath = path_1.default.join(commitDir, `${commitSha.substring(2)}.json`);
-        await fs_1.default.promises.writeFile(commitPath, Buffer.from(JSON.stringify(commitData, null, 2)));
-        return commitData;
-    }
-    catch (e) {
-        return null;
-    }
-};
-exports.writeCommit = writeCommit;
-const getHistory = async (repoId, sha) => {
+const getHistory = async (datasource, repoId, sha) => {
     if (sha == null) {
         return [];
     }
-    const commit = await (0, exports.readCommit)(repoId, sha);
+    const commit = await datasource.readCommit(repoId, sha);
     if (commit == null) {
         return null;
     }
-    const history = await (0, exports.getHistory)(repoId, commit.parent);
+    const history = await (0, exports.getHistory)(datasource, repoId, commit.parent);
     return [
         {
             sha,
@@ -300,12 +221,12 @@ const getBaseDivergenceSha = (history, origin) => {
     return null;
 };
 exports.getBaseDivergenceSha = getBaseDivergenceSha;
-const getDivergenceOriginSha = async (repoId, sha1, sha2) => {
-    const history1 = await (0, exports.getHistory)(repoId, sha1);
+const getDivergenceOriginSha = async (datasource, repoId, sha1, sha2) => {
+    const history1 = await (0, exports.getHistory)(datasource, repoId, sha1);
     if (!history1) {
         throw "missing history";
     }
-    const history2 = await (0, exports.getHistory)(repoId, sha2);
+    const history2 = await (0, exports.getHistory)(datasource, repoId, sha2);
     if (!history2) {
         throw "missing history";
     }
@@ -323,55 +244,15 @@ const getDivergenceOriginSha = async (repoId, sha1, sha2) => {
     return null;
 };
 exports.getDivergenceOriginSha = getDivergenceOriginSha;
-const getLocalBranch = async (repoId, branchName) => {
-    try {
-        const repoPath = path_1.default.join(filestructure_1.vReposPath, repoId);
-        const branchPath = path_1.default.join(repoPath, "branches", `${branchName}.json`);
-        const branchData = await fs_1.default.promises.readFile(branchPath);
-        const branch = JSON.parse(branchData.toString());
-        return {
-            ...branch,
-            name: branchName,
-        };
-    }
-    catch (e) {
-        return null;
-    }
-};
-exports.getLocalBranch = getLocalBranch;
-const deleteLocalBranch = async (repoId, branchName) => {
-    try {
-        const repoPath = path_1.default.join(filestructure_1.vReposPath, repoId);
-        const branchPath = path_1.default.join(repoPath, "branches", `${branchName}.json`);
-        await fs_1.default.promises.rm(branchPath);
-        return true;
-    }
-    catch (e) {
-        return false;
-    }
-};
-exports.deleteLocalBranch = deleteLocalBranch;
-const updateLocalBranch = async (repoId, branchName, branchData) => {
-    try {
-        const repoPath = path_1.default.join(filestructure_1.vReposPath, repoId);
-        const branchPath = path_1.default.join(repoPath, "branches", `${branchName}.json`);
-        await fs_1.default.promises.writeFile(branchPath, Buffer.from(JSON.stringify(branchData, null, 2)));
-        return branchData;
-    }
-    catch (e) {
-        return null;
-    }
-};
-exports.updateLocalBranch = updateLocalBranch;
-const getCommitState = async (repoId, sha) => {
+const getCommitState = async (datasource, repoId, sha) => {
     if (!sha) {
         return EMPTY_COMMIT_STATE;
     }
-    const commitData = await (0, exports.readCommit)(repoId, sha);
+    const commitData = await datasource.readCommit(repoId, sha);
     if (commitData == null) {
         return null;
     }
-    const state = await (0, exports.getCommitState)(repoId, commitData.parent);
+    const state = await (0, exports.getCommitState)(datasource, repoId, commitData.parent);
     return Object.keys(commitData.diff).reduce((acc, namespace) => {
         if (namespace == "store") {
             const store = Object.keys(commitData?.diff?.store ?? {}).reduce((storeAcc, pluginName) => {
@@ -416,29 +297,29 @@ const applyStateDiffToCommitState = async (commitState, stateDiff) => {
     }, commitState);
 };
 exports.applyStateDiffToCommitState = applyStateDiffToCommitState;
-const getCurrentBranch = async (repoId, fetchCurrentState) => {
-    const current = await fetchCurrentState(repoId);
+const getCurrentBranch = async (datasource, repoId) => {
+    const current = await datasource.getCurrentState(repoId);
     if (current.branch) {
-        const branch = await (0, exports.getLocalBranch)(repoId, current.branch);
+        const branch = await datasource.getBranch(repoId, current.branch);
         return branch;
     }
     return null;
 };
 exports.getCurrentBranch = getCurrentBranch;
-const getUnstagedCommitState = async (repoId, fetchCurrentState) => {
-    const current = await fetchCurrentState(repoId);
+const getUnstagedCommitState = async (datasource, repoId) => {
+    const current = await datasource.getCurrentState(repoId);
     if (current.branch) {
-        const branch = await (0, exports.getLocalBranch)(repoId, current.branch);
-        const commitState = await (0, exports.getCommitState)(repoId, branch.lastCommit);
+        const branch = await datasource.getBranch(repoId, current.branch);
+        const commitState = await (0, exports.getCommitState)(datasource, repoId, branch.lastCommit);
         return commitState;
     }
-    const commitState = await (0, exports.getCommitState)(repoId, current.commit);
+    const commitState = await (0, exports.getCommitState)(datasource, repoId, current.commit);
     return commitState;
 };
 exports.getUnstagedCommitState = getUnstagedCommitState;
-const getRepoState = async (repoId, fetchCurrentState) => {
-    const current = await fetchCurrentState(repoId);
-    const state = await (0, exports.getUnstagedCommitState)(repoId, fetchCurrentState);
+const getRepoState = async (datasource, repoId) => {
+    const current = await datasource.getCurrentState(repoId);
+    const state = await (0, exports.getUnstagedCommitState)(datasource, repoId);
     return Object.keys(current.diff).reduce((acc, namespace) => {
         if (namespace == "store") {
             const store = Object.keys(current.diff?.store ?? {}).reduce((storeAcc, pluginName) => {
@@ -459,9 +340,9 @@ const getRepoState = async (repoId, fetchCurrentState) => {
     }, state);
 };
 exports.getRepoState = getRepoState;
-const getProposedStateFromDiffListOnCurrent = async (repoId, diffList, fetchCurrentState) => {
-    const current = await fetchCurrentState(repoId);
-    const commitState = await (0, exports.getCommitState)(repoId, current.commit);
+const getProposedStateFromDiffListOnCurrent = async (datasource, repoId, diffList) => {
+    const current = await datasource.getCurrentState(repoId);
+    const commitState = await (0, exports.getCommitState)(datasource, repoId, current.commit);
     try {
         const updated = diffList.reduce((acc, { namespace, diff, pluginName }) => {
             if (namespace != "store") {
@@ -484,7 +365,7 @@ const getProposedStateFromDiffListOnCurrent = async (repoId, diffList, fetchCurr
                 },
             };
         }, current);
-        // PRUNE DANGLING PLUGINS FROM STORE
+        // PRUNE DANGLING PLUGINS FROM UNCOMITED STORE STATE
         const nextPlugins = (0, versioncontrol_1.applyDiff)(updated.diff.plugins, commitState.plugins);
         const pluginNameSet = new Set(nextPlugins.map((p) => p.key));
         for (let pluginName in updated.diff.store) {
@@ -499,15 +380,13 @@ const getProposedStateFromDiffListOnCurrent = async (repoId, diffList, fetchCurr
     }
 };
 exports.getProposedStateFromDiffListOnCurrent = getProposedStateFromDiffListOnCurrent;
-const saveDiffListToCurrent = async (repoId, diffList, fetchCurrentState) => {
+const saveDiffListToCurrent = async (datasource, repoId, diffList) => {
     try {
-        const repoPath = path_1.default.join(filestructure_1.vReposPath, repoId);
-        const currentPath = path_1.default.join(repoPath, `current.json`);
-        const proposedChanges = await (0, exports.getProposedStateFromDiffListOnCurrent)(repoId, diffList, fetchCurrentState);
+        const proposedChanges = await (0, exports.getProposedStateFromDiffListOnCurrent)(datasource, repoId, diffList);
         if (!proposedChanges) {
             return null;
         }
-        await fs_1.default.promises.writeFile(currentPath, Buffer.from(JSON.stringify(proposedChanges, null, 2)), "utf-8");
+        await datasource.saveCurrentState(repoId, proposedChanges);
         return proposedChanges;
     }
     catch (e) {
@@ -516,14 +395,11 @@ const saveDiffListToCurrent = async (repoId, diffList, fetchCurrentState) => {
 };
 exports.saveDiffListToCurrent = saveDiffListToCurrent;
 /**
- *
  * use when committing against branch or sha
  */
-const updateCurrentCommitSHA = async (repoId, sha, isResolvingMerge, fetchCurrentState) => {
+const updateCurrentCommitSHA = async (datasource, repoId, sha, isResolvingMerge) => {
     try {
-        const repoPath = path_1.default.join(filestructure_1.vReposPath, repoId);
-        const currentPath = path_1.default.join(repoPath, `current.json`);
-        const current = await fetchCurrentState(repoId);
+        const current = await datasource.getCurrentState(repoId);
         if (current.isMerge && !isResolvingMerge) {
             return null;
         }
@@ -534,8 +410,7 @@ const updateCurrentCommitSHA = async (repoId, sha, isResolvingMerge, fetchCurren
             isMerge: false,
             merge: null,
         };
-        await fs_1.default.promises.writeFile(currentPath, Buffer.from(JSON.stringify(updated, null, 2)));
-        return updated;
+        return await datasource.saveCurrentState(repoId, updated);
     }
     catch (e) {
         return null;
@@ -543,14 +418,11 @@ const updateCurrentCommitSHA = async (repoId, sha, isResolvingMerge, fetchCurren
 };
 exports.updateCurrentCommitSHA = updateCurrentCommitSHA;
 /**
- *
  * use when HEAD is detached
  */
-const updateCurrentWithSHA = async (repoId, sha, isResolvingMerge, fetchCurrentState) => {
+const updateCurrentWithSHA = async (datasource, repoId, sha, isResolvingMerge) => {
     try {
-        const repoPath = path_1.default.join(filestructure_1.vReposPath, repoId);
-        const currentPath = path_1.default.join(repoPath, `current.json`);
-        const current = await fetchCurrentState(repoId);
+        const current = await datasource.getCurrentState(repoId);
         if (current.isMerge && !isResolvingMerge) {
             return null;
         }
@@ -562,19 +434,16 @@ const updateCurrentWithSHA = async (repoId, sha, isResolvingMerge, fetchCurrentS
             isMerge: false,
             merge: null,
         };
-        await fs_1.default.promises.writeFile(currentPath, Buffer.from(JSON.stringify(updated, null, 2)));
-        return updated;
+        return await datasource.saveCurrentState(repoId, updated);
     }
     catch (e) {
         return null;
     }
 };
 exports.updateCurrentWithSHA = updateCurrentWithSHA;
-const updateCurrentWithNewBranch = async (repoId, branchName, fetchCurrentState) => {
+const updateCurrentWithNewBranch = async (datasource, repoId, branchName) => {
     try {
-        const repoPath = path_1.default.join(filestructure_1.vReposPath, repoId);
-        const currentPath = path_1.default.join(repoPath, `current.json`);
-        const current = await fetchCurrentState(repoId);
+        const current = await datasource.getCurrentState(repoId);
         if (current.isMerge) {
             return null;
         }
@@ -583,19 +452,16 @@ const updateCurrentWithNewBranch = async (repoId, branchName, fetchCurrentState)
             //commit: null,
             branch: branchName,
         };
-        await fs_1.default.promises.writeFile(currentPath, Buffer.from(JSON.stringify(updated, null, 2)));
-        return updated;
+        return await datasource.saveCurrentState(repoId, updated);
     }
     catch (e) {
         return null;
     }
 };
 exports.updateCurrentWithNewBranch = updateCurrentWithNewBranch;
-const updateCurrentBranch = async (repoId, branchName, fetchCurrentState) => {
+const updateCurrentBranch = async (datasource, repoId, branchName) => {
     try {
-        const repoPath = path_1.default.join(filestructure_1.vReposPath, repoId);
-        const currentPath = path_1.default.join(repoPath, `current.json`);
-        const current = await fetchCurrentState(repoId);
+        const current = await datasource.getCurrentState(repoId);
         if (current.isMerge) {
             return null;
         }
@@ -605,8 +471,7 @@ const updateCurrentBranch = async (repoId, branchName, fetchCurrentState) => {
             branch: branchName,
             diff: EMPTY_COMMIT_DIFF,
         };
-        await fs_1.default.promises.writeFile(currentPath, Buffer.from(JSON.stringify(updated, null, 2)));
-        return updated;
+        return await datasource.saveCurrentState(repoId, updated);
     }
     catch (e) {
         return null;
@@ -626,24 +491,24 @@ const getPluginsToRunUpdatesOn = (pastPlugins, nextPlugins) => {
     });
 };
 exports.getPluginsToRunUpdatesOn = getPluginsToRunUpdatesOn;
-const buildStateStore = async (state, pluginFetch) => {
+const buildStateStore = async (datasource, state) => {
     let out = {};
-    const manifests = await (0, plugins_1.getPluginManifests)(state.plugins, pluginFetch);
+    const manifests = await (0, plugins_1.getPluginManifests)(state.plugins, datasource.getPluginManifest);
     for (const pluginManifest of manifests) {
         const kv = state?.store?.[pluginManifest.name] ?? [];
-        const schemaMap = await (0, plugins_1.getSchemaMapForManifest)(pluginManifest, pluginFetch);
+        const schemaMap = await (0, plugins_1.getSchemaMapForManifest)(pluginManifest, datasource.getPluginManifest);
         const pluginState = (0, plugins_1.getStateFromKVForPlugin)(schemaMap, kv, pluginManifest.name);
         out[pluginManifest.name] = pluginState;
     }
     return out;
 };
 exports.buildStateStore = buildStateStore;
-const convertStateStoreToKV = async (state, stateStore, pluginFetch) => {
+const convertStateStoreToKV = async (datasource, state, stateStore) => {
     let out = {};
-    const manifests = await (0, plugins_1.getPluginManifests)(state.plugins, pluginFetch);
+    const manifests = await (0, plugins_1.getPluginManifests)(state.plugins, datasource.getPluginManifest);
     for (const pluginManifest of manifests) {
-        const schemaMap = await (0, plugins_1.getSchemaMapForManifest)(pluginManifest, pluginFetch);
-        const kv = await (0, plugins_1.getKVStateForPlugin)(schemaMap, pluginManifest.name, stateStore, pluginFetch);
+        const schemaMap = await (0, plugins_1.getSchemaMapForManifest)(pluginManifest, datasource.getPluginManifest);
+        const kv = await (0, plugins_1.getKVStateForPlugin)(schemaMap, pluginManifest.name, stateStore, datasource.getPluginManifest);
         out[pluginManifest.name] = kv;
     }
     return out;
@@ -802,13 +667,13 @@ const renderDiffList = (diffList) => {
     }, { diff: EMPTY_COMMIT_DIFF }).diff;
 };
 exports.renderDiffList = renderDiffList;
-const getMergeCommitStates = async (repoId, sha1, sha2) => {
+const getMergeCommitStates = async (datasource, repoId, sha1, sha2) => {
     try {
-        const originSha = await (0, exports.getDivergenceOriginSha)(repoId, sha1, sha2);
-        const commit1 = await (0, exports.getCommitState)(repoId, sha1);
-        const commit2 = await (0, exports.getCommitState)(repoId, sha2);
+        const originSha = await (0, exports.getDivergenceOriginSha)(datasource, repoId, sha1, sha2);
+        const commit1 = await (0, exports.getCommitState)(datasource, repoId, sha1);
+        const commit2 = await (0, exports.getCommitState)(datasource, repoId, sha2);
         const originCommit = !!originSha
-            ? await (0, exports.getCommitState)(repoId, originSha)
+            ? await (0, exports.getCommitState)(datasource, repoId, originSha)
             : EMPTY_COMMIT_STATE;
         return {
             commit1,
@@ -821,10 +686,10 @@ const getMergeCommitStates = async (repoId, sha1, sha2) => {
     }
 };
 exports.getMergeCommitStates = getMergeCommitStates;
-const canAutoMergeCommitStates = async (commit1, commit2, originCommit, pluginFetch) => {
+const canAutoMergeCommitStates = async (datasource, commit1, commit2, originCommit) => {
     try {
-        const yourMerge = await (0, exports.getMergedCommitState)(commit1, commit2, originCommit, pluginFetch, "yours");
-        const theirMerge = await (0, exports.getMergedCommitState)(commit1, commit2, originCommit, pluginFetch, "theirs");
+        const yourMerge = await (0, exports.getMergedCommitState)(datasource, commit1, commit2, originCommit, "yours");
+        const theirMerge = await (0, exports.getMergedCommitState)(datasource, commit1, commit2, originCommit, "theirs");
         return JSON.stringify(yourMerge) == JSON.stringify(theirMerge);
     }
     catch (e) {
@@ -832,7 +697,7 @@ const canAutoMergeCommitStates = async (commit1, commit2, originCommit, pluginFe
     }
 };
 exports.canAutoMergeCommitStates = canAutoMergeCommitStates;
-const getMergedCommitState = async (commit1, commit2, originCommit, pluginFetch, whose = "yours") => {
+const getMergedCommitState = async (datasource, commit1, commit2, originCommit, whose = "yours") => {
     try {
         const [tokenizedCommit1, tokenizedStore1] = (0, exports.tokenizeCommitState)(commit1);
         const [tokenizedCommit2, tokenizedStore2] = (0, exports.tokenizeCommitState)(commit2);
@@ -865,14 +730,14 @@ const getMergedCommitState = async (commit1, commit2, originCommit, pluginFetch,
         mergeState.plugins = (0, exports.uniqueKV)(mergeState.plugins);
         mergeState.binaries = (0, exports.uniqueKV)(mergeState.binaries);
         mergeState.licenses = (0, exports.uniqueKV)(mergeState.licenses);
-        let stateStore = await (0, exports.buildStateStore)(mergeState, pluginFetch);
-        const manifests = await (0, plugins_1.getPluginManifests)(mergeState.plugins, pluginFetch);
+        let stateStore = await (0, exports.buildStateStore)(datasource, mergeState);
+        const manifests = await (0, plugins_1.getPluginManifests)(mergeState.plugins, datasource.getPluginManifest);
         const rootManifests = manifests.filter((m) => Object.keys(m.imports).length === 0);
         for (const manifest of rootManifests) {
-            const schemaMap = await (0, plugins_1.getSchemaMapForManifest)(manifest, pluginFetch);
-            stateStore = await (0, plugins_1.cascadePluginState)(schemaMap, stateStore, manifest.name, pluginFetch);
+            const schemaMap = await (0, plugins_1.getSchemaMapForManifest)(manifest, datasource.getPluginManifest);
+            stateStore = await (0, plugins_1.cascadePluginState)(schemaMap, stateStore, manifest.name, datasource.getPluginManifest);
         }
-        mergeState.store = await (0, exports.convertStateStoreToKV)(mergeState, stateStore, pluginFetch);
+        mergeState.store = await (0, exports.convertStateStoreToKV)(datasource, mergeState, stateStore);
         return mergeState;
     }
     catch (e) {
@@ -880,21 +745,21 @@ const getMergedCommitState = async (commit1, commit2, originCommit, pluginFetch,
     }
 };
 exports.getMergedCommitState = getMergedCommitState;
-const canAutoMergeOnTopCurrentState = async (repoId, mergeSha, pluginFetch) => {
+const canAutoMergeOnTopCurrentState = async (datasource, repoId, mergeSha) => {
     try {
-        const current = await (0, exports.getCurrentState)(repoId);
-        const repoState = await (0, exports.getRepoState)(repoId, exports.getCurrentState);
-        const mergeState = await (0, exports.getCommitState)(repoId, mergeSha);
-        const { originCommit } = await (0, exports.getMergeCommitStates)(repoId, current.commit, mergeSha);
-        return await (0, exports.canAutoMergeCommitStates)(repoState, mergeState, originCommit, pluginFetch);
+        const current = await datasource.getCurrentState(repoId);
+        const repoState = await (0, exports.getRepoState)(datasource, repoId);
+        const mergeState = await (0, exports.getCommitState)(datasource, repoId, mergeSha);
+        const { originCommit } = await (0, exports.getMergeCommitStates)(datasource, repoId, current.commit, mergeSha);
+        return await (0, exports.canAutoMergeCommitStates)(datasource, repoState, mergeState, originCommit);
     }
     catch (e) {
         return null;
     }
 };
 exports.canAutoMergeOnTopCurrentState = canAutoMergeOnTopCurrentState;
-const renderCommitState = async (state, pluginFetch) => {
-    const store = await (0, exports.buildStateStore)(state, pluginFetch);
+const renderCommitState = async (datasource, state) => {
+    const store = await (0, exports.buildStateStore)(datasource, state);
     return {
         ...state,
         store,

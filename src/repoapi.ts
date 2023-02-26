@@ -1,34 +1,21 @@
 import path from "path";
+import { existsAsync, vReposPath, getUserAsync } from "./filestructure";
 import {
-  existsAsync,
-  vReposPath,
-  getUserAsync,
-} from "./filestructure";
-import {
-  getLocalBranches,
-  getRepoSettings,
   getCurrentBranch,
   getRepoState,
   saveDiffListToCurrent,
-  getCurrentState,
   getUnstagedCommitState,
   buildStateStore,
-  writeCommit,
-  getLocalBranch,
-  updateLocalBranch,
   updateCurrentCommitSHA,
   getCurrentCommitSha,
   getHistory,
-  readCommit,
   getCommitState,
   Branch,
   updateCurrentWithNewBranch,
   updateCurrentWithSHA,
-  deleteLocalBranch,
   canCommit,
   getAddedDeps,
   getRemovedDeps,
-  getPluginsToRunUpdatesOn,
   getProposedStateFromDiffListOnCurrent,
   applyStateDiffToCommitState,
   convertStateStoreToKV,
@@ -42,10 +29,9 @@ import {
   getDivergenceOriginSha,
   getCommitStateDiffList,
   renderDiffList,
-  getBaseDivergenceSha
+  getBaseDivergenceSha,
 } from "./repo";
 import {
-  applyDiff,
   CommitData,
   DiffElement,
   getDiff,
@@ -53,72 +39,66 @@ import {
   getTextDiff,
 } from "./versioncontrol";
 import {
-  getStateFromKVForPlugin,
-  getKVStateForPlugin,
-  getRootSchemaForPlugin,
-  hasPlugin,
   PluginElement,
   pluginManifestsAreCompatibleForUpdate,
-  readPluginManifest,
-  Manifest,
   getSchemaMapForManifest,
   getPluginManifests,
   getManifestMapFromManifestList,
   getDownstreamDepsInSchemaMap,
   getUpstreamDepsInSchemaMap,
-  pluginListToMap,
   pluginMapToList,
   topSortManifests,
   manifestListToPluginList,
   cascadePluginState,
 } from "./plugins";
 import { LicenseCodes } from "./licensecodes";
+import { DataSource } from "./datasource";
 
-export const repoExists = async (repoId?: string): Promise<boolean> => {
+export const writeRepoDescription = async (
+  datasource: DataSource,
+  repoId?: string,
+  description?: string
+) => {
   if (!repoId) {
-    return false;
+    return null;
   }
-  return await existsAsync(path.join(vReposPath, repoId));
+  if (!description) {
+    return null;
+  }
+  const exists = await datasource.repoExists(repoId);
+  if (!exists) {
+    return null;
+  }
+
+  try {
+    const unstagedState = await getUnstagedCommitState(datasource, repoId);
+    const diff = getTextDiff(unstagedState.description?.join(""), description);
+    const state = await saveDiffListToCurrent(datasource, repoId, [
+      {
+        diff,
+        namespace: "description",
+      },
+    ]);
+
+    const nextState = await applyStateDiffToCommitState(
+      unstagedState,
+      state.diff
+    );
+    return nextState;
+  } catch (e) {
+    return null;
+  }
 };
 
-export const writeRepoDescription = async (repoId?: string, description?: string) => {
-    if (!repoId) {
-      return null;
-    }
-    if (!description) {
-      return null;
-    }
-    const exists = await repoExists(repoId);
-    if (!exists) {
-      return null;
-    }
-
-    try {
-      const unstagedState = await getUnstagedCommitState(repoId, getCurrentState);
-      const diff = getTextDiff(unstagedState.description?.join(""), description);
-      const state = await saveDiffListToCurrent(repoId, [
-        {
-          diff,
-          namespace: "description",
-        },
-      ],
-      getCurrentState);
-
-      const nextState = await applyStateDiffToCommitState(unstagedState, state.diff);
-      return nextState;
-    } catch (e) {
-      return null;
-    }
-}
-
 export const writeRepoLicenses = async (
+  datasource: DataSource,
   repoId?: string,
   licensesInput?: Array<{ key: string; value: string }>
 ) => {
   if (!repoId) {
     return null;
   }
-  const exists = await repoExists(repoId);
+  const exists = await datasource.repoExists(repoId);
   if (!exists) {
     return null;
   }
@@ -138,75 +118,89 @@ export const writeRepoLicenses = async (
       return null;
     }
 
-    const unstagedState = await getUnstagedCommitState(repoId, getCurrentState);
+    const unstagedState = await getUnstagedCommitState(datasource, repoId);
     const diff = getDiff(unstagedState.licenses, licenses);
-    const state = await saveDiffListToCurrent(repoId, [
+    const state = await saveDiffListToCurrent(datasource, repoId, [
       {
         diff,
         namespace: "licenses",
       },
-    ],
-    getCurrentState);
-    const nextState = await applyStateDiffToCommitState(unstagedState, state.diff);
+    ]);
+    const nextState = await applyStateDiffToCommitState(
+      unstagedState,
+      state.diff
+    );
     return nextState;
   } catch (e) {
     return null;
   }
 };
 
-export const readRepoLicenses = async (repoId?: string): Promise<Array<{key: string, value: string}>> => {
+export const readRepoLicenses = async (
+  datasource: DataSource,
+  repoId?: string
+): Promise<Array<{ key: string; value: string }>> => {
   if (!repoId) {
     return null;
   }
-  const exists = await repoExists(repoId);
+  const exists = await datasource.repoExists(repoId);
   if (!exists) {
     return null;
   }
   try {
-    const state = await getRepoState(repoId, getCurrentState);
+    const state = await getRepoState(datasource, repoId);
     return state.licenses;
   } catch (e) {
     return null;
   }
-}
+};
 
-export const readRepoDescription = async (repoId?: string) => {
-    if (!repoId) {
-      return null;
-    }
-    const exists = await existsAsync(path.join(vReposPath, repoId));
-    if (!exists) {
-      return;
-    }
-    const state = await getRepoState(repoId, getCurrentState);
-    return state.description;
-}
-
-export const getCurrentRepoBranch = async (repoId?: string) => {
+export const readRepoDescription = async (
+  datasource: DataSource,
+  repoId?: string
+) => {
   if (!repoId) {
     return null;
   }
-  const exists = await repoExists(repoId);
+  const exists = await existsAsync(path.join(vReposPath, repoId));
+  if (!exists) {
+    return;
+  }
+  const state = await getRepoState(datasource, repoId);
+  return state.description;
+};
+
+export const getCurrentRepoBranch = async (
+  datasource: DataSource,
+  repoId?: string
+) => {
+  if (!repoId) {
+    return null;
+  }
+  const exists = await datasource.repoExists(repoId);
   if (!exists) {
     return null;
   }
   try {
-    const branch = await getCurrentBranch(repoId, getCurrentState);
+    const branch = await getCurrentBranch(datasource, repoId);
     return branch;
   } catch (e) {
     return null;
   }
 };
-export const getRepoBranches = async (repoId?: string) => {
+export const getRepoBranches = async (
+  datasource: DataSource,
+  repoId?: string
+) => {
   if (!repoId) {
     return null;
   }
-  const exists = await repoExists(repoId);
+  const exists = await datasource.repoExists(repoId);
   if (!exists) {
     return null;
   }
   try {
-    const branches = await getLocalBranches(repoId);
+    const branches = await datasource.getBranches(repoId);
     return branches;
   } catch (e) {
     return null;
@@ -214,18 +208,19 @@ export const getRepoBranches = async (repoId?: string) => {
 };
 
 export const switchRepoBranch = async (
+  datasource: DataSource,
   repoId?: string,
   branchName?: string
 ) => {
   if (!repoId) {
     return null;
   }
-  const exists = await repoExists(repoId);
+  const exists = await datasource.repoExists(repoId);
   if (!exists) {
     return null;
   }
   try {
-    const currentBranches = await getLocalBranches(repoId);
+    const currentBranches = await datasource.getBranches(repoId);
     if (
       currentBranches
         .map((v) => v.name.toLowerCase())
@@ -233,7 +228,7 @@ export const switchRepoBranch = async (
     ) {
       return null;
     }
-    const sha = await getCurrentCommitSha(repoId, getCurrentState);
+    const sha = await getCurrentCommitSha(datasource, repoId);
     if (!sha) {
       return null;
     }
@@ -249,26 +244,30 @@ export const switchRepoBranch = async (
       createdAt: new Date().toString(),
       name: branchName,
     };
-    const branchData = await updateLocalBranch(repoId, branchName, branch);
+    const branchData = await datasource.saveBranch(repoId, branchName, branch);
     if (!branchData) {
       return null;
     }
-    return await updateCurrentWithNewBranch(repoId, branchName, getCurrentState);
+    return await updateCurrentWithNewBranch(datasource, repoId, branchName);
   } catch (e) {
     return null;
   }
 };
 
-export const deleteBranch = async (repoId?: string, branchName?: string) => {
+export const deleteBranch = async (
+  datasource: DataSource,
+  repoId?: string,
+  branchName?: string
+) => {
   if (!repoId) {
     return null;
   }
-  const exists = await repoExists(repoId);
+  const exists = await datasource.repoExists(repoId);
   if (!exists) {
     return null;
   }
   try {
-    const currentBranches = await getLocalBranches(repoId);
+    const currentBranches = await datasource.getBranches(repoId);
     if (
       !currentBranches
         .map((v) => v.name.toLowerCase())
@@ -276,31 +275,32 @@ export const deleteBranch = async (repoId?: string, branchName?: string) => {
     ) {
       return null;
     }
-    const current = await getCurrentState(repoId);
+    const current = await datasource.getCurrentState(repoId);
     // ADD CAN DELETE
     if (
       current.branch &&
       current.branch.toLowerCase() == branchName.toLocaleLowerCase()
     ) {
-      await deleteLocalBranch(repoId, branchName);
+      // check is just localf
+      await datasource.deleteBranch(repoId, branchName);
     }
-    const branches = await getLocalBranches(repoId);
+    const branches = await datasource.getBranches(repoId);
     return branches;
   } catch (e) {
     return null;
   }
-}
+};
 
-export const readSettings = async (repoId?: string) => {
+export const readSettings = async (datasource: DataSource, repoId?: string) => {
   if (!repoId) {
     return null;
   }
-  const exists = await repoExists(repoId);
+  const exists = await datasource.repoExists(repoId);
   if (!exists) {
     return null;
   }
   try {
-    const settings = await getRepoSettings(repoId);
+    const settings = await datasource.getRepoSettings(repoId);
     if (!settings) {
       return null;
     }
@@ -310,20 +310,23 @@ export const readSettings = async (repoId?: string) => {
   }
 };
 
-export const readLastCommit = async (repoId?: string) => {
+export const readLastCommit = async (
+  datasource: DataSource,
+  repoId?: string
+) => {
   if (!repoId) {
     return null;
   }
-  const exists = await repoExists(repoId);
+  const exists = await datasource.repoExists(repoId);
   if (!exists) {
     return null;
   }
   try {
-    const sha = await getCurrentCommitSha(repoId, getCurrentState);
+    const sha = await getCurrentCommitSha(datasource, repoId);
     if (!sha) {
       return null;
     }
-    const commit = await readCommit(repoId, sha);
+    const commit = await datasource.readCommit(repoId, sha);
     if (!commit) {
       return null;
     }
@@ -333,20 +336,23 @@ export const readLastCommit = async (repoId?: string) => {
   }
 };
 
-
-export const readRepoCommit = async (repoId?: string, sha?: string) => {
+export const readRepoCommit = async (
+  datasource: DataSource,
+  repoId?: string,
+  sha?: string
+) => {
   if (!repoId) {
     return null;
   }
   if (!sha) {
     return null;
   }
-  const exists = await repoExists(repoId);
+  const exists = await datasource.repoExists(repoId);
   if (!exists) {
     return null;
   }
   try {
-    const commit = await readCommit(repoId, sha);
+    const commit = await datasource.readCommit(repoId, sha);
     if (!commit) {
       return null;
     }
@@ -356,72 +362,83 @@ export const readRepoCommit = async (repoId?: string, sha?: string) => {
   }
 };
 
-export const readCurrentHistory = async (repoId?: string) => {
+export const readCurrentHistory = async (
+  datasource: DataSource,
+  repoId?: string
+) => {
   if (!repoId) {
     return null;
   }
-  const exists = await repoExists(repoId);
+  const exists = await datasource.repoExists(repoId);
   if (!exists) {
     return null;
   }
   try {
-    const sha = await getCurrentCommitSha(repoId, getCurrentState);
+    const sha = await getCurrentCommitSha(datasource, repoId);
     if (!sha) {
       return [];
     }
-    const history = await getHistory(repoId, sha);
+    const history = await getHistory(datasource, repoId, sha);
     if (!history) {
       return null;
     }
     return history;
-  } catch(e) {
+  } catch (e) {
     return null;
   }
 };
 
-export const readBranchHistory = async (repoId?: string, branchName?: string) => {
+export const readBranchHistory = async (
+  datasource: DataSource,
+  repoId?: string,
+  branchName?: string
+) => {
   if (!repoId) {
     return null;
   }
   if (!branchName) {
     return null;
   }
-  const exists = await repoExists(repoId);
+  const exists = await datasource.repoExists(repoId);
   if (!exists) {
     return null;
   }
   try {
-    const branch = await getLocalBranch(repoId, branchName);
+    const branch = await datasource.getBranch(repoId, branchName);
     if (!branch) {
       return null;
     }
-    const history = await getHistory(repoId, branch.lastCommit);
+    const history = await getHistory(datasource, repoId, branch.lastCommit);
     if (!history) {
       return null;
     }
     return history;
-  } catch(e) {
+  } catch (e) {
     return null;
   }
 };
 
-export const readCommitHistory = async (repoId?: string, sha?: string) => {
+export const readCommitHistory = async (
+  datasource: DataSource,
+  repoId?: string,
+  sha?: string
+) => {
   if (!repoId) {
     return null;
   }
   if (!sha) {
     return null;
   }
-  const exists = await repoExists(repoId);
+  const exists = await datasource.repoExists(repoId);
   if (!exists) {
     return null;
   }
   try {
-    const commit = await readCommit(repoId, sha);
+    const commit = await datasource.readCommit(repoId, sha);
     if (!commit) {
       return null;
     }
-    const history = await getHistory(repoId, sha);
+    const history = await getHistory(datasource, repoId, sha);
     if (!history) {
       return null;
     }
@@ -431,78 +448,93 @@ export const readCommitHistory = async (repoId?: string, sha?: string) => {
   }
 };
 
-export const readCurrentState = async (repoId?: string) => {
+export const readCurrentState = async (
+  datasource: DataSource,
+  repoId?: string
+) => {
   if (!repoId) {
     return null;
   }
-  const exists = await repoExists(repoId);
+  const exists = await datasource.repoExists(repoId);
   if (!exists) {
     return null;
   }
   try {
-    const state = await getRepoState(repoId, getCurrentState);
-    return await renderCommitState(state, readPluginManifest);
+    const state = await getRepoState(datasource, repoId);
+    return await renderCommitState(datasource, state);
   } catch (e) {
     return null;
   }
-}
+};
 
-export const readCommitState = async (repoId?: string, sha?: string) => {
+export const readCommitState = async (
+  datasource: DataSource,
+  repoId?: string,
+  sha?: string
+) => {
   if (!repoId) {
     return null;
   }
   if (!sha) {
     return null;
   }
-  const exists = await repoExists(repoId);
+  const exists = await datasource.repoExists(repoId);
   if (!exists) {
     return null;
   }
   try {
-    const state = await getCommitState(repoId, sha);
+    const state = await getCommitState(datasource, repoId, sha);
     if (!state) {
       return null;
     }
-    return await renderCommitState(state, readPluginManifest);
+    return await renderCommitState(datasource, state);
   } catch (e) {
     return null;
   }
 };
 
-export const readBranchState = async (repoId?: string, branchName?: string) => {
+export const readBranchState = async (
+  datasource: DataSource,
+  repoId?: string,
+  branchName?: string
+) => {
   if (!repoId) {
     return null;
   }
   if (!branchName) {
     return null;
   }
-  const exists = await repoExists(repoId);
+  const exists = await datasource.repoExists(repoId);
   if (!exists) {
     return null;
   }
   try {
-    const branch = await getLocalBranch(repoId, branchName);
+    const branch = await datasource.getBranch(repoId, branchName);
     if (!branch) {
       return null;
     }
-    const state = await getCommitState(repoId, branch.lastCommit);
+    const state = await getCommitState(datasource, repoId, branch.lastCommit);
     if (!state) {
       return null;
     }
-    return renderCommitState(state, readPluginManifest)
+    return renderCommitState(datasource, state);
   } catch (e) {
     return null;
   }
 };
 
-export const writeRepoCommit = async (repoId?: string, message?: string) => {
+export const writeRepoCommit = async (
+  datasource: DataSource,
+  repoId?: string,
+  message?: string
+) => {
   if (!repoId) {
     return null;
   }
   if (!message) {
     return null;
   }
-  const exists = await repoExists(repoId);
+  const exists = await datasource.repoExists(repoId);
   if (!exists) {
     return null;
   }
@@ -511,15 +543,17 @@ export const writeRepoCommit = async (repoId?: string, message?: string) => {
     if (!user.id) {
       return null;
     }
-    const commitIsValid = await canCommit(repoId, user, message, getCurrentState);
+    const commitIsValid = await canCommit(datasource, repoId, user, message);
     if (!commitIsValid) {
       return null;
     }
-    const currentState = await getCurrentState(repoId);
-    const currentSha = await getCurrentCommitSha(repoId, getCurrentState);
-    const parent = currentSha ? await readCommit(repoId, currentSha) : null;
+    const currentState = await datasource.getCurrentState(repoId);
+    const currentSha = await getCurrentCommitSha(datasource, repoId);
+    const parent = currentSha
+      ? await datasource.readCommit(repoId, currentSha)
+      : null;
     const idx = parent ? parent.idx + 1 : 0;
-    const timestamp = (new Date()).toString();
+    const timestamp = new Date().toString();
     const commitData: CommitData = {
       parent: parent ? parent.sha : null,
       historicalParent: parent ? parent.sha : null,
@@ -527,83 +561,101 @@ export const writeRepoCommit = async (repoId?: string, message?: string) => {
       diff: currentState.diff,
       timestamp,
       userId: user.id,
-      message
+      message,
     };
     const sha = getDiffHash(commitData);
-    const commit = await writeCommit(repoId, sha, {sha, ...commitData});
+    const commit = await datasource.saveCommit(repoId, sha, {
+      sha,
+      ...commitData,
+    });
     if (!commit) {
       return null;
     }
     if (currentState.branch) {
-      const branchState = await getLocalBranch(repoId, currentState.branch);
+      const branchState = await datasource.getBranch(
+        repoId,
+        currentState.branch
+      );
       // be careful
       if (!branchState) {
         //TODO: FIX THIS
         return null;
       }
-      await updateLocalBranch(repoId, currentState.branch, {
+      await datasource.saveBranch(repoId, currentState.branch, {
         ...branchState,
-        lastCommit: sha
+        lastCommit: sha,
       });
-      await updateCurrentCommitSHA(repoId, sha, false, getCurrentState);
+      await updateCurrentCommitSHA(datasource, repoId, sha, false);
     } else {
-      await updateCurrentCommitSHA(repoId, sha, false, getCurrentState);
+      await updateCurrentCommitSHA(datasource, repoId, sha, false);
     }
     return commit;
   } catch (e) {
     return null;
   }
-}
+};
 
-export const checkoutBranch = async (repoId?: string, branchName?: string) => {
+export const checkoutBranch = async (
+  datasource: DataSource,
+  repoId?: string,
+  branchName?: string
+) => {
   if (!repoId) {
     return null;
   }
   if (!branchName) {
     return null;
   }
-  const exists = await repoExists(repoId);
+  const exists = await datasource.repoExists(repoId);
   if (!exists) {
     return null;
   }
   try {
-    const currentBranches = await getLocalBranches(repoId);
+    const currentBranches = await datasource.getBranches(repoId);
     const user = await getUserAsync();
     if (!user) {
       return null;
     }
-    if (!currentBranches.map(v => v.name.toLowerCase()).includes(branchName.toLowerCase())) {
+    if (
+      !currentBranches
+        .map((v) => v.name.toLowerCase())
+        .includes(branchName.toLowerCase())
+    ) {
       return null;
     }
 
-    const branchData = await getLocalBranch(repoId, branchName);
+    const branchData = await datasource.getBranch(repoId, branchName);
     if (!branchData) {
       return null;
     }
-    return await updateCurrentWithNewBranch(repoId, branchName, getCurrentState);
+    return await updateCurrentWithNewBranch(datasource, repoId, branchName);
   } catch (e) {
     return null;
   }
-}
+};
 
-export const checkoutSha = async (repoId?: string, sha?: string) => {
+export const checkoutSha = async (
+  datasource: DataSource,
+  repoId?: string,
+  sha?: string
+) => {
   if (!repoId) {
     return null;
   }
   if (!sha) {
     return null;
   }
-  const exists = await repoExists(repoId);
+  const exists = await datasource.repoExists(repoId);
   if (!exists) {
     return null;
   }
   try {
-    const commit = await readCommit(repoId, sha);
+    const commit = await datasource.readCommit(repoId, sha);
     if (!commit) {
       return null;
     }
 
-    const current = await updateCurrentWithSHA(repoId, sha, false, getCurrentState);
+    const current = await updateCurrentWithSHA(datasource, repoId, sha, false);
     if (!current) {
       return null;
     }
@@ -611,38 +663,50 @@ export const checkoutSha = async (repoId?: string, sha?: string) => {
   } catch (e) {
     return null;
   }
-}
+};
 
 export const updatePlugins = async (
+  datasource: DataSource,
   repoId: string,
-  plugins: Array<PluginElement>,
-  pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>
-  ) => {
+  plugins: Array<PluginElement>
+) => {
   if (!repoId) {
     return null;
   }
   if (!plugins) {
     return null;
   }
-  const exists = await repoExists(repoId);
+  const exists = await datasource.repoExists(repoId);
   if (!exists) {
     return null;
   }
   try {
-    const unstagedState = await getUnstagedCommitState(repoId, getCurrentState);
+    const unstagedState = await getUnstagedCommitState(datasource, repoId);
     const addedPlugins = getAddedDeps(unstagedState.plugins, plugins);
     const removedPlugins = getRemovedDeps(unstagedState.plugins, plugins);
-    const oldManifests = await getPluginManifests(unstagedState.plugins, pluginFetch);
-    const newManifests = await getPluginManifests(plugins, pluginFetch);
+    const oldManifests = await getPluginManifests(
+      unstagedState.plugins,
+      datasource.getPluginManifest
+    );
+    const newManifests = await getPluginManifests(
+      plugins,
+      datasource.getPluginManifest
+    );
     const oldManifestMap = getManifestMapFromManifestList(oldManifests);
     const newManifestMap = getManifestMapFromManifestList(newManifests);
     for (const removedManifest of removedPlugins) {
-      const downstreamDeps = getDownstreamDepsInSchemaMap(oldManifestMap, removedManifest.key);
-      for(const downstreamDep of downstreamDeps) {
+      const downstreamDeps = getDownstreamDepsInSchemaMap(
+        oldManifestMap,
+        removedManifest.key
+      );
+      for (const downstreamDep of downstreamDeps) {
         // checks the dep is truly deleted and not updated
         // ensure any downstream dependencies are no longer present
         // otherwise they have to be removed first in a separate request
-        if (newManifestMap[downstreamDep] && !newManifestMap[removedManifest.key]) {
+        if (
+          newManifestMap[downstreamDep] &&
+          !newManifestMap[removedManifest.key]
+        ) {
           // EDGE CASE: check that the version present in new manifest
           // no longer holds reference to orig dep
           // if new version hold no reference, this is safe
@@ -656,22 +720,33 @@ export const updatePlugins = async (
 
     const pluginsToAppend: Array<PluginElement> = [];
     for (const addedDep of addedPlugins) {
-      const addedDepImportsList = pluginMapToList(newManifestMap[addedDep.key].imports);
-      const addedDepImportManifests = await getPluginManifests(addedDepImportsList, pluginFetch);
+      const addedDepImportsList = pluginMapToList(
+        newManifestMap[addedDep.key].imports
+      );
+      const addedDepImportManifests = await getPluginManifests(
+        addedDepImportsList,
+        datasource.getPluginManifest
+      );
       const addedDepImportsManifestMap = getManifestMapFromManifestList([
         newManifestMap[addedDep.key],
         ...addedDepImportManifests,
       ]);
       // need to construct deps from imports
-      const upstreamDeps = getUpstreamDepsInSchemaMap(addedDepImportsManifestMap, addedDep.key);
+      const upstreamDeps = getUpstreamDepsInSchemaMap(
+        addedDepImportsManifestMap,
+        addedDep.key
+      );
       for (const upstreamDep of upstreamDeps) {
-        const upstreamManifest = await pluginFetch(upstreamDep, addedDepImportsManifestMap[upstreamDep].version);
+        const upstreamManifest = await datasource.getPluginManifest(
+          upstreamDep,
+          addedDepImportsManifestMap[upstreamDep].version
+        );
         if (newManifestMap[upstreamDep]) {
           if (newManifestMap[upstreamDep].version != upstreamManifest.version) {
             const areCompatible = await pluginManifestsAreCompatibleForUpdate(
               upstreamManifest,
               newManifestMap[upstreamDep],
-              pluginFetch
+              datasource.getPluginManifest
             );
             if (!areCompatible) {
               return null;
@@ -683,26 +758,37 @@ export const updatePlugins = async (
           pluginsToAppend.push({
             key: upstreamManifest.name,
             value: upstreamManifest.version,
-          })
+          });
         }
       }
     }
     // do top sort
     const updatedPlugins = uniqueKV([...plugins, ...pluginsToAppend]);
-    const updatedManifests = await getPluginManifests(updatedPlugins, pluginFetch);
-    const updatedManifestMap =  getManifestMapFromManifestList(updatedManifests);
+    const updatedManifests = await getPluginManifests(
+      updatedPlugins,
+      datasource.getPluginManifest
+    );
+    const updatedManifestMap = getManifestMapFromManifestList(updatedManifests);
     for (let updatedPlugin of updatedManifests) {
-      const upstreamDeps = getUpstreamDepsInSchemaMap(updatedManifestMap, updatedPlugin.name);
+      const upstreamDeps = getUpstreamDepsInSchemaMap(
+        updatedManifestMap,
+        updatedPlugin.name
+      );
       for (const upstreamDep of upstreamDeps) {
-        const upstreamManifest = await pluginFetch(upstreamDep, updatedPlugin.imports[upstreamDep]);
-        if (upstreamManifest.version != updatedManifestMap[upstreamDep].version) {
+        const upstreamManifest = await datasource.getPluginManifest(
+          upstreamDep,
+          updatedPlugin.imports[upstreamDep]
+        );
+        if (
+          upstreamManifest.version != updatedManifestMap[upstreamDep].version
+        ) {
           // we need to know that the depended upon version is subset of the version
           // being used by the app to ensure read safety
           const areCompatible = await pluginManifestsAreCompatibleForUpdate(
             upstreamManifest,
             updatedManifestMap[upstreamDep],
-            pluginFetch
-          )
+            datasource.getPluginManifest
+          );
           if (!areCompatible) {
             return null;
           }
@@ -710,20 +796,25 @@ export const updatePlugins = async (
       }
     }
     const sortedUpdatedManifests = topSortManifests(updatedManifests);
-    const sortedUpdatedPlugins = manifestListToPluginList(sortedUpdatedManifests);
+    const sortedUpdatedPlugins = manifestListToPluginList(
+      sortedUpdatedManifests
+    );
 
     const pluginsDiff = getDiff(unstagedState.plugins, sortedUpdatedPlugins);
-    const pluginsToBeAddedToStore = getAddedDeps(unstagedState.plugins, sortedUpdatedPlugins);
+    const pluginsToBeAddedToStore = getAddedDeps(
+      unstagedState.plugins,
+      sortedUpdatedPlugins
+    );
     const pluginAdditions = [];
     for (const plugin of pluginsToBeAddedToStore) {
-        pluginAdditions.push({
-          namespace: "store",
-          pluginName: plugin.key,
-          diff: {
-            add: {},
-            remove: {},
-          },
-        });
+      pluginAdditions.push({
+        namespace: "store",
+        pluginName: plugin.key,
+        diff: {
+          add: {},
+          remove: {},
+        },
+      });
     }
 
     const diffList = [
@@ -733,40 +824,64 @@ export const updatePlugins = async (
       },
       ...pluginAdditions,
     ];
-    const proposedState = await getProposedStateFromDiffListOnCurrent(repoId, diffList, getCurrentState);
-    const proposedCommitState = await applyStateDiffToCommitState(unstagedState, proposedState.diff);
-    let stateStore = await buildStateStore(proposedCommitState, pluginFetch);
-    const rootDependencies = updatedManifests.filter(m => Object.keys(m.imports).length == 0);
+    const proposedState = await getProposedStateFromDiffListOnCurrent(
+      datasource,
+      repoId,
+      diffList
+    );
+    const proposedCommitState = await applyStateDiffToCommitState(
+      unstagedState,
+      proposedState.diff
+    );
+    let stateStore = await buildStateStore(datasource, proposedCommitState);
+    const rootDependencies = updatedManifests.filter(
+      (m) => Object.keys(m.imports).length == 0
+    );
     for (const rootManifest of rootDependencies) {
-      const schemaMap = await getSchemaMapForManifest(rootManifest, pluginFetch);
-      stateStore = await cascadePluginState(schemaMap, stateStore, rootManifest.name, pluginFetch)
+      const schemaMap = await getSchemaMapForManifest(
+        rootManifest,
+        datasource.getPluginManifest
+      );
+      stateStore = await cascadePluginState(
+        schemaMap,
+        stateStore,
+        rootManifest.name,
+        datasource.getPluginManifest
+      );
     }
-    const kvState =  await convertStateStoreToKV(proposedCommitState, stateStore, pluginFetch);
+    const kvState = await convertStateStoreToKV(
+      datasource,
+      proposedCommitState,
+      stateStore
+    );
     const lexicallyOrderedPlugins = updatedPlugins.sort((a, b) => {
       if (a.key == b.key) return 0;
       return a.key > b.key ? 1 : -1;
-    })
-    for (const {key} of lexicallyOrderedPlugins) {
-       const diff = getDiff(unstagedState.store?.[key] ?? [], kvState[key]);
-        diffList.push({
-          diff,
-          namespace: "store",
-          pluginName: key
-        })
+    });
+    for (const { key } of lexicallyOrderedPlugins) {
+      const diff = getDiff(unstagedState.store?.[key] ?? [], kvState[key]);
+      diffList.push({
+        diff,
+        namespace: "store",
+        pluginName: key,
+      });
     }
-    const state = await saveDiffListToCurrent(repoId, diffList, getCurrentState);
-    const nextState = await applyStateDiffToCommitState(unstagedState, state.diff);
-    return await renderCommitState(nextState, pluginFetch);
+    const state = await saveDiffListToCurrent(datasource, repoId, diffList);
+    const nextState = await applyStateDiffToCommitState(
+      unstagedState,
+      state.diff
+    );
+    return await renderCommitState(datasource, nextState);
   } catch (e) {
     return null;
   }
-}
+};
 
 export const updatePluginState = async (
+  datasource: DataSource,
   repoId: string,
   pluginName: string,
-  updatedState: object,
-  pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>
+  updatedState: object
 ) => {
   if (!repoId) {
     return null;
@@ -777,13 +892,13 @@ export const updatePluginState = async (
   if (!updatedState) {
     return null;
   }
-  const exists = await repoExists(repoId);
+  const exists = await datasource.repoExists(repoId);
   if (!exists) {
     return null;
   }
   try {
-    const unstagedState = await getUnstagedCommitState(repoId, getCurrentState);
-    const current = await getRepoState(repoId, getCurrentState);
+    const unstagedState = await getUnstagedCommitState(datasource, repoId);
+    const current = await getRepoState(datasource, repoId);
     if (current == null) {
       return null;
     }
@@ -796,43 +911,56 @@ export const updatePluginState = async (
 
     const manifests = await getPluginManifests(
       current.plugins,
-      pluginFetch
+      datasource.getPluginManifest
     );
 
-    const manifest = manifests.find(p => p.name == pluginName);
-    const schemaMap = await getSchemaMapForManifest(manifest, pluginFetch);
-    let stateStore = await buildStateStore(current, pluginFetch);
-    stateStore[pluginName] = updatedState
+    const manifest = manifests.find((p) => p.name == pluginName);
+    const schemaMap = await getSchemaMapForManifest(
+      manifest,
+      datasource.getPluginManifest
+    );
+    let stateStore = await buildStateStore(datasource, current);
+    stateStore[pluginName] = updatedState;
     stateStore = await cascadePluginState(
       schemaMap,
       stateStore,
       pluginName,
-      pluginFetch
+      datasource.getPluginManifest
     );
 
-    const kvState =  await convertStateStoreToKV(current, stateStore, pluginFetch);
+    const kvState = await convertStateStoreToKV(
+      datasource,
+      current,
+      stateStore
+    );
     const diffList = [];
     for (const pluginName in schemaMap) {
-      const diff = getDiff(unstagedState.store?.[pluginName] ?? [], kvState[pluginName]);
+      const diff = getDiff(
+        unstagedState.store?.[pluginName] ?? [],
+        kvState[pluginName]
+      );
       diffList.push({
         diff,
         namespace: "store",
-        pluginName
+        pluginName,
       });
     }
 
-    const state = await saveDiffListToCurrent(repoId, diffList, getCurrentState);
-    const nextState = await applyStateDiffToCommitState(unstagedState, state.diff);
-    return await renderCommitState(nextState, pluginFetch);
+    const state = await saveDiffListToCurrent(datasource, repoId, diffList);
+    const nextState = await applyStateDiffToCommitState(
+      unstagedState,
+      state.diff
+    );
+    return await renderCommitState(datasource, nextState);
   } catch (e) {
     return null;
   }
 };
 
 export const mergeCommit = async (
+  datasource: DataSource,
   repoId: string,
-  mergeSha: string,
-  pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>
+  mergeSha: string
 ) => {
   if (!repoId) {
     return null;
@@ -840,7 +968,7 @@ export const mergeCommit = async (
   if (!mergeSha) {
     return null;
   }
-  const exists = await repoExists(repoId);
+  const exists = await datasource.repoExists(repoId);
   if (!exists) {
     return null;
   }
@@ -850,9 +978,9 @@ export const mergeCommit = async (
     return null;
   }
   try {
-
-    const current = await getCurrentState(repoId);
+    const current = await datasource.getCurrentState(repoId);
     const commitStateResult = await getMergeCommitStates(
+      datasource,
       repoId,
       current.commit,
       mergeSha
@@ -860,32 +988,48 @@ export const mergeCommit = async (
     if (!commitStateResult) {
       return null;
     }
-    const { commit1, commit2, originCommit} = commitStateResult;
+    const { commit1, commit2, originCommit } = commitStateResult;
     const canAutoCommitMergeStates = await canAutoMergeCommitStates(
+      datasource,
       commit1,
       commit2,
-      originCommit,
-      pluginFetch
+      originCommit
     );
     if (canAutoCommitMergeStates) {
-
-      const canAutoMergeOnTopOfCurrentState = await canAutoMergeOnTopCurrentState(
-        repoId,
-        mergeSha,
-        pluginFetch
-      );
+      const canAutoMergeOnTopOfCurrentState =
+        await canAutoMergeOnTopCurrentState(datasource, repoId, mergeSha);
 
       if (!diffIsEmpty(current.diff) && canAutoMergeOnTopOfCurrentState) {
-        const mergeState = await getMergedCommitState(commit1, commit2, originCommit, pluginFetch);
-        const repoState = await getRepoState(repoId, getCurrentState);
-        const mergeCurrState = await getMergedCommitState(mergeState, repoState, commit1, pluginFetch);
+        const mergeState = await getMergedCommitState(
+          datasource,
+          commit1,
+          commit2,
+          originCommit
+        );
+        const repoState = await getRepoState(datasource, repoId);
+        const mergeCurrState = await getMergedCommitState(
+          datasource,
+          mergeState,
+          repoState,
+          commit1
+        );
 
         const mergeDiffList = getCommitStateDiffList(commit1, mergeState);
-        const restoreCurrDiffList = getCommitStateDiffList(mergeState, mergeCurrState);
+        const restoreCurrDiffList = getCommitStateDiffList(
+          mergeState,
+          mergeCurrState
+        );
         // need to add commit2 to list
         const mergeDiff = renderDiffList(mergeDiffList);
-        const originSha = await getDivergenceOriginSha(repoId, current.commit, mergeSha);
-        const origin = originSha ? await readCommit(repoId, originSha) : null;
+        const originSha = await getDivergenceOriginSha(
+          datasource,
+          repoId,
+          current.commit,
+          mergeSha
+        );
+        const origin = originSha
+          ? await datasource.readCommit(repoId, originSha)
+          : null;
         if (!origin) {
           //this is a full history rebase, (this is bad)
           return;
@@ -896,12 +1040,15 @@ export const mergeCommit = async (
           return;
         }
 
-        const history = await getHistory(repoId, current.commit);
-        const { sha: baseSha, idx: baseIdx} = getBaseDivergenceSha(history, origin);
-        const baseCommit = await getCommitState(repoId, baseSha);
+        const history = await getHistory(datasource, repoId, current.commit);
+        const { sha: baseSha, idx: baseIdx } = getBaseDivergenceSha(
+          history,
+          origin
+        );
+        const baseCommit = await getCommitState(datasource, repoId, baseSha);
         const baseDiffList = getCommitStateDiffList(commit2, baseCommit);
-        const baseCommitData = await readCommit(repoId, baseSha);
-        const mergeCommitData = await readCommit(repoId, mergeSha);
+        const baseCommitData = await datasource.readCommit(repoId, baseSha);
+        const mergeCommitData = await datasource.readCommit(repoId, mergeSha);
         const mergeBaseCommit: CommitData = {
           ...baseCommitData,
           diff: renderDiffList(baseDiffList),
@@ -909,16 +1056,22 @@ export const mergeCommit = async (
           historicalParent: originSha,
           authorUserId: baseCommitData.authorUserId ?? baseCommitData.userId,
           userId: user.id,
-          parent: mergeSha
+          parent: mergeSha,
         };
-        mergeBaseCommit.sha = getDiffHash(mergeBaseCommit)
+        mergeBaseCommit.sha = getDiffHash(mergeBaseCommit);
         const rebaseList = [mergeBaseCommit];
         for (let idx = baseIdx + 1; idx < history.length; idx++) {
-          const commitToRebase = await readCommit(repoId, history[history.length - idx - 1].sha);
-          commitToRebase.authorUserId = rebaseList[rebaseList.length - 1].authorUserId ?? rebaseList[rebaseList.length - 1].userId;
+          const commitToRebase = await datasource.readCommit(
+            repoId,
+            history[history.length - idx - 1].sha
+          );
+          commitToRebase.authorUserId =
+            rebaseList[rebaseList.length - 1].authorUserId ??
+            rebaseList[rebaseList.length - 1].userId;
           commitToRebase.userId = user.id;
           commitToRebase.parent = rebaseList[rebaseList.length - 1].sha;
-          commitToRebase.historicalParent = rebaseList[rebaseList.length - 1].sha;
+          commitToRebase.historicalParent =
+            rebaseList[rebaseList.length - 1].sha;
           commitToRebase.idx = rebaseList[rebaseList.length - 1].idx + 1;
           commitToRebase.sha = getDiffHash(commitToRebase);
           rebaseList.push(commitToRebase);
@@ -930,47 +1083,78 @@ export const mergeCommit = async (
           message: `Merge [${mergeSha}] into [${current.commit}]`,
           mergeBase: mergeBaseCommit.sha,
           userId: user.id,
-          timestamp: (new Date()).toString(),
-          diff: mergeDiff
-        }
+          timestamp: new Date().toString(),
+          diff: mergeDiff,
+        };
         mergeCommit.sha = getDiffHash(mergeCommit);
         rebaseList.push(mergeCommit);
         for (let commitData of rebaseList) {
-          const result = await writeCommit(repoId, commitData.sha, commitData);
+          const result = await datasource.saveCommit(
+            repoId,
+            commitData.sha,
+            commitData
+          );
           if (!result) {
             return null;
           }
         }
 
         if (current.branch) {
-          const branchState = await getLocalBranch(repoId, current.branch);
-          await updateLocalBranch(repoId, current.branch, {
+          const branchState = await datasource.getBranch(
+            repoId,
+            current.branch
+          );
+          await datasource.saveBranch(repoId, current.branch, {
             ...branchState,
-            lastCommit: mergeCommit.sha
+            lastCommit: mergeCommit.sha,
           });
-          await updateCurrentCommitSHA(repoId, mergeCommit.sha, false, getCurrentState);
-          const state = await saveDiffListToCurrent(repoId, restoreCurrDiffList, getCurrentState);
-          const unstagedState = await getUnstagedCommitState(repoId, getCurrentState);
-          const nextState = await applyStateDiffToCommitState(unstagedState, state.diff);
-          return await renderCommitState(nextState, pluginFetch);
+          await updateCurrentCommitSHA(
+            datasource,
+            repoId,
+            mergeCommit.sha,
+            false
+          );
+          const state = await saveDiffListToCurrent(
+            datasource,
+            repoId,
+            restoreCurrDiffList
+          );
+          const unstagedState = await getUnstagedCommitState(
+            datasource,
+            repoId
+          );
+          const nextState = await applyStateDiffToCommitState(
+            unstagedState,
+            state.diff
+          );
+          return await renderCommitState(datasource, nextState);
         }
 
         // in this case just update the sha, not need to update the branch state
-        await updateCurrentCommitSHA(repoId, mergeCommit.sha, false, getCurrentState);
-        const state = await saveDiffListToCurrent(repoId, restoreCurrDiffList, getCurrentState);
-        const unstagedState = await getUnstagedCommitState(repoId, getCurrentState);
-        const nextState = await applyStateDiffToCommitState(unstagedState, state.diff);
-        return await renderCommitState(nextState, pluginFetch);
+        await updateCurrentCommitSHA(
+          datasource,
+          repoId,
+          mergeCommit.sha,
+          false
+        );
+        const state = await saveDiffListToCurrent(
+          datasource,
+          repoId,
+          restoreCurrDiffList
+        );
+        const unstagedState = await getUnstagedCommitState(datasource, repoId);
+        const nextState = await applyStateDiffToCommitState(
+          unstagedState,
+          state.diff
+        );
+        return await renderCommitState(datasource, nextState);
       }
-
 
       return;
     }
     // since it cant auto merge update current to isMerge: true
-
-
   } catch (e) {
     console.log("E", e);
     return null;
   }
-}
+};
