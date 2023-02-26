@@ -11,6 +11,7 @@ const login_1 = require("./login");
 const plugincreator_1 = require("./plugincreator");
 const cli_color_1 = __importDefault(require("cli-color"));
 const yargs_1 = __importDefault(require("yargs"));
+const prettyjson_1 = require("prettyjson");
 (0, filestructure_1.buildFloroFilestructure)();
 yargs_1.default
     .command({
@@ -214,7 +215,12 @@ yargs_1.default
                 if (readFunction != null) {
                     const out = await (0, plugincreator_1.inspectLocalManifest)(process.cwd(), options?.expanded ?? false, readFunction);
                     if (out) {
-                        console.log(out);
+                        console.log((0, prettyjson_1.render)(out, {
+                            keysColor: "brightCyan",
+                            dashColor: "magenta",
+                            stringColor: "blue",
+                            multilineStringColor: "cyan",
+                        }));
                         return;
                     }
                 }

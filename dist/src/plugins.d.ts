@@ -41,9 +41,15 @@ export interface Manifest {
 export declare const readDevPluginManifest: (pluginName: string, pluginVersion: string) => Promise<Manifest | null>;
 export declare const downloadPlugin: (pluginName: string, pluginVersion: string) => Promise<Manifest | null>;
 export declare const readPluginManifest: (pluginName: string, pluginValue: string) => Promise<Manifest | null>;
-export declare const getPluginManifest: (pluginName: string, plugins: Array<PluginElement>, pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>) => Promise<Manifest | null>;
 export declare const pluginManifestsAreCompatibleForUpdate: (oldManifest: Manifest, newManifest: Manifest, pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>) => Promise<boolean | null>;
+export declare const schemaMapsAreCompatible: (oldSchemaMap: {
+    [key: string]: Manifest;
+}, newSchemaMap: {
+    [key: string]: Manifest;
+}, pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>) => Promise<boolean | null>;
+export declare const topSortManifests: (manifests: Array<Manifest>) => Manifest[];
 export declare const getPluginManifests: (pluginList: Array<PluginElement>, pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>) => Promise<Array<Manifest>>;
+export declare const getManifestMapFromManifestList: (manifests: Array<Manifest>) => {};
 export declare const pluginListToMap: (pluginList: Array<PluginElement>) => {
     [pluginName: string]: string;
 };
@@ -53,6 +59,7 @@ export declare const pluginMapToList: (pluginMap: {
 export declare const manifestListToSchemaMap: (manifestList: Array<Manifest>) => {
     [pluginName: string]: Manifest;
 };
+export declare const manifestListToPluginList: (manifestList: Array<Manifest>) => Array<PluginElement>;
 export declare const hasPlugin: (pluginName: string, plugins: Array<PluginElement>) => boolean;
 export declare const hasPluginManifest: (manifest: Manifest, manifests: Array<Manifest>) => boolean;
 export interface DepFetch {
@@ -126,6 +133,14 @@ export declare const getKVStateForPlugin: (schema: {
 }, pluginName: string, stateMap: {
     [key: string]: object;
 }, pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>) => Promise<Array<DiffElement>>;
+export declare const getUpstreamDepsInSchemaMap: (schemaMap: {
+    [key: string]: Manifest;
+}, pluginName: string) => Array<string>;
+export declare const getDownstreamDepsInSchemaMap: (schemaMap: {
+    [key: string]: Manifest;
+}, pluginName: string, memo?: {
+    [pluginName: string]: boolean;
+}) => Array<string>;
 /***
  * cascading is heavy but infrequent. It only needs to be
  * called when updating state. Not called when applying diffs

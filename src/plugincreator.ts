@@ -30,6 +30,7 @@ import {
   pluginManifestsAreCompatibleForUpdate,
   readPluginManifest,
   validatePluginManifest,
+  TypeStruct,
 } from "./plugins";
 import clc from "cli-color";
 import semver from "semver";
@@ -239,7 +240,7 @@ export const inspectLocalManifest = async (
   cwd: string,
   expand = false,
   pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>
-): Promise<string | null> => {
+): Promise<TypeStruct|{[key: string]: Manifest}> => {
   const isPluginDir = await checkDirectoryIsPluginWorkingDirectory(cwd);
   if (!isPluginDir) {
     console.log(
@@ -257,9 +258,9 @@ export const inspectLocalManifest = async (
     );
     if (expand) {
       const rootSchemaMap = await getRootSchemaMap(schemaMap, pluginFetch);
-      return JSON.stringify(rootSchemaMap, null, 2);
+      return rootSchemaMap;
     }
-    return JSON.stringify(schemaMap, null, 2);
+    return schemaMap;
   } catch (e) {
     return null;
   }

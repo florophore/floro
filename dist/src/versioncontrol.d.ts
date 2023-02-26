@@ -23,11 +23,15 @@ export interface CommitData {
     sha?: string;
     diff: StateDiff;
     userId: string;
+    authorUserId?: string;
     timestamp: string;
     parent: string | null;
     historicalParent: string | null;
+    mergeBase?: string | null;
+    idx: number;
     message: string;
 }
+export declare const hashString: (str: string) => any;
 export declare const getKVHashes: (obj: {
     key: string;
     value: {
@@ -37,6 +41,10 @@ export declare const getKVHashes: (obj: {
     keyHash: string;
     valueHash: string;
 };
+export declare const getKVHash: (obj: {
+    key: string;
+    value: unknown;
+}) => string;
 export declare const getRowHash: (obj: {
     key: string;
     value: {

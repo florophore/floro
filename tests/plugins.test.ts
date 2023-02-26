@@ -3,7 +3,6 @@ import { buildFloroFilestructure, userHome } from "../src/filestructure";
 import {
   readPluginManifest,
   getStateFromKVForPlugin,
-  getPluginManifest,
   getRootSchemaMap,
   getKVStateForPlugin,
   pluginManifestIsSubsetOfManifest,
@@ -29,34 +28,23 @@ describe("plugins", () => {
     vol.reset();
   });
 
-  describe("getPluginManifest", () => {
+  describe("readPluginManifest", () => {
     test("returns dev manifest", async () => {
       makeTestPlugin(SIMPLE_PLUGIN_MANIFEST, true);
-      const manifest = await getPluginManifest(
+      const manifest = await readPluginManifest(
         "simple",
-        [
-          {
-            key: "simple",
-            value: "dev@0.0.0",
-          },
-        ],
-        readPluginManifest
+        "dev@0.0.0"
       );
       expect(manifest).toEqual(SIMPLE_PLUGIN_MANIFEST);
     });
 
     test("returns non-dev manifest", async () => {
       makeTestPlugin(SIMPLE_PLUGIN_MANIFEST);
-      const manifest = await getPluginManifest(
+      const manifest = await readPluginManifest(
         "simple",
-        [
-          {
-            key: "simple",
-            value: "0.0.0",
-          },
-        ],
-        readPluginManifest
+        "0.0.0"
       );
+;
       expect(manifest).toEqual(SIMPLE_PLUGIN_MANIFEST);
     });
   });

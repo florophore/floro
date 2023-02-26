@@ -16,25 +16,16 @@ describe("plugins", () => {
     afterEach(() => {
         memfs_1.vol.reset();
     });
-    describe("getPluginManifest", () => {
+    describe("readPluginManifest", () => {
         test("returns dev manifest", async () => {
             (0, fsmocks_1.makeTestPlugin)(pluginmocks_1.SIMPLE_PLUGIN_MANIFEST, true);
-            const manifest = await (0, plugins_1.getPluginManifest)("simple", [
-                {
-                    key: "simple",
-                    value: "dev@0.0.0",
-                },
-            ], plugins_1.readPluginManifest);
+            const manifest = await (0, plugins_1.readPluginManifest)("simple", "dev@0.0.0");
             expect(manifest).toEqual(pluginmocks_1.SIMPLE_PLUGIN_MANIFEST);
         });
         test("returns non-dev manifest", async () => {
             (0, fsmocks_1.makeTestPlugin)(pluginmocks_1.SIMPLE_PLUGIN_MANIFEST);
-            const manifest = await (0, plugins_1.getPluginManifest)("simple", [
-                {
-                    key: "simple",
-                    value: "0.0.0",
-                },
-            ], plugins_1.readPluginManifest);
+            const manifest = await (0, plugins_1.readPluginManifest)("simple", "0.0.0");
+            ;
             expect(manifest).toEqual(pluginmocks_1.SIMPLE_PLUGIN_MANIFEST);
         });
     });

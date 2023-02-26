@@ -199,9 +199,9 @@ const inspectLocalManifest = async (cwd, expand = false, pluginFetch) => {
         const schemaMap = await (0, exports.getSchemaMapForCreationManifest)(manifest, pluginFetch);
         if (expand) {
             const rootSchemaMap = await (0, plugins_1.getRootSchemaMap)(schemaMap, pluginFetch);
-            return JSON.stringify(rootSchemaMap, null, 2);
+            return rootSchemaMap;
         }
-        return JSON.stringify(schemaMap, null, 2);
+        return schemaMap;
     }
     catch (e) {
         return null;

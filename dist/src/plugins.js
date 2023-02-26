@@ -26,7 +26,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.drawGetPluginStore = exports.drawGetReferencedObject = exports.drawRefReturnTypes = exports.drawSchemaRoot = exports.drawMakeQueryRef = exports.buildPointerArgsMap = exports.buildPointerReturnTypeMap = exports.typestructsAreEquivalent = exports.replaceRawRefsInExpandedType = exports.replaceRefVarsWithWildcards = exports.collectKeyRefs = exports.invalidSchemaPropsCheck = exports.isSchemaValid = exports.isTopologicalSubsetValid = exports.isTopologicalSubset = exports.pluginManifestIsSubsetOfManifest = exports.validatePluginState = exports.cascadePluginState = exports.getKVStateForPlugin = exports.getRootSchemaMap = exports.getRootSchemaForPlugin = exports.getExpandedTypesForPlugin = exports.getStateFromKVForPlugin = exports.buildObjectsAtPath = exports.indexArrayDuplicates = exports.flattenStateToSchemaPathKV = exports.getStateId = exports.decodeSchemaPath = exports.writePathString = exports.defaultVoidedState = exports.validatePluginManifest = exports.containsCyclicTypes = exports.schemaHasInvalidTypeSytax = exports.schemaManifestHasInvalidSyntax = exports.getSchemaMapForManifest = exports.verifyPluginDependencyCompatability = exports.coalesceDependencyVersions = exports.getUpstreamDependencyManifests = exports.getDependenciesForManifest = exports.hasPluginManifest = exports.hasPlugin = exports.manifestListToSchemaMap = exports.pluginMapToList = exports.pluginListToMap = exports.getPluginManifests = exports.pluginManifestsAreCompatibleForUpdate = exports.getPluginManifest = exports.readPluginManifest = exports.downloadPlugin = exports.readDevPluginManifest = void 0;
+exports.buildPointerArgsMap = exports.buildPointerReturnTypeMap = exports.typestructsAreEquivalent = exports.replaceRawRefsInExpandedType = exports.replaceRefVarsWithWildcards = exports.collectKeyRefs = exports.invalidSchemaPropsCheck = exports.isSchemaValid = exports.isTopologicalSubsetValid = exports.isTopologicalSubset = exports.pluginManifestIsSubsetOfManifest = exports.validatePluginState = exports.cascadePluginState = exports.getDownstreamDepsInSchemaMap = exports.getUpstreamDepsInSchemaMap = exports.getKVStateForPlugin = exports.getRootSchemaMap = exports.getRootSchemaForPlugin = exports.getExpandedTypesForPlugin = exports.getStateFromKVForPlugin = exports.buildObjectsAtPath = exports.indexArrayDuplicates = exports.flattenStateToSchemaPathKV = exports.getStateId = exports.decodeSchemaPath = exports.writePathString = exports.defaultVoidedState = exports.validatePluginManifest = exports.containsCyclicTypes = exports.schemaHasInvalidTypeSytax = exports.schemaManifestHasInvalidSyntax = exports.getSchemaMapForManifest = exports.verifyPluginDependencyCompatability = exports.coalesceDependencyVersions = exports.getUpstreamDependencyManifests = exports.getDependenciesForManifest = exports.hasPluginManifest = exports.hasPlugin = exports.manifestListToPluginList = exports.manifestListToSchemaMap = exports.pluginMapToList = exports.pluginListToMap = exports.getManifestMapFromManifestList = exports.getPluginManifests = exports.topSortManifests = exports.schemaMapsAreCompatible = exports.pluginManifestsAreCompatibleForUpdate = exports.readPluginManifest = exports.downloadPlugin = exports.readDevPluginManifest = void 0;
+exports.drawGetPluginStore = exports.drawGetReferencedObject = exports.drawRefReturnTypes = exports.drawSchemaRoot = exports.drawMakeQueryRef = void 0;
 const filestructure_1 = require("./filestructure");
 const axios_1 = __importDefault(require("axios"));
 const path_1 = __importDefault(require("path"));
@@ -171,17 +172,6 @@ const readPluginManifest = async (pluginName, pluginValue) => {
     return await (0, exports.downloadPlugin)(pluginName, pluginValue);
 };
 exports.readPluginManifest = readPluginManifest;
-const getPluginManifest = async (pluginName, plugins, pluginFetch) => {
-    const pluginInfo = plugins.find((v) => v.key == pluginName);
-    if (!pluginInfo) {
-        return null;
-    }
-    if (!pluginInfo.value) {
-        return null;
-    }
-    return await pluginFetch(pluginName, pluginInfo.value);
-};
-exports.getPluginManifest = getPluginManifest;
 const pluginManifestsAreCompatibleForUpdate = async (oldManifest, newManifest, pluginFetch) => {
     const oldSchemaMap = await (0, exports.getSchemaMapForManifest)(oldManifest, pluginFetch);
     const newSchemaMap = await (0, exports.getSchemaMapForManifest)(newManifest, pluginFetch);
@@ -202,9 +192,47 @@ const pluginManifestsAreCompatibleForUpdate = async (oldManifest, newManifest, p
     });
 };
 exports.pluginManifestsAreCompatibleForUpdate = pluginManifestsAreCompatibleForUpdate;
+const schemaMapsAreCompatible = async (oldSchemaMap, newSchemaMap, pluginFetch) => {
+    if (!oldSchemaMap) {
+        return null;
+    }
+    if (!newSchemaMap) {
+        return null;
+    }
+    const isSubSet = await (0, exports.pluginManifestIsSubsetOfManifest)(oldSchemaMap, newSchemaMap, pluginFetch);
+    return isSubSet;
+};
+exports.schemaMapsAreCompatible = schemaMapsAreCompatible;
+const topSortManifests = (manifests) => {
+    const lexicallySortedManifests = manifests.sort((a, b) => {
+        if (a.name == b.name)
+            return 0;
+        return a.name > b.name ? 1 : -1;
+    });
+    const visited = new Set();
+    const manifestMap = (0, exports.manifestListToSchemaMap)(lexicallySortedManifests);
+    const out = [];
+    for (const manifest of lexicallySortedManifests) {
+        if (visited.has(manifest.name)) {
+            continue;
+        }
+        const upstreamDeps = (0, exports.getUpstreamDepsInSchemaMap)(manifestMap, manifest.name).map((pluginName) => manifestMap[pluginName]);
+        const depsToAdd = (0, exports.topSortManifests)(upstreamDeps);
+        for (const upstreamDep of depsToAdd) {
+            if (!visited.has(upstreamDep.name)) {
+                visited.add(upstreamDep.name);
+                out.push(upstreamDep);
+            }
+        }
+        visited.add(manifest.name);
+        out.push(manifest);
+    }
+    return out;
+};
+exports.topSortManifests = topSortManifests;
 const getPluginManifests = async (pluginList, pluginFetch) => {
-    const manifests = await Promise.all(pluginList.map(({ key: pluginName }) => {
-        return (0, exports.getPluginManifest)(pluginName, pluginList, pluginFetch);
+    const manifests = await Promise.all(pluginList.map(({ key: pluginName, value: pluginVersion }) => {
+        return pluginFetch(pluginName, pluginVersion);
     }));
     return manifests?.filter((manifest) => {
         if (manifest == null) {
@@ -214,6 +242,15 @@ const getPluginManifests = async (pluginList, pluginFetch) => {
     });
 };
 exports.getPluginManifests = getPluginManifests;
+const getManifestMapFromManifestList = (manifests) => {
+    return manifests.reduce((acc, manifest) => {
+        return {
+            ...acc,
+            [manifest.name]: manifest
+        };
+    }, {});
+};
+exports.getManifestMapFromManifestList = getManifestMapFromManifestList;
 const pluginListToMap = (pluginList) => {
     return pluginList.reduce((map, { key, value }) => {
         return {
@@ -241,6 +278,15 @@ const manifestListToSchemaMap = (manifestList) => {
     }, {});
 };
 exports.manifestListToSchemaMap = manifestListToSchemaMap;
+const manifestListToPluginList = (manifestList) => {
+    return manifestList.map((p) => {
+        return {
+            key: p.name,
+            value: p.version,
+        };
+    });
+};
+exports.manifestListToPluginList = manifestListToPluginList;
 const hasPlugin = (pluginName, plugins) => {
     for (const { key } of plugins) {
         if (key === pluginName) {
@@ -358,7 +404,7 @@ const verifyPluginDependencyCompatability = async (deps, pluginFetch) => {
         };
     }
     for (const pluginName in depsMap) {
-        if (depsMap[pluginName].length == 0) {
+        if (depsMap[pluginName].length <= 1) {
             continue;
         }
         for (let i = 1; i < depsMap[pluginName].length; ++i) {
@@ -1428,7 +1474,7 @@ const getStateFromKVForPlugin = (schemaMap, kv, pluginName) => {
 };
 exports.getStateFromKVForPlugin = getStateFromKVForPlugin;
 const getExpandedTypesForPlugin = (schemaMap, pluginName) => {
-    const upstreamDeps = getUpstreamDepsInSchemaMap(schemaMap, pluginName);
+    const upstreamDeps = (0, exports.getUpstreamDepsInSchemaMap)(schemaMap, pluginName);
     const schemaWithTypes = [...upstreamDeps, pluginName].reduce((acc, pluginName) => {
         return {
             ...acc,
@@ -1527,11 +1573,12 @@ const getUpstreamDepsInSchemaMap = (schemaMap, pluginName) => {
     }
     const deps = Object.keys(current.imports);
     for (const dep of deps) {
-        const upstreamDeps = getUpstreamDepsInSchemaMap(schemaMap, dep);
+        const upstreamDeps = (0, exports.getUpstreamDepsInSchemaMap)(schemaMap, dep);
         deps.push(...upstreamDeps);
     }
     return deps;
 };
+exports.getUpstreamDepsInSchemaMap = getUpstreamDepsInSchemaMap;
 const getDownstreamDepsInSchemaMap = (schemaMap, pluginName, memo = {}) => {
     if (memo[pluginName]) {
         return [];
@@ -1543,11 +1590,12 @@ const getDownstreamDepsInSchemaMap = (schemaMap, pluginName, memo = {}) => {
             continue;
         }
         if (schemaMap[dep].imports[pluginName]) {
-            out.push(dep, ...getDownstreamDepsInSchemaMap(schemaMap, pluginName, memo));
+            out.push(dep, ...(0, exports.getDownstreamDepsInSchemaMap)(schemaMap, pluginName, memo));
         }
     }
     return out;
 };
+exports.getDownstreamDepsInSchemaMap = getDownstreamDepsInSchemaMap;
 const refSetFromKey = (key) => {
     const out = [];
     const parts = splitPath(key);
@@ -1635,7 +1683,7 @@ const cascadePluginState = async (schemaMap, stateMap, pluginName, pluginFetch, 
     if (next.length != kvs.length) {
         return (0, exports.cascadePluginState)(schemaMap, { ...stateMap, [pluginName]: newPluginState }, pluginName, pluginFetch, rootSchemaMap, memo);
     }
-    const downstreamDeps = getDownstreamDepsInSchemaMap(schemaMap, pluginName);
+    const downstreamDeps = (0, exports.getDownstreamDepsInSchemaMap)(schemaMap, pluginName);
     const result = await asyncReduce(nextStateMap, downstreamDeps, async (stateMap, dependentPluginName) => {
         if (memo[`${pluginName}:${dependentPluginName}`]) {
             return {

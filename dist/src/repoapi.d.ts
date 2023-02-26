@@ -1,15 +1,12 @@
 import { Branch } from "./repo";
 import { CommitData } from "./versioncontrol";
-import { PluginElement } from "./plugins";
+import { PluginElement, Manifest } from "./plugins";
 export declare const repoExists: (repoId?: string) => Promise<boolean>;
-export declare const writeRepoDescription: (repoId?: string, description?: string) => Promise<string[]>;
+export declare const writeRepoDescription: (repoId?: string, description?: string) => Promise<import("./repo").CommitState>;
 export declare const writeRepoLicenses: (repoId?: string, licensesInput?: Array<{
     key: string;
     value: string;
-}>) => Promise<{
-    key: string;
-    value: string;
-}[]>;
+}>) => Promise<import("./repo").CommitState>;
 export declare const readRepoLicenses: (repoId?: string) => Promise<Array<{
     key: string;
     value: string;
@@ -25,62 +22,12 @@ export declare const readRepoCommit: (repoId?: string, sha?: string) => Promise<
 export declare const readCurrentHistory: (repoId?: string) => Promise<import("./repo").CommitHistory[]>;
 export declare const readBranchHistory: (repoId?: string, branchName?: string) => Promise<import("./repo").CommitHistory[]>;
 export declare const readCommitHistory: (repoId?: string, sha?: string) => Promise<import("./repo").CommitHistory[]>;
-export declare const readCurrentState: (repoId?: string) => Promise<{
-    store: {
-        [key: string]: unknown;
-    };
-    description: string[];
-    licenses: {
-        key: string;
-        value: string;
-    }[];
-    plugins: {
-        key: string;
-        value: string;
-    }[];
-    binaries: {
-        key: string;
-        value: string;
-    }[];
-}>;
-export declare const readCommitState: (repoId?: string, sha?: string) => Promise<{
-    store: {
-        [key: string]: unknown;
-    };
-    description: string[];
-    licenses: {
-        key: string;
-        value: string;
-    }[];
-    plugins: {
-        key: string;
-        value: string;
-    }[];
-    binaries: {
-        key: string;
-        value: string;
-    }[];
-}>;
-export declare const readBranchState: (repoId?: string, branchName?: string) => Promise<{
-    store: {
-        [key: string]: unknown;
-    };
-    description: string[];
-    licenses: {
-        key: string;
-        value: string;
-    }[];
-    plugins: {
-        key: string;
-        value: string;
-    }[];
-    binaries: {
-        key: string;
-        value: string;
-    }[];
-}>;
+export declare const readCurrentState: (repoId?: string) => Promise<import("./repo").RenderedCommitState>;
+export declare const readCommitState: (repoId?: string, sha?: string) => Promise<import("./repo").RenderedCommitState>;
+export declare const readBranchState: (repoId?: string, branchName?: string) => Promise<import("./repo").RenderedCommitState>;
 export declare const writeRepoCommit: (repoId?: string, message?: string) => Promise<CommitData>;
 export declare const checkoutBranch: (repoId?: string, branchName?: string) => Promise<import("./repo").State>;
 export declare const checkoutSha: (repoId?: string, sha?: string) => Promise<import("./repo").State>;
-export declare const updatePlugins: (repoId?: string, plugins?: Array<PluginElement>) => Promise<any>;
-export declare const updatePluginState: (repoId?: string, pluginName?: string, updateState?: unknown) => Promise<any>;
+export declare const updatePlugins: (repoId: string, plugins: Array<PluginElement>, pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>) => Promise<import("./repo").RenderedCommitState>;
+export declare const updatePluginState: (repoId: string, pluginName: string, updatedState: object, pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>) => Promise<import("./repo").RenderedCommitState>;
+export declare const mergeCommit: (repoId: string, mergeSha: string, pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>) => Promise<import("./repo").RenderedCommitState>;

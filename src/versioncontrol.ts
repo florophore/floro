@@ -29,9 +29,12 @@ export interface CommitData {
   sha?: string;
   diff: StateDiff;
   userId: string;
+  authorUserId?: string;
   timestamp: string;
   parent: string | null;
   historicalParent: string | null;
+  mergeBase?: string | null;
+  idx: number;
   message: string;
 }
 
@@ -48,6 +51,10 @@ const getObjectStringValue = (obj: {
   }, "");
 };
 
+export const hashString = (str: string) => {
+  return Crypto.SHA256(str);
+}
+
 export const getKVHashes = (obj: {
   key: string;
   value: {
@@ -60,6 +67,22 @@ export const getKVHashes = (obj: {
     keyHash,
     valueHash,
   };
+};
+
+
+export const getKVHash = (obj: {
+  key: string;
+  value: unknown
+}
+): string => {
+  if (typeof obj.value == "string") {
+    const keyHash = Crypto.SHA256(obj.key);
+    const valueHash = Crypto.SHA256(obj.value);
+    return Crypto.SHA256(keyHash + valueHash);
+  }
+  const keyHash = Crypto.SHA256(obj.key);
+  const valueHash = Crypto.SHA256(JSON.stringify(obj.value));
+  return Crypto.SHA256(keyHash + valueHash);
 };
 
 export const getRowHash = (obj: {
@@ -83,14 +106,20 @@ export const getDiffHash = (commitData: CommitData): string => {
   if (!commitData.message) {
     return null;
   }
+
+  if (!commitData.parent && !commitData.historicalParent) {
+    const str = `userId:${commitData.userId}/authorUserId:${commitData.authorUserId ?? commitData.userId}/timestamp:${commitData.timestamp}/message:${commitData.message}/idx:${commitData.idx}/mergeBase:${commitData?.mergeBase ?? 'none'}/diff:${diffString}`;
+    return Crypto.SHA256(str);
+  }
   if (!commitData.parent) {
-    const str = `userId:${commitData.userId}/timestamp:${commitData.timestamp}/message:${commitData.timestamp}/diff:${diffString}`;
+    const str = `userId:${commitData.userId}/authorUserId:${commitData.authorUserId ?? commitData.userId}/timestamp:${commitData.timestamp}/message:${commitData.message}/historicalParent:${commitData.historicalParent}/idx:${commitData.idx}/mergeBase:${commitData?.mergeBase ?? 'none'}/diff:${diffString}`;
     return Crypto.SHA256(str);
   }
   if (!commitData.historicalParent) {
-    return null;
+    const str = `userId:${commitData.userId}/authorUserId:${commitData.authorUserId ?? commitData.userId}/timestamp:${commitData.timestamp}/message:${commitData.message}/parent:${commitData.parent}/idx:${commitData.idx}/mergeBase:${commitData?.mergeBase ?? 'none'}/diff:${diffString}`;
+    return Crypto.SHA256(str);
   }
-  const str = `userId:${commitData.userId}/timestamp:${commitData.timestamp}/message:${commitData.timestamp}/parent:${commitData.parent}/historicalParent:${commitData.historicalParent}/diff:${diffString}`;
+  const str = `userId:${commitData.userId}/authorUserId:${commitData.authorUserId ?? commitData.userId}/timestamp:${commitData.timestamp}/message:${commitData.message}/parent:${commitData.parent}/historicalParent:${commitData.historicalParent}/idx:${commitData.idx}/mergeBase:${commitData.mergeBase ?? 'none'}/diff:${diffString}`;
   return Crypto.SHA256(str);
 };
 

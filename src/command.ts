@@ -28,7 +28,7 @@ import {
 } from "./plugincreator";
 import clc from "cli-color";
 import yargs from "yargs";
-import { readPluginManifest } from "./plugins";
+import { render } from 'prettyjson';
 
 buildFloroFilestructure();
 
@@ -297,7 +297,15 @@ yargs
               const out = await inspectLocalManifest(process.cwd(), options?.expanded ?? false, readFunction);
               if (out) {
                 console.log(
-                  out
+                  render(
+                    out,
+                    {
+                      keysColor: "brightCyan",
+                      dashColor: "magenta",
+                      stringColor: "blue",
+                      multilineStringColor: "cyan",
+                    }
+                  )
                 );
                 return;
               }

@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.canAutoMerge = exports.getMergeSequence = exports.applyDiff = exports.getTextDiff = exports.splitTextForDiff = exports.getDiff = exports.getLCS = exports.getDiffHash = exports.getRowHash = exports.getKVHashes = void 0;
+exports.canAutoMerge = exports.getMergeSequence = exports.applyDiff = exports.getTextDiff = exports.splitTextForDiff = exports.getDiff = exports.getLCS = exports.getDiffHash = exports.getRowHash = exports.getKVHash = exports.getKVHashes = exports.hashString = void 0;
 const cryptojs_1 = require("cryptojs");
 const mdiff_1 = __importDefault(require("mdiff"));
 const getObjectStringValue = (obj) => {
@@ -17,6 +17,10 @@ const getObjectStringValue = (obj) => {
         return `${s}/${key}:${obj[key]}`;
     }, "");
 };
+const hashString = (str) => {
+    return cryptojs_1.Crypto.SHA256(str);
+};
+exports.hashString = hashString;
 const getKVHashes = (obj) => {
     const keyHash = cryptojs_1.Crypto.SHA256(obj.key);
     const valueHash = cryptojs_1.Crypto.SHA256(getObjectStringValue(obj.value));
@@ -26,6 +30,17 @@ const getKVHashes = (obj) => {
     };
 };
 exports.getKVHashes = getKVHashes;
+const getKVHash = (obj) => {
+    if (typeof obj.value == "string") {
+        const keyHash = cryptojs_1.Crypto.SHA256(obj.key);
+        const valueHash = cryptojs_1.Crypto.SHA256(obj.value);
+        return cryptojs_1.Crypto.SHA256(keyHash + valueHash);
+    }
+    const keyHash = cryptojs_1.Crypto.SHA256(obj.key);
+    const valueHash = cryptojs_1.Crypto.SHA256(JSON.stringify(obj.value));
+    return cryptojs_1.Crypto.SHA256(keyHash + valueHash);
+};
+exports.getKVHash = getKVHash;
 const getRowHash = (obj) => {
     const { keyHash, valueHash } = (0, exports.getKVHashes)(obj);
     return cryptojs_1.Crypto.SHA256(keyHash + valueHash);
@@ -42,14 +57,19 @@ const getDiffHash = (commitData) => {
     if (!commitData.message) {
         return null;
     }
+    if (!commitData.parent && !commitData.historicalParent) {
+        const str = `userId:${commitData.userId}/authorUserId:${commitData.authorUserId ?? commitData.userId}/timestamp:${commitData.timestamp}/message:${commitData.message}/idx:${commitData.idx}/mergeBase:${commitData?.mergeBase ?? 'none'}/diff:${diffString}`;
+        return cryptojs_1.Crypto.SHA256(str);
+    }
     if (!commitData.parent) {
-        const str = `userId:${commitData.userId}/timestamp:${commitData.timestamp}/message:${commitData.timestamp}/diff:${diffString}`;
+        const str = `userId:${commitData.userId}/authorUserId:${commitData.authorUserId ?? commitData.userId}/timestamp:${commitData.timestamp}/message:${commitData.message}/historicalParent:${commitData.historicalParent}/idx:${commitData.idx}/mergeBase:${commitData?.mergeBase ?? 'none'}/diff:${diffString}`;
         return cryptojs_1.Crypto.SHA256(str);
     }
     if (!commitData.historicalParent) {
-        return null;
+        const str = `userId:${commitData.userId}/authorUserId:${commitData.authorUserId ?? commitData.userId}/timestamp:${commitData.timestamp}/message:${commitData.message}/parent:${commitData.parent}/idx:${commitData.idx}/mergeBase:${commitData?.mergeBase ?? 'none'}/diff:${diffString}`;
+        return cryptojs_1.Crypto.SHA256(str);
     }
-    const str = `userId:${commitData.userId}/timestamp:${commitData.timestamp}/message:${commitData.timestamp}/parent:${commitData.parent}/historicalParent:${commitData.historicalParent}/diff:${diffString}`;
+    const str = `userId:${commitData.userId}/authorUserId:${commitData.authorUserId ?? commitData.userId}/timestamp:${commitData.timestamp}/message:${commitData.message}/parent:${commitData.parent}/historicalParent:${commitData.historicalParent}/idx:${commitData.idx}/mergeBase:${commitData.mergeBase ?? 'none'}/diff:${diffString}`;
     return cryptojs_1.Crypto.SHA256(str);
 };
 exports.getDiffHash = getDiffHash;
