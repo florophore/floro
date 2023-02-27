@@ -88,6 +88,7 @@ export interface CommitHistory {
     idx: number;
     message: string;
 }
+export declare const getRepos: () => Promise<string[]>;
 export declare const getAddedDeps: (oldPlugins: Array<PluginElement>, newPlugins: Array<PluginElement>) => Array<PluginElement>;
 export declare const getRemovedDeps: (oldPlugins: Array<PluginElement>, newPlugins: Array<PluginElement>) => Array<PluginElement>;
 export declare const cloneRepo: (repoId: string) => Promise<boolean>;

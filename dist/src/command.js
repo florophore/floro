@@ -213,7 +213,7 @@ yargs_1.default
             handler: async (options) => {
                 const readFunction = await (0, plugincreator_1.getLocalManifestReadFunction)(process.cwd());
                 if (readFunction != null) {
-                    const out = await (0, plugincreator_1.inspectLocalManifest)(process.cwd(), options?.expanded ?? false, readFunction);
+                    const out = await (0, plugincreator_1.inspectLocalManifest)(process.cwd(), options?.expanded ?? false);
                     if (out) {
                         console.log((0, prettyjson_1.render)(out, {
                             keysColor: "brightCyan",
@@ -240,7 +240,7 @@ yargs_1.default
                     console.log(cli_color_1.default.cyanBright.bgBlack.underline("Manifest is invalid."));
                     return;
                 }
-                const apiGenSucceed = await (0, plugincreator_1.generateLocalTypescriptAPI)(process.cwd(), true, readFunction);
+                const apiGenSucceed = await (0, plugincreator_1.generateLocalTypescriptAPI)(process.cwd(), true);
                 if (apiGenSucceed) {
                     console.log(cli_color_1.default.cyanBright.bgBlack.underline("Generated API successfully."));
                     return;

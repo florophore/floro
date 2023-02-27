@@ -1,7 +1,6 @@
 import cron from "node-cron";
 import {
   getRemoteHostAsync,
-  getUserSession,
   getUserSessionAsync,
   writeUser,
   writeUserSession,

@@ -27,7 +27,6 @@ import sha256 from "crypto-js/sha256";
 import HexEncode from "crypto-js/enc-hex";
 import {
   cloneRepo,
-  getLocalRepos,
 } from "./repo";
 import {
   getCurrentRepoBranch,
@@ -48,12 +47,9 @@ import {
   writeRepoLicenses,
   readRepoLicenses,
   checkoutBranch,
-  updatePluginState,
-  updatePlugins,
   deleteBranch,
 } from "./repoapi";
-import { readDevPluginManifest } from "./plugins";
-import { makeMemoizedDataSource } from "./datasource";
+import { makeMemoizedDataSource, readDevPluginManifest } from "./datasource";
 
 const remoteHost = getRemoteHostSync();
 
@@ -144,7 +140,7 @@ app.get(
   "/repos",
   cors(corsOptionsDelegate),
   async (_req, res): Promise<void> => {
-    const repos = await getLocalRepos();
+    const repos = await datasource.getRepos();
     res.send({
       repos,
     });

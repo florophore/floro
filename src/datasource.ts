@@ -1,9 +1,16 @@
 import path from "path";
-import fs from "fs";
-import { existsAsync, vPluginsPath, vReposPath } from "./filestructure";
+import fs, { createWriteStream } from "fs";
+import { existsAsync, getPluginsJsonAsync, getRemoteHostAsync, getUserSessionAsync, vDEVPath, vPluginsPath, vReposPath, vTMPPath } from "./filestructure";
 import { Manifest } from "./plugins";
 import { Branch, RepoSetting, State } from "./repo";
 import { CommitData } from "./versioncontrol";
+import axios from "axios";
+import { broadcastAllDevices } from "./multiplexer";
+import tar from "tar";
+
+axios.defaults.validateStatus = function () {
+  return true;
+};
 
 export interface DataSource {
   /* PLUGINS */
@@ -16,6 +23,7 @@ export interface DataSource {
     pluginVersion: string
   ) => Promise<boolean>;
   /* REPOS */
+  getRepos?(): Promise<Array<string>>;
   repoExists?(repoId?: string): Promise<boolean>;
   getRepoSettings?: (repoId: string) => Promise<RepoSetting>;
   getCurrentState?: (repoId: string) => Promise<State>;
@@ -38,27 +46,198 @@ export interface DataSource {
   readCommit?: (repoId: string, sha: string) => Promise<CommitData>;
 }
 
-const repoExists = async (repoId?: string): Promise<boolean> => {
-  if (!repoId) {
-    return false;
-  }
-  return await existsAsync(path.join(vReposPath, repoId));
-};
-
 /* PLUGINS */
-const getPluginManifest = async (
+/**
+ * We need to export readDevPluginManifest for the daemon server
+ * all other methods not in datasource should remain internal to
+ * this file.
+ */
+export const readDevPluginManifest = async (
   pluginName: string,
   pluginVersion: string
+): Promise<Manifest | null> => {
+  const pluginsJSON = await getPluginsJsonAsync();
+  if (!pluginsJSON) {
+    return null;
+  }
+  if (
+    pluginsJSON.plugins?.[pluginName]?.proxy &&
+    !pluginVersion.startsWith("dev@")
+  ) {
+    try {
+      const uri = `http://127.0.0.1:63403/plugins/${pluginName}/dev/floro/floro.manifest.json`;
+      const res = await axios.get(uri);
+      return res.data;
+    } catch (e) {
+      return null;
+    }
+  }
+  try {
+    const pluginManifestPath = path.join(
+      vDEVPath,
+      pluginName,
+      pluginVersion.split("@")?.[1] ?? "none",
+      "floro",
+      "floro.manifest.json"
+    );
+    const manifestString = await fs.promises.readFile(pluginManifestPath);
+    return JSON.parse(manifestString.toString());
+  } catch (e) {
+    return null;
+  }
+};
+
+const pullPluginTar = async (
+  name: string,
+  version: string,
+  link: string,
+  hash: string
+): Promise<Manifest | null> => {
+  const downloadPath = path.join(vTMPPath, `${hash}.tar.gz`);
+  const pluginPath = path.join(vPluginsPath, name, version);
+  const didWrite = await axios.get(link);
+  await axios({
+    method: "get",
+    url: link,
+    onDownloadProgress: (progressEvent) => {
+      broadcastAllDevices(
+        `plugin:${name}@${version}:download-progress`,
+        progressEvent
+      );
+    },
+    responseType: "stream",
+  }).then((response) => {
+    const exists = fs.existsSync(downloadPath);
+    if (exists) {
+      return true;
+    }
+    const writer = createWriteStream(downloadPath);
+    return new Promise((resolve) => {
+      response.data.pipe(writer);
+      let error = null;
+      writer.on("error", (err) => {
+        error = err;
+        writer.close();
+        resolve(false);
+      });
+      writer.on("close", () => {
+        if (!error) {
+          resolve(true);
+        }
+      });
+    });
+  });
+  const exists = await existsAsync(pluginPath);
+  if (!exists && didWrite) {
+    await fs.promises.mkdir(pluginPath, { recursive: true});
+    if (process.env.NODE_ENV != "test") {
+      await fs.promises.chmod(pluginPath, 0o755);
+    }
+    await tar.x({
+      file: downloadPath,
+      cwd: pluginPath,
+    });
+  }
+  if (exists && didWrite) {
+    await tar.x({
+      file: downloadPath,
+      cwd: pluginPath,
+    });
+  }
+  const downloadExists = await existsAsync(downloadPath);
+  if (downloadExists) {
+    await fs.promises.rm(downloadPath);
+  }
+  if (didWrite) {
+    const pluginManifestPath = path.join(
+      vPluginsPath,
+      name,
+      version,
+      "floro",
+      "floro.manifest.json"
+    );
+    const manifestString = await fs.promises.readFile(pluginManifestPath);
+    return JSON.parse(manifestString.toString());
+  }
+  return null;
+};
+
+export const downloadPlugin = async (
+  pluginName: string,
+  pluginVersion: string
+): Promise<Manifest | null> => {
+  const remote = await getRemoteHostAsync();
+  const session = await getUserSessionAsync();
+
+  const request = await axios.get(
+    `${remote}/api/plugin/${pluginName}/${pluginVersion}/install`,
+    {
+      headers: {
+        ["session_key"]: session?.clientKey,
+      },
+    }
+  );
+  if (request.status == 200) {
+    const installResponse = request.data;
+    for (const dependency of installResponse.dependencies) {
+      const pluginManifestPath = path.join(
+        vPluginsPath,
+        dependency.name,
+        dependency.version,
+        "floro",
+        "floro.manifest.json"
+      );
+      const existsLocallly = await existsAsync(pluginManifestPath);
+      if (existsLocallly) {
+        continue;
+      }
+      const dependencyManifest = await pullPluginTar(
+        dependency.name,
+        dependency.version,
+        dependency.link,
+        dependency.hash
+      );
+      if (!dependencyManifest) {
+        return null;
+      }
+      const stillExistsLocallly = await existsAsync(pluginManifestPath);
+      if (!stillExistsLocallly) {
+          return null;
+      }
+    }
+    return await pullPluginTar(
+      installResponse.name,
+      installResponse.version,
+      installResponse.link,
+      installResponse.hash
+    );
+  }
+  return null;
+};
+
+export const getPluginManifest = async (
+  pluginName: string,
+  pluginValue: string
 ): Promise<Manifest> => {
+  if (pluginValue.startsWith("dev")) {
+    return await readDevPluginManifest(pluginName, pluginValue);
+  }
+  if (!pluginValue) {
+    return null;
+  }
   const pluginManifestPath = path.join(
     vPluginsPath,
     pluginName,
-    pluginVersion,
+    pluginValue,
     "floro",
     "floro.manifest.json"
   );
-  const manifestString = await fs.promises.readFile(pluginManifestPath);
-  return JSON.parse(manifestString.toString());
+  const existsLocallly = await existsAsync(pluginManifestPath);
+  if (existsLocallly) {
+    const manifestString = await fs.promises.readFile(pluginManifestPath);
+    return JSON.parse(manifestString.toString());
+  }
+  return await downloadPlugin(pluginName, pluginValue);
 };
 
 const pluginManifestExists = async (
@@ -76,6 +255,23 @@ const pluginManifestExists = async (
 };
 
 /* REPOS */
+
+export const getRepos = async (): Promise<string[]> => {
+  const repoDir = await fs.promises.readdir(vReposPath);
+  return repoDir?.filter((repoName) => {
+    return /^[0-9a-fA-F]{8}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{12}$/.test(
+      repoName
+    );
+  });
+};
+
+const repoExists = async (repoId?: string): Promise<boolean> => {
+  if (!repoId) {
+    return false;
+  }
+  return await existsAsync(path.join(vReposPath, repoId));
+};
+
 const getRepoSettings = async (repoId: string): Promise<RepoSetting> => {
   try {
     const repoPath = path.join(vReposPath, repoId);
@@ -221,21 +417,9 @@ const readCommit = async (repoId: string, sha: string): Promise<CommitData> => {
   }
 };
 
-export const makeDataSource = (datasource: DataSource = {
-    repoExists,
-    getPluginManifest,
-    pluginManifestExists,
-    getRepoSettings,
-    getCurrentState,
-    saveCurrentState,
-    getBranch,
-    getBranches,
-    deleteBranch,
-    saveBranch,
-    saveCommit,
-    readCommit,
-  }) => {
+export const makeDataSource = (datasource: DataSource = {}) => {
   const defaultDataSource: DataSource = {
+    getRepos,
     repoExists,
     getPluginManifest,
     pluginManifestExists,
@@ -274,7 +458,7 @@ export const makeMemoizedDataSource = (dataSourceOverride: DataSource = {}) => {
   const memoizedPluginManifestExistence = new Set();
   const _pluginManifestExists = async (pluginName: string, pluginVersion: string) => {
     const pluginString = pluginName + "-" + pluginVersion;
-    if (memoizedPluginManifestExistence.has(pluginName)) {
+    if (memoizedPluginManifestExistence.has(pluginName) && !pluginVersion.startsWith("dev")) {
         return true;
     }
     const result = await dataSource.pluginManifestExists(pluginName, pluginVersion);
@@ -290,7 +474,7 @@ export const makeMemoizedDataSource = (dataSourceOverride: DataSource = {}) => {
     pluginVersion: string
   ): Promise<Manifest> => {
     const memoString = pluginName + "-" + pluginVersion;
-    if (manifestMemo[memoString]) {
+    if (manifestMemo[memoString] && !pluginVersion.startsWith("dev")) {
       return manifestMemo[memoString];
     }
     const result = await dataSource.getPluginManifest(
@@ -335,7 +519,6 @@ export const makeMemoizedDataSource = (dataSourceOverride: DataSource = {}) => {
     if (result) {
       memoizedCurrentState[repoId] = result;
     }
-    console.log("MCS", memoizedCurrentState)
     return result;
   };
 

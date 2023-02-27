@@ -42,7 +42,6 @@ const sha256_1 = __importDefault(require("crypto-js/sha256"));
 const enc_hex_1 = __importDefault(require("crypto-js/enc-hex"));
 const repo_1 = require("./repo");
 const repoapi_1 = require("./repoapi");
-const plugins_1 = require("./plugins");
 const datasource_1 = require("./datasource");
 const remoteHost = (0, filestructure_1.getRemoteHostSync)();
 const app = (0, express_1.default)();
@@ -105,7 +104,7 @@ app.get("/ping", (0, cors_1.default)(corsOptionsDelegate), async (_req, res) => 
     res.send("PONG");
 });
 app.get("/repos", (0, cors_1.default)(corsOptionsDelegate), async (_req, res) => {
-    const repos = await (0, repo_1.getLocalRepos)();
+    const repos = await datasource.getRepos();
     res.send({
         repos,
     });
@@ -400,7 +399,7 @@ app.get("/plugins/:pluginName/dev@*", async (req, res) => {
         res.sendStatus(404);
         return;
     }
-    const manifest = await (0, plugins_1.readDevPluginManifest)(pluginName, pluginVersion);
+    const manifest = await (0, datasource_1.readDevPluginManifest)(pluginName, pluginVersion);
     if (!manifest) {
         res.sendStatus(404);
         return;

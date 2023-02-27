@@ -1,21 +1,8 @@
-import {
-  existsAsync,
-  getPluginsJsonAsync,
-  getRemoteHostAsync,
-  getUserSessionAsync,
-  vDEVPath,
-  vPluginsPath,
-  vTMPPath,
-} from "./filestructure";
-
 import axios from "axios";
-import path from "path";
 import { DiffElement } from "./versioncontrol";
-import fs, { createWriteStream } from "fs";
 import { Crypto } from "cryptojs";
 import semver from "semver";
-import { broadcastAllDevices } from "./multiplexer";
-import tar from "tar";
+import datasource, { DataSource } from "./datasource";
 
 axios.defaults.validateStatus = function () {
   return true;
@@ -70,201 +57,13 @@ export interface Manifest {
 
 const primitives = new Set(["int", "float", "boolean", "string"]);
 
-export const readDevPluginManifest = async (
-  pluginName: string,
-  pluginVersion: string
-): Promise<Manifest | null> => {
-  const pluginsJSON = await getPluginsJsonAsync();
-  if (!pluginsJSON) {
-    return null;
-  }
-  if (
-    pluginsJSON.plugins?.[pluginName]?.proxy &&
-    !pluginVersion.startsWith("dev@")
-  ) {
-    try {
-      const uri = `http://127.0.0.1:63403/plugins/${pluginName}/dev/floro/floro.manifest.json`;
-      const res = await axios.get(uri);
-      return res.data;
-    } catch (e) {
-      return null;
-    }
-  }
-  try {
-    const pluginManifestPath = path.join(
-      vDEVPath,
-      pluginName,
-      pluginVersion.split("@")?.[1] ?? "none",
-      "floro",
-      "floro.manifest.json"
-    );
-    const manifestString = await fs.promises.readFile(pluginManifestPath);
-    return JSON.parse(manifestString.toString());
-  } catch (e) {
-    return null;
-  }
-};
-
-const pullTar = async (
-  name: string,
-  version: string,
-  link: string,
-  hash: string
-): Promise<Manifest | null> => {
-  const downloadPath = path.join(vTMPPath, `${hash}.tar.gz`);
-  const pluginPath = path.join(vPluginsPath, name, version);
-  const didWrite = await axios.get(link);
-  await axios({
-    method: "get",
-    url: link,
-    onDownloadProgress: (progressEvent) => {
-      broadcastAllDevices(
-        `plugin:${name}@${version}:download-progress`,
-        progressEvent
-      );
-    },
-    responseType: "stream",
-  }).then((response) => {
-    const exists = fs.existsSync(downloadPath);
-    if (exists) {
-      return true;
-    }
-    const writer = createWriteStream(downloadPath);
-    return new Promise((resolve) => {
-      response.data.pipe(writer);
-      let error = null;
-      writer.on("error", (err) => {
-        error = err;
-        writer.close();
-        resolve(false);
-      });
-      writer.on("close", () => {
-        if (!error) {
-          resolve(true);
-        }
-      });
-    });
-  });
-  const exists = await existsAsync(pluginPath);
-  if (!exists && didWrite) {
-    await fs.promises.mkdir(pluginPath, { recursive: true});
-    if (process.env.NODE_ENV != "test") {
-      await fs.promises.chmod(pluginPath, 0o755);
-    }
-    await tar.x({
-      file: downloadPath,
-      cwd: pluginPath,
-    });
-  }
-  if (exists && didWrite) {
-    await tar.x({
-      file: downloadPath,
-      cwd: pluginPath,
-    });
-  }
-  const downloadExists = await existsAsync(downloadPath);
-  if (downloadExists) {
-    await fs.promises.rm(downloadPath);
-  }
-  if (didWrite) {
-    const pluginManifestPath = path.join(
-      vPluginsPath,
-      name,
-      version,
-      "floro",
-      "floro.manifest.json"
-    );
-    const manifestString = await fs.promises.readFile(pluginManifestPath);
-    return JSON.parse(manifestString.toString());
-  }
-  return null;
-};
-
-export const downloadPlugin = async (
-  pluginName: string,
-  pluginVersion: string
-): Promise<Manifest | null> => {
-  const remote = await getRemoteHostAsync();
-  const session = await getUserSessionAsync();
-
-  const request = await axios.get(
-    `${remote}/api/plugin/${pluginName}/${pluginVersion}/install`,
-    {
-      headers: {
-        ["session_key"]: session?.clientKey,
-      },
-    }
-  );
-  if (request.status == 200) {
-    const installResponse = request.data;
-    for (const dependency of installResponse.dependencies) {
-      const pluginManifestPath = path.join(
-        vPluginsPath,
-        dependency.name,
-        dependency.version,
-        "floro",
-        "floro.manifest.json"
-      );
-      const existsLocallly = await existsAsync(pluginManifestPath);
-      if (existsLocallly) {
-        continue;
-      }
-      const dependencyManifest = await pullTar(
-        dependency.name,
-        dependency.version,
-        dependency.link,
-        dependency.hash
-      );
-      if (!dependencyManifest) {
-        return null;
-      }
-      const stillExistsLocallly = await existsAsync(pluginManifestPath);
-      if (!stillExistsLocallly) {
-          return null;
-      }
-    }
-    return await pullTar(
-      installResponse.name,
-      installResponse.version,
-      installResponse.link,
-      installResponse.hash
-    );
-  }
-  return null;
-};
-
-export const readPluginManifest = async (
-  pluginName: string,
-  pluginValue: string
-): Promise<Manifest | null> => {
-  if (pluginValue.startsWith("dev")) {
-    return await readDevPluginManifest(pluginName, pluginValue);
-  }
-  if (!pluginValue) {
-    return null;
-  }
-  const pluginManifestPath = path.join(
-    vPluginsPath,
-    pluginName,
-    pluginValue,
-    "floro",
-    "floro.manifest.json"
-  );
-  const existsLocallly = await existsAsync(pluginManifestPath);
-  if (existsLocallly) {
-    const manifestString = await fs.promises.readFile(pluginManifestPath);
-    return JSON.parse(manifestString.toString());
-  }
-  return await downloadPlugin(pluginName, pluginValue);
-};
-
 export const pluginManifestsAreCompatibleForUpdate = async (
+  datasource: DataSource,
   oldManifest: Manifest,
-  newManifest: Manifest,
-  pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>
+  newManifest: Manifest
 ): Promise<boolean | null> => {
-  const oldSchemaMap = await getSchemaMapForManifest(oldManifest, pluginFetch);
-  const newSchemaMap = await getSchemaMapForManifest(newManifest, pluginFetch);
+  const oldSchemaMap = await getSchemaMapForManifest(datasource, oldManifest);
+  const newSchemaMap = await getSchemaMapForManifest(datasource, newManifest);
 
   if (!oldSchemaMap) {
     return null;
@@ -285,18 +84,18 @@ export const pluginManifestsAreCompatibleForUpdate = async (
         return true;
       }
       return await pluginManifestIsSubsetOfManifest(
+        datasource,
         oldSchemaMap,
-        newSchemaMap,
-        pluginFetch
+        newSchemaMap
       );
     }
   );
 };
 
 export const schemaMapsAreCompatible = async (
-  oldSchemaMap: {[key: string]: Manifest},
-  newSchemaMap: {[key: string]: Manifest},
-  pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>
+  datasource: DataSource,
+  oldSchemaMap: { [key: string]: Manifest },
+  newSchemaMap: { [key: string]: Manifest }
 ): Promise<boolean | null> => {
   if (!oldSchemaMap) {
     return null;
@@ -307,18 +106,18 @@ export const schemaMapsAreCompatible = async (
   }
 
   const isSubSet = await pluginManifestIsSubsetOfManifest(
+    datasource,
     oldSchemaMap,
-    newSchemaMap,
-    pluginFetch
+    newSchemaMap
   );
   return isSubSet;
-}
+};
 
 export const topSortManifests = (manifests: Array<Manifest>) => {
   const lexicallySortedManifests = manifests.sort((a, b) => {
     if (a.name == b.name) return 0;
     return a.name > b.name ? 1 : -1;
-  })
+  });
   const visited = new Set();
   const manifestMap = manifestListToSchemaMap(lexicallySortedManifests);
   const out: Array<Manifest> = [];
@@ -333,11 +132,11 @@ export const topSortManifests = (manifests: Array<Manifest>) => {
     const depsToAdd = topSortManifests(upstreamDeps);
     for (const upstreamDep of depsToAdd) {
       if (!visited.has(upstreamDep.name)) {
-        visited.add(upstreamDep.name)
+        visited.add(upstreamDep.name);
         out.push(upstreamDep);
       }
     }
-    visited.add(manifest.name)
+    visited.add(manifest.name);
     out.push(manifest);
   }
   return out;
@@ -360,16 +159,14 @@ export const getPluginManifests = async (
   }) as Array<Manifest>;
 };
 
-export const getManifestMapFromManifestList = (
-  manifests: Array<Manifest>
-) => {
+export const getManifestMapFromManifestList = (manifests: Array<Manifest>) => {
   return manifests.reduce((acc, manifest) => {
     return {
       ...acc,
-      [manifest.name]: manifest
-    }
+      [manifest.name]: manifest,
+    };
   }, {});
-}
+};
 
 export const pluginListToMap = (
   pluginList: Array<PluginElement>
@@ -446,11 +243,8 @@ export interface DepFetch {
 }
 
 export const getDependenciesForManifest = async (
+  datasource: DataSource,
   manifest: Manifest,
-  pluginFetch: (
-    pluginName: string,
-    version: string
-  ) => Promise<Manifest | null>,
   seen = {}
 ): Promise<DepFetch> => {
   const deps: Array<Manifest> = [];
@@ -462,7 +256,7 @@ export const getDependenciesForManifest = async (
       };
     }
     try {
-      const pluginManifest = await pluginFetch(
+      const pluginManifest = await datasource.getPluginManifest(
         pluginName,
         manifest.imports[pluginName]
       );
@@ -473,8 +267,8 @@ export const getDependenciesForManifest = async (
         };
       }
       const depResult = await getDependenciesForManifest(
+        datasource,
         pluginManifest,
-        pluginFetch,
         {
           ...seen,
           [manifest.name]: true,
@@ -498,11 +292,8 @@ export const getDependenciesForManifest = async (
 };
 
 export const getUpstreamDependencyManifests = async (
+  datasource: DataSource,
   manifest: Manifest,
-  pluginFetch: (
-    pluginName: string,
-    version: string
-  ) => Promise<Manifest | null>,
   memo: { [key: string]: Array<Manifest> } = {}
 ): Promise<Array<Manifest> | null> => {
   if (memo[manifest.name + "-" + manifest.version]) {
@@ -511,7 +302,7 @@ export const getUpstreamDependencyManifests = async (
 
   const deps: Array<Manifest> = [manifest];
   for (const dependentPluginName in manifest.imports) {
-    const dependentManifest = await pluginFetch(
+    const dependentManifest = await datasource.getPluginManifest(
       dependentPluginName,
       manifest.imports[dependentPluginName]
     );
@@ -519,8 +310,8 @@ export const getUpstreamDependencyManifests = async (
       return null;
     }
     const subDeps = await getUpstreamDependencyManifests(
+      datasource,
       dependentManifest,
-      pluginFetch,
       memo
     );
     if (subDeps == null) {
@@ -578,8 +369,8 @@ export interface VerifyDepsResult {
 }
 
 export const verifyPluginDependencyCompatability = async (
-  deps: Array<Manifest>,
-  pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>
+  datasource: DataSource,
+  deps: Array<Manifest>
 ): Promise<VerifyDepsResult> => {
   const depsMap = coalesceDependencyVersions(deps);
   if (!depsMap) {
@@ -619,8 +410,8 @@ export const verifyPluginDependencyCompatability = async (
         };
       }
       const lastDeps = await getDependenciesForManifest(
-        lastManifest,
-        pluginFetch
+        datasource,
+        lastManifest
       );
       if (!lastDeps) {
         return {
@@ -632,8 +423,8 @@ export const verifyPluginDependencyCompatability = async (
         };
       }
       const nextDeps = await getDependenciesForManifest(
-        nextManifest,
-        pluginFetch
+        datasource,
+        nextManifest
       );
       if (!nextDeps) {
         return {
@@ -655,9 +446,9 @@ export const verifyPluginDependencyCompatability = async (
         ...(nextDeps.deps as Array<Manifest>),
       ]);
       const areCompatible = await pluginManifestIsSubsetOfManifest(
+        datasource,
         lastSchemaMap,
-        nextSchemaMap,
-        pluginFetch
+        nextSchemaMap
       );
       if (!areCompatible) {
         return {
@@ -678,14 +469,14 @@ export const verifyPluginDependencyCompatability = async (
 };
 
 export const getSchemaMapForManifest = async (
-  manifest: Manifest,
-  pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>
+  datasource: DataSource,
+  manifest: Manifest
 ): Promise<{ [key: string]: Manifest } | null> => {
-  const deps = await getUpstreamDependencyManifests(manifest, pluginFetch);
+  const deps = await getUpstreamDependencyManifests(datasource, manifest);
   if (!deps) {
     return null;
   }
-  const areValid = await verifyPluginDependencyCompatability(deps, pluginFetch);
+  const areValid = await verifyPluginDependencyCompatability(datasource, deps);
   if (!areValid.isValid) {
     return null;
   }
@@ -711,47 +502,47 @@ export const schemaManifestHasInvalidSyntax = (
   if (!schema?.store) {
     return {
       isInvalid: true,
-      error: "Store cannot be empty"
+      error: "Store cannot be empty",
     };
   }
   if (typeof schema?.store != "object") {
     return {
       isInvalid: true,
-      error: "Store must be an object"
+      error: "Store must be an object",
     };
   }
-  if ( Object.keys(schema.store).length == 0) {
+  if (Object.keys(schema.store).length == 0) {
     return {
       isInvalid: true,
-      error: "Store cannot be empty"
+      error: "Store cannot be empty",
     };
   }
   if (!schema?.types) {
     return {
       isInvalid: true,
-      error: "Types cannot be empty"
+      error: "Types cannot be empty",
     };
   }
   if (typeof schema?.types != "object") {
     return {
       isInvalid: true,
-      error: "Types must be an object"
+      error: "Types must be an object",
     };
   }
   if (!schema?.imports) {
     return {
       isInvalid: true,
-      error: "Imports cannot be empty"
+      error: "Imports cannot be empty",
     };
   }
   if (typeof schema?.imports != "object") {
     return {
       isInvalid: true,
-      error: "Imports must be an object"
+      error: "Imports must be an object",
     };
   }
   return schemaHasInvalidTypeSytax(schema, schema.store);
-}
+};
 
 export interface SyntaxValidation {
   isInvalid: boolean;
@@ -767,32 +558,41 @@ export const schemaHasInvalidTypeSytax = (
     if (visited[struct[prop]?.type as string]) {
       continue;
     }
-    if (typeof struct[prop].type == "string" && (struct[prop]?.type as string)?.startsWith("$")) {
+    if (
+      typeof struct[prop].type == "string" &&
+      (struct[prop]?.type as string)?.startsWith("$")
+    ) {
+      return {
+        isInvalid: true,
+        error: `${prop} in \n${JSON.stringify(
+          struct,
+          null,
+          2
+        )}\n type value cannot start with $`,
+      };
+    }
+
+    if (
+      (struct[prop].type as string) == "set" ||
+      (struct[prop].type as string) == "array"
+    ) {
+      if (
+        typeof struct[prop].values == "string" &&
+        (struct[prop]?.values as string)?.startsWith("$")
+      ) {
         return {
           isInvalid: true,
           error: `${prop} in \n${JSON.stringify(
             struct,
             null,
             2
-          )}\n type value cannot start with $`,
+          )}\n values value cannot start with $`,
         };
-    }
-
-    if (
-      (struct[prop].type as string) == "set" ||
-      ((struct[prop].type as string) == "array")
-    ) {
-      if (typeof struct[prop].values == "string" && (struct[prop]?.values as string)?.startsWith("$")) {
-          return {
-            isInvalid: true,
-            error: `${prop} in \n${JSON.stringify(
-              struct,
-              null,
-              2
-            )}\n values value cannot start with $`,
-          };
       }
-      if (typeof struct[prop].values == "string" && primitives.has(struct[prop].values as string)) {
+      if (
+        typeof struct[prop].values == "string" &&
+        primitives.has(struct[prop].values as string)
+      ) {
         continue;
       }
       if (typeof struct[prop].values != "string") {
@@ -802,7 +602,7 @@ export const schemaHasInvalidTypeSytax = (
           {
             ...visited,
           }
-        )
+        );
         if (syntaxCheck.isInvalid) {
           return syntaxCheck;
         }
@@ -819,7 +619,7 @@ export const schemaHasInvalidTypeSytax = (
             ...visited,
             [struct[prop].values as string]: true,
           }
-        )
+        );
         if (syntaxCheck.isInvalid) {
           return syntaxCheck;
         }
@@ -828,16 +628,14 @@ export const schemaHasInvalidTypeSytax = (
     }
     if (schema.types[struct[prop].type as string]) {
       const syntaxCheck = schemaHasInvalidTypeSytax(
-          schema,
-          schema.types[struct[prop].type as string] as TypeStruct,
-          {
-            ...visited,
-            [struct[prop].type as string]: true,
-          }
+        schema,
+        schema.types[struct[prop].type as string] as TypeStruct,
+        {
+          ...visited,
+          [struct[prop].type as string]: true,
+        }
       );
-      if (
-        syntaxCheck.isInvalid
-      ) {
+      if (syntaxCheck.isInvalid) {
         return syntaxCheck;
       }
       continue;
@@ -871,8 +669,8 @@ export const schemaHasInvalidTypeSytax = (
       }
     }
   }
-  return { isInvalid: false};
-}
+  return { isInvalid: false };
+};
 
 export const containsCyclicTypes = (
   schema: Manifest,
@@ -906,8 +704,7 @@ export const containsCyclicTypes = (
           schema.types[struct[prop].type as string] as TypeStruct,
           {
             ...visited,
-            [struct[prop].type as string]:
-              true,
+            [struct[prop].type as string]: true,
           }
         )
       ) {
@@ -927,8 +724,8 @@ export const containsCyclicTypes = (
 };
 
 export const validatePluginManifest = async (
-  manifest: Manifest,
-  pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>
+  datasource: DataSource,
+  manifest: Manifest
 ) => {
   try {
     const syntaxCheck = schemaManifestHasInvalidSyntax(manifest);
@@ -944,7 +741,7 @@ export const validatePluginManifest = async (
         message: `${manifest.name}'s schema contains cyclic types, consider using references`,
       };
     }
-    const deps = await getUpstreamDependencyManifests(manifest, pluginFetch);
+    const deps = await getUpstreamDependencyManifests(datasource, manifest);
     if (!deps) {
       return {
         status: "error",
@@ -952,8 +749,8 @@ export const validatePluginManifest = async (
       };
     }
     const areValid = await verifyPluginDependencyCompatability(
-      deps,
-      pluginFetch
+      datasource,
+      deps
     );
     if (!areValid.isValid) {
       if (areValid.reason == "dep_fetch") {
@@ -970,7 +767,7 @@ export const validatePluginManifest = async (
       }
     }
 
-    const schemaMap = await getSchemaMapForManifest(manifest, pluginFetch);
+    const schemaMap = await getSchemaMapForManifest(datasource, manifest);
     if (!schemaMap) {
       return {
         status: "error",
@@ -978,7 +775,7 @@ export const validatePluginManifest = async (
       };
     }
     const expandedTypes = getExpandedTypesForPlugin(schemaMap, manifest.name);
-    const rootSchemaMap = (await getRootSchemaMap(schemaMap, pluginFetch)) ?? {};
+    const rootSchemaMap = (await getRootSchemaMap(datasource, schemaMap)) ?? {};
     const hasValidPropsType = invalidSchemaPropsCheck(
       schemaMap[manifest.name].store,
       rootSchemaMap[manifest.name],
@@ -1176,11 +973,11 @@ const constructRootSchema = (
 };
 
 export const defaultVoidedState = async (
+  datasource: DataSource,
   schemaMap: { [key: string]: Manifest },
-  stateMap: { [key: string]: object },
-  pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>
+  stateMap: { [key: string]: object }
 ) => {
-  const rootSchemaMap = (await getRootSchemaMap(schemaMap, pluginFetch)) ?? {};
+  const rootSchemaMap = (await getRootSchemaMap(datasource, schemaMap)) ?? {};
   return Object.keys(rootSchemaMap).reduce((acc, pluginName) => {
     const struct = rootSchemaMap[pluginName];
     const state = stateMap?.[pluginName] ?? {};
@@ -2044,18 +1841,24 @@ export const getRootSchemaForPlugin = (
 };
 
 export const getRootSchemaMap = async (
+  datasource: DataSource,
   schemaMap: {
     [key: string]: Manifest;
   }
-  ,pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>
-): Promise<{ [key: string]: TypeStruct }| null> => {
+): Promise<{ [key: string]: TypeStruct } | null> => {
   // need to top sort
   const rootSchemaMap = {};
   for (const pluginName in schemaMap) {
     const manifest = schemaMap[pluginName];
-    const upsteamDeps = await getUpstreamDependencyManifests(manifest, pluginFetch);
+    const upsteamDeps = await getUpstreamDependencyManifests(
+      datasource,
+      manifest
+    );
     const subSchemaMap = manifestListToSchemaMap(upsteamDeps as Manifest[]);
-    rootSchemaMap[pluginName] = getRootSchemaForPlugin(subSchemaMap, pluginName);
+    rootSchemaMap[pluginName] = getRootSchemaForPlugin(
+      subSchemaMap,
+      pluginName
+    );
   }
   return traverseSchemaMapForRefKeyTypes(rootSchemaMap, rootSchemaMap);
 };
@@ -2129,13 +1932,13 @@ const traverseSchemaMapForRefKeyTypes = (
 };
 
 export const getKVStateForPlugin = async (
+  datasource: DataSource,
   schema: { [key: string]: Manifest },
   pluginName: string,
-  stateMap: { [key: string]: object },
-  pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>
+  stateMap: { [key: string]: object }
 ): Promise<Array<DiffElement>> => {
   const rootUpsteamSchema = getRootSchemaForPlugin(schema, pluginName);
-  const state = await defaultVoidedState(schema, stateMap, pluginFetch);
+  const state = await defaultVoidedState(datasource, schema, stateMap);
   return generateKVFromStateWithRootSchema(
     rootUpsteamSchema,
     pluginName,
@@ -2214,20 +2017,25 @@ const asyncReduce = async <T, U>(
  * called when updating state. Not called when applying diffs
  */
 export const cascadePluginState = async (
+  datasource: DataSource,
   schemaMap: { [key: string]: Manifest },
   stateMap: { [key: string]: object },
   pluginName: string,
-  pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>,
   rootSchemaMap?: { [key: string]: TypeStruct },
   memo: { [key: string]: { [key: string]: object } } = {}
 ): Promise<{ [key: string]: object }> => {
   if (!rootSchemaMap) {
-    rootSchemaMap = (await getRootSchemaMap(schemaMap, pluginFetch)) ?? {};
+    rootSchemaMap = (await getRootSchemaMap(datasource, schemaMap)) ?? {};
   }
   if (!memo) {
     memo = {};
   }
-  const kvs = await getKVStateForPlugin(schemaMap, pluginName, stateMap, pluginFetch);
+  const kvs = await getKVStateForPlugin(
+    datasource,
+    schemaMap,
+    pluginName,
+    stateMap
+  );
   const removedRefs = new Set();
   const next: Array<DiffElement> = [];
   for (const kv of kvs) {
@@ -2283,48 +2091,57 @@ export const cascadePluginState = async (
   const nextStateMap = { ...stateMap, [pluginName]: newPluginState };
   if (next.length != kvs.length) {
     return cascadePluginState(
+      datasource,
       schemaMap,
       { ...stateMap, [pluginName]: newPluginState },
       pluginName,
-      pluginFetch,
       rootSchemaMap,
       memo
     );
   }
   const downstreamDeps = getDownstreamDepsInSchemaMap(schemaMap, pluginName);
-  const result = await asyncReduce(nextStateMap, downstreamDeps, async (stateMap, dependentPluginName) => {
-    if (memo[`${pluginName}:${dependentPluginName}`]) {
-      return {
+  const result = await asyncReduce(
+    nextStateMap,
+    downstreamDeps,
+    async (stateMap, dependentPluginName) => {
+      if (memo[`${pluginName}:${dependentPluginName}`]) {
+        return {
+          ...stateMap,
+          ...memo[`${pluginName}:${dependentPluginName}`],
+        };
+      }
+      const result = {
         ...stateMap,
-        ...memo[`${pluginName}:${dependentPluginName}`],
+        ...(await cascadePluginState(
+          datasource,
+          schemaMap,
+          stateMap,
+          dependentPluginName,
+          rootSchemaMap,
+          memo
+        )),
       };
+      memo[`${pluginName}:${dependentPluginName}`] = result;
+      return result;
     }
-    const result = {
-      ...stateMap,
-      ...(await cascadePluginState(
-        schemaMap,
-        stateMap,
-        dependentPluginName,
-        pluginFetch,
-        rootSchemaMap,
-        memo
-      )),
-    };
-    memo[`${pluginName}:${dependentPluginName}`] = result;
-    return result;
-  });
+  );
   return result;
 };
 
 export const validatePluginState = async (
+  datasource: DataSource,
   schemaMap: { [key: string]: Manifest },
   stateMap: { [key: string]: object },
-  pluginName: string,
-  pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>,
+  pluginName: string
 ): Promise<boolean> => {
-  const rootSchemaMap = (await getRootSchemaMap(schemaMap, pluginFetch)) ?? {};
+  const rootSchemaMap = (await getRootSchemaMap(datasource, schemaMap)) ?? {};
   // ignore $(store)
-  const [, ...kvs] = await getKVStateForPlugin(schemaMap, pluginName, stateMap, pluginFetch);
+  const [, ...kvs] = await getKVStateForPlugin(
+    datasource,
+    schemaMap,
+    pluginName,
+    stateMap
+  );
   for (const { key, value } of kvs) {
     const subSchema = getSchemaAtPath(rootSchemaMap[pluginName], key);
     for (const prop in subSchema) {
@@ -2381,12 +2198,12 @@ const objectIsSubsetOfObject = (current: object, next: object): boolean => {
 };
 
 export const pluginManifestIsSubsetOfManifest = async (
+  datasource: DataSource,
   currentSchemaMap: { [key: string]: Manifest },
-  nextSchemaMap: { [key: string]: Manifest },
-  pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>
+  nextSchemaMap: { [key: string]: Manifest }
 ): Promise<boolean> => {
-  const oldRootSchema = await getRootSchemaMap(currentSchemaMap, pluginFetch);
-  const nextRootSchema = await getRootSchemaMap(nextSchemaMap, pluginFetch);
+  const oldRootSchema = await getRootSchemaMap(datasource, currentSchemaMap);
+  const nextRootSchema = await getRootSchemaMap(datasource, nextSchemaMap);
   if (!oldRootSchema) {
     return false;
   }
@@ -2398,12 +2215,12 @@ export const pluginManifestIsSubsetOfManifest = async (
 };
 
 export const isTopologicalSubset = async (
+  datasource: DataSource,
   oldSchemaMap: { [key: string]: Manifest },
   oldStateMap: { [key: string]: object },
   newSchemaMap: { [key: string]: Manifest },
   newStateMap: { [key: string]: object },
-  pluginName: string,
-  pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>
+  pluginName: string
 ): Promise<boolean> => {
   if (!oldSchemaMap[pluginName] && !newSchemaMap[pluginName]) {
     return true;
@@ -2413,12 +2230,23 @@ export const isTopologicalSubset = async (
   }
 
   if (
-    !(await pluginManifestIsSubsetOfManifest(oldSchemaMap, newSchemaMap, pluginFetch))
+    !(await pluginManifestIsSubsetOfManifest(
+      datasource,
+      oldSchemaMap,
+      newSchemaMap
+    ))
   ) {
     return false;
   }
   const oldKVs =
-    await (await getKVStateForPlugin(oldSchemaMap, pluginName, oldStateMap, pluginFetch))
+    (await (
+      await getKVStateForPlugin(
+        datasource,
+        oldSchemaMap,
+        pluginName,
+        oldStateMap
+      )
+    )
       ?.map?.(({ key }) => key)
       ?.filter?.((key) => {
         // remove array refs, since unstable
@@ -2426,10 +2254,10 @@ export const isTopologicalSubset = async (
           return false;
         }
         return true;
-      }) ?? [];
-  const newKVs = (await getKVStateForPlugin(newSchemaMap, pluginName, newStateMap, pluginFetch)).map(
-    ({ key }) => key
-  );
+      })) ?? [];
+  const newKVs = (
+    await getKVStateForPlugin(datasource, newSchemaMap, pluginName, newStateMap)
+  ).map(({ key }) => key);
   const newKVsSet = new Set(newKVs);
   for (const key of oldKVs) {
     if (!newKVsSet.has(key)) {
@@ -2449,12 +2277,12 @@ export const isTopologicalSubsetValid = async (
 ): Promise<boolean> => {
   if (
     !(await isTopologicalSubset(
+      datasource,
       oldSchemaMap,
       oldStateMap,
       newSchemaMap,
       newStateMap,
-      pluginName,
-      pluginFetch
+      pluginName
     ))
   ) {
     return false;
@@ -2462,22 +2290,17 @@ export const isTopologicalSubsetValid = async (
   // we need to apply old schema against new data to ensure valid/safe
   // otherwise we would examine props outside of the subspace that may
   // be invalid in the new version but dont exist in the old version
-  const oldRootSchemaMap = (await getRootSchemaMap(oldSchemaMap, pluginFetch)) ?? {};
+  const oldRootSchemaMap =
+    (await getRootSchemaMap(datasource, oldSchemaMap)) ?? {};
   // ignore $(store)
-  const [, ...oldKVs] = (await getKVStateForPlugin(
-    oldSchemaMap,
-    pluginName,
-    oldStateMap,
-    pluginFetch
-  )).map(({ key }) => key);
+  const [, ...oldKVs] = (
+    await getKVStateForPlugin(datasource, oldSchemaMap, pluginName, oldStateMap)
+  ).map(({ key }) => key);
   const oldKVsSet = new Set(oldKVs);
   // ignore $(store)
-  const [, ...newKVs] = (await getKVStateForPlugin(
-    newSchemaMap,
-    pluginName,
-    newStateMap,
-    pluginFetch
-  )).filter(({ key }) => oldKVsSet.has(key));
+  const [, ...newKVs] = (
+    await getKVStateForPlugin(datasource, newSchemaMap, pluginName, newStateMap)
+  ).filter(({ key }) => oldKVsSet.has(key));
   // we can check against newKV since isTopologicalSubset check ensures the key
   // intersection already exists. Here we just have to ensure the new values are
   // compatible against the old schema
@@ -2922,9 +2745,9 @@ export const invalidSchemaPropsCheck = (
       const formattedPath = [...path, prop].join(".");
       return {
         status: "error",
-        message: `Invalid prop in schema. Remove or change '${prop}=${typeStruct[prop]}' from '${path.join(
-          "."
-        )}'. Found at '${formattedPath}'.`,
+        message: `Invalid prop in schema. Remove or change '${prop}=${
+          typeStruct[prop]
+        }' from '${path.join(".")}'. Found at '${formattedPath}'.`,
       };
     }
     if (typeof typeStruct[prop] == "object") {

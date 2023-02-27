@@ -20,8 +20,7 @@ import {
   /** MOVE */
   validatePluginManifest,
   verifyPluginDependencyCompatability,
-  getDependenciesForManifest,
-  readPluginManifest,
+  getDependenciesForManifest
 } from "../src/plugins";
 import {
   makePluginCreationDirectory,
@@ -29,6 +28,7 @@ import {
   makeTestPlugin,
 } from "./helpers/fsmocks";
 import { SIMPLE_PLUGIN_MANIFEST } from "./helpers/pluginmocks";
+import { DataSource, makeMemoizedDataSource } from "../src/datasource";
 
 const realFS = jest.requireActual("fs");
 const SNAPSHOT_1_WITH_REACT = realFS.readFileSync(
@@ -40,10 +40,12 @@ jest.mock("fs");
 jest.mock("fs/promises");
 
 describe("plugincreator", () => {
+  let datasource: DataSource;
   beforeEach(async () => {
     fs.mkdirSync(userHome, { recursive: true });
     buildFloroFilestructure();
     await makeSignedInUser();
+    datasource = makeMemoizedDataSource();
   });
 
   afterEach(() => {
@@ -170,13 +172,13 @@ describe("plugincreator", () => {
       };
       makeTestPlugin(PLUGIN_C_MANIFEST, true);
       const bDeps = await getDependenciesForManifest(
-        PLUGIN_B_MANIFEST,
-        readPluginManifest
+        datasource,
+        PLUGIN_B_MANIFEST
       );
       expect(bDeps.deps).toEqual([PLUGIN_A_MANIFEST]);
       const cDeps = await getDependenciesForManifest(
+        datasource,
         PLUGIN_C_MANIFEST,
-        readPluginManifest
       );
       expect(cDeps.deps).toEqual([PLUGIN_B_MANIFEST, PLUGIN_A_MANIFEST]);
     });
@@ -255,8 +257,8 @@ describe("plugincreator", () => {
       makeTestPlugin(PLUGIN_C_MANIFEST);
 
       const depListResponse = await getDependenciesForManifest(
-        PLUGIN_C_MANIFEST,
-        readPluginManifest
+        datasource,
+        PLUGIN_C_MANIFEST
       );
       expect(depListResponse).toEqual({
         status: "error",
@@ -338,12 +340,12 @@ describe("plugincreator", () => {
       makeTestPlugin(PLUGIN_C_MANIFEST);
 
       const depListResponse = await getDependenciesForManifest(
-        PLUGIN_C_MANIFEST,
-        readPluginManifest
+        datasource,
+        PLUGIN_C_MANIFEST
       );
       const validationResponse = await verifyPluginDependencyCompatability(
-        depListResponse.deps,
-        readPluginManifest
+        datasource,
+        depListResponse.deps
       );
       expect(validationResponse.isValid).toEqual(true);
     });
@@ -418,12 +420,12 @@ describe("plugincreator", () => {
       makeTestPlugin(PLUGIN_C_MANIFEST);
 
       const depListResponse = await getDependenciesForManifest(
-        PLUGIN_C_MANIFEST,
-        readPluginManifest
+        datasource,
+        PLUGIN_C_MANIFEST
       );
       const validationResponse = await verifyPluginDependencyCompatability(
-        depListResponse.deps,
-        readPluginManifest
+        datasource,
+        depListResponse.deps
       );
       expect(validationResponse).toEqual({
         isValid: false,
@@ -509,8 +511,8 @@ describe("plugincreator", () => {
       makeTestPlugin(PLUGIN_C_MANIFEST);
 
       const depListResponse = await getSchemaMapForCreationManifest(
-        PLUGIN_C_MANIFEST,
-        readPluginManifest
+        datasource,
+        PLUGIN_C_MANIFEST
       );
       expect(depListResponse).toEqual({
         A: PLUGIN_A_1_MANIFEST,
@@ -561,8 +563,8 @@ describe("plugincreator", () => {
       makeTestPlugin(PLUGIN_A_MANIFEST);
 
       const result = await validatePluginManifest(
-        PLUGIN_A_MANIFEST,
-        readPluginManifest
+        datasource,
+        PLUGIN_A_MANIFEST
       );
       expect(result).toEqual({
         status: "error",
@@ -631,8 +633,8 @@ describe("plugincreator", () => {
       makeTestPlugin(PLUGIN_B_MANIFEST);
 
       const result = await validatePluginManifest(
-        PLUGIN_B_MANIFEST,
-        readPluginManifest
+        datasource,
+        PLUGIN_B_MANIFEST
       );
       expect(result).toEqual({ status: "ok" });
     });
@@ -663,8 +665,8 @@ describe("plugincreator", () => {
       };
       makeTestPlugin(PLUGIN_A_MANIFEST);
       const result = await validatePluginManifest(
-        PLUGIN_A_MANIFEST,
-        readPluginManifest
+        datasource,
+        PLUGIN_A_MANIFEST
       );
       expect(result).toEqual({
         status: "error",
@@ -697,8 +699,8 @@ describe("plugincreator", () => {
       };
       makeTestPlugin(PLUGIN_A_MANIFEST);
       const result = await validatePluginManifest(
-        PLUGIN_A_MANIFEST,
-        readPluginManifest
+        datasource,
+        PLUGIN_A_MANIFEST
       );
       expect(result).toEqual({
         status: "error",
@@ -737,8 +739,8 @@ describe("plugincreator", () => {
       };
       makeTestPlugin(PLUGIN_A_MANIFEST);
       const result = await validatePluginManifest(
-        PLUGIN_A_MANIFEST,
-        readPluginManifest
+        datasource,
+        PLUGIN_A_MANIFEST
       );
       expect(result).toEqual({
         status: "error",
@@ -772,8 +774,8 @@ describe("plugincreator", () => {
       };
       makeTestPlugin(PLUGIN_A_MANIFEST);
       const result = await validatePluginManifest(
-        PLUGIN_A_MANIFEST,
-        readPluginManifest
+        datasource,
+        PLUGIN_A_MANIFEST
       );
       expect(result).toEqual({
         status: "error",
@@ -801,8 +803,8 @@ describe("plugincreator", () => {
       };
       makeTestPlugin(PLUGIN_A_MANIFEST);
       const result = await validatePluginManifest(
-        PLUGIN_A_MANIFEST,
-        readPluginManifest
+        datasource,
+        PLUGIN_A_MANIFEST
       );
       expect(result).toEqual({
         status: "error",
@@ -834,8 +836,8 @@ describe("plugincreator", () => {
       };
       makeTestPlugin(PLUGIN_A_MANIFEST);
       const result = await validatePluginManifest(
-        PLUGIN_A_MANIFEST,
-        readPluginManifest
+        datasource,
+        PLUGIN_A_MANIFEST
       );
       expect(result).toEqual({
         status: "error",
@@ -876,8 +878,8 @@ describe("plugincreator", () => {
       };
       makeTestPlugin(PLUGIN_A_MANIFEST);
       const result = await validatePluginManifest(
-        PLUGIN_A_MANIFEST,
-        readPluginManifest
+        datasource,
+        PLUGIN_A_MANIFEST
       );
       expect(result).toEqual({
         status: "error",
@@ -908,8 +910,8 @@ describe("plugincreator", () => {
       };
       makeTestPlugin(PLUGIN_A_MANIFEST);
       const result = await validatePluginManifest(
-        PLUGIN_A_MANIFEST,
-        readPluginManifest
+        datasource,
+        PLUGIN_A_MANIFEST
       );
       expect(result).toEqual({
         status: "error",
@@ -941,8 +943,8 @@ describe("plugincreator", () => {
       };
       makeTestPlugin(PLUGIN_A_MANIFEST);
       const result = await validatePluginManifest(
-        PLUGIN_A_MANIFEST,
-        readPluginManifest
+        datasource,
+        PLUGIN_A_MANIFEST
       );
       expect(result).toEqual({
         status: "error",
@@ -1026,11 +1028,10 @@ describe("plugincreator", () => {
         },
       };
       makeTestPlugin(PLUGIN_B_MANIFEST);
-
       const code = await generateTypeScriptAPI(
+        datasource,
         PLUGIN_B_MANIFEST,
-        true,
-        readPluginManifest
+        true
       );
       expect(code).toEqual(SNAPSHOT_1_WITH_REACT);
     });

@@ -26,7 +26,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.renderCommitState = exports.canAutoMergeOnTopCurrentState = exports.getMergedCommitState = exports.canAutoMergeCommitStates = exports.getMergeCommitStates = exports.renderDiffList = exports.getCommitStateDiffList = exports.uniqueKV = exports.mergeTokenStores = exports.detokenizeStore = exports.tokenizeCommitState = exports.convertStateStoreToKV = exports.buildStateStore = exports.getPluginsToRunUpdatesOn = exports.updateCurrentBranch = exports.updateCurrentWithNewBranch = exports.updateCurrentWithSHA = exports.updateCurrentCommitSHA = exports.saveDiffListToCurrent = exports.getProposedStateFromDiffListOnCurrent = exports.getRepoState = exports.getUnstagedCommitState = exports.getCurrentBranch = exports.applyStateDiffToCommitState = exports.getCommitState = exports.getDivergenceOriginSha = exports.getBaseDivergenceSha = exports.getHistory = exports.buildCommitData = exports.canCommit = exports.diffIsEmpty = exports.getCurrentCommitSha = exports.cloneRepo = exports.getRemovedDeps = exports.getAddedDeps = void 0;
+exports.renderCommitState = exports.canAutoMergeOnTopCurrentState = exports.getMergedCommitState = exports.canAutoMergeCommitStates = exports.getMergeCommitStates = exports.renderDiffList = exports.getCommitStateDiffList = exports.uniqueKV = exports.mergeTokenStores = exports.detokenizeStore = exports.tokenizeCommitState = exports.convertStateStoreToKV = exports.buildStateStore = exports.getPluginsToRunUpdatesOn = exports.updateCurrentBranch = exports.updateCurrentWithNewBranch = exports.updateCurrentWithSHA = exports.updateCurrentCommitSHA = exports.saveDiffListToCurrent = exports.getProposedStateFromDiffListOnCurrent = exports.getRepoState = exports.getUnstagedCommitState = exports.getCurrentBranch = exports.applyStateDiffToCommitState = exports.getCommitState = exports.getDivergenceOriginSha = exports.getBaseDivergenceSha = exports.getHistory = exports.buildCommitData = exports.canCommit = exports.diffIsEmpty = exports.getCurrentCommitSha = exports.cloneRepo = exports.getRemovedDeps = exports.getAddedDeps = exports.getRepos = void 0;
 const axios_1 = __importDefault(require("axios"));
 const fs_1 = __importStar(require("fs"));
 const path_1 = __importDefault(require("path"));
@@ -50,6 +50,13 @@ const EMPTY_COMMIT_DIFF = {
     binaries: { add: {}, remove: {} },
 };
 const EMPTY_COMMIT_DIFF_STRING = JSON.stringify(EMPTY_COMMIT_DIFF);
+const getRepos = async () => {
+    const repoDir = await fs_1.default.promises.readdir(filestructure_1.vReposPath);
+    return repoDir?.filter((repoName) => {
+        return /^[0-9a-fA-F]{8}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{12}$/.test(repoName);
+    });
+};
+exports.getRepos = getRepos;
 const getAddedDeps = (oldPlugins, newPlugins) => {
     const oldPluginMap = (0, plugins_1.pluginListToMap)(oldPlugins);
     const out = [];
@@ -496,7 +503,7 @@ const buildStateStore = async (datasource, state) => {
     const manifests = await (0, plugins_1.getPluginManifests)(state.plugins, datasource.getPluginManifest);
     for (const pluginManifest of manifests) {
         const kv = state?.store?.[pluginManifest.name] ?? [];
-        const schemaMap = await (0, plugins_1.getSchemaMapForManifest)(pluginManifest, datasource.getPluginManifest);
+        const schemaMap = await (0, plugins_1.getSchemaMapForManifest)(datasource, pluginManifest);
         const pluginState = (0, plugins_1.getStateFromKVForPlugin)(schemaMap, kv, pluginManifest.name);
         out[pluginManifest.name] = pluginState;
     }
@@ -507,8 +514,8 @@ const convertStateStoreToKV = async (datasource, state, stateStore) => {
     let out = {};
     const manifests = await (0, plugins_1.getPluginManifests)(state.plugins, datasource.getPluginManifest);
     for (const pluginManifest of manifests) {
-        const schemaMap = await (0, plugins_1.getSchemaMapForManifest)(pluginManifest, datasource.getPluginManifest);
-        const kv = await (0, plugins_1.getKVStateForPlugin)(schemaMap, pluginManifest.name, stateStore, datasource.getPluginManifest);
+        const schemaMap = await (0, plugins_1.getSchemaMapForManifest)(datasource, pluginManifest);
+        const kv = await (0, plugins_1.getKVStateForPlugin)(datasource, schemaMap, pluginManifest.name, stateStore);
         out[pluginManifest.name] = kv;
     }
     return out;
@@ -734,8 +741,8 @@ const getMergedCommitState = async (datasource, commit1, commit2, originCommit, 
         const manifests = await (0, plugins_1.getPluginManifests)(mergeState.plugins, datasource.getPluginManifest);
         const rootManifests = manifests.filter((m) => Object.keys(m.imports).length === 0);
         for (const manifest of rootManifests) {
-            const schemaMap = await (0, plugins_1.getSchemaMapForManifest)(manifest, datasource.getPluginManifest);
-            stateStore = await (0, plugins_1.cascadePluginState)(schemaMap, stateStore, manifest.name, datasource.getPluginManifest);
+            const schemaMap = await (0, plugins_1.getSchemaMapForManifest)(datasource, manifest);
+            stateStore = await (0, plugins_1.cascadePluginState)(datasource, schemaMap, stateStore, manifest.name);
         }
         mergeState.store = await (0, exports.convertStateStoreToKV)(datasource, mergeState, stateStore);
         return mergeState;

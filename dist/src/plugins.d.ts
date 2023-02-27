@@ -1,4 +1,5 @@
 import { DiffElement } from "./versioncontrol";
+import { DataSource } from "./datasource";
 export interface PluginElement {
     key: string;
     value: string;
@@ -38,15 +39,12 @@ export interface Manifest {
     types: TypeStruct;
     store: TypeStruct;
 }
-export declare const readDevPluginManifest: (pluginName: string, pluginVersion: string) => Promise<Manifest | null>;
-export declare const downloadPlugin: (pluginName: string, pluginVersion: string) => Promise<Manifest | null>;
-export declare const readPluginManifest: (pluginName: string, pluginValue: string) => Promise<Manifest | null>;
-export declare const pluginManifestsAreCompatibleForUpdate: (oldManifest: Manifest, newManifest: Manifest, pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>) => Promise<boolean | null>;
-export declare const schemaMapsAreCompatible: (oldSchemaMap: {
+export declare const pluginManifestsAreCompatibleForUpdate: (datasource: DataSource, oldManifest: Manifest, newManifest: Manifest) => Promise<boolean | null>;
+export declare const schemaMapsAreCompatible: (datasource: DataSource, oldSchemaMap: {
     [key: string]: Manifest;
 }, newSchemaMap: {
     [key: string]: Manifest;
-}, pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>) => Promise<boolean | null>;
+}) => Promise<boolean | null>;
 export declare const topSortManifests: (manifests: Array<Manifest>) => Manifest[];
 export declare const getPluginManifests: (pluginList: Array<PluginElement>, pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>) => Promise<Array<Manifest>>;
 export declare const getManifestMapFromManifestList: (manifests: Array<Manifest>) => {};
@@ -67,8 +65,8 @@ export interface DepFetch {
     reason?: string;
     deps?: Array<Manifest>;
 }
-export declare const getDependenciesForManifest: (manifest: Manifest, pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>, seen?: {}) => Promise<DepFetch>;
-export declare const getUpstreamDependencyManifests: (manifest: Manifest, pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>, memo?: {
+export declare const getDependenciesForManifest: (datasource: DataSource, manifest: Manifest, seen?: {}) => Promise<DepFetch>;
+export declare const getUpstreamDependencyManifests: (datasource: DataSource, manifest: Manifest, memo?: {
     [key: string]: Manifest[];
 }) => Promise<Array<Manifest> | null>;
 export declare const coalesceDependencyVersions: (deps: Array<Manifest>) => {
@@ -83,8 +81,8 @@ export interface VerifyDepsResult {
     lastVersion?: string;
     nextVersion?: string;
 }
-export declare const verifyPluginDependencyCompatability: (deps: Array<Manifest>, pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>) => Promise<VerifyDepsResult>;
-export declare const getSchemaMapForManifest: (manifest: Manifest, pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>) => Promise<{
+export declare const verifyPluginDependencyCompatability: (datasource: DataSource, deps: Array<Manifest>) => Promise<VerifyDepsResult>;
+export declare const getSchemaMapForManifest: (datasource: DataSource, manifest: Manifest) => Promise<{
     [key: string]: Manifest;
 }>;
 export declare const schemaManifestHasInvalidSyntax: (schema: Manifest) => SyntaxValidation;
@@ -94,15 +92,15 @@ export interface SyntaxValidation {
 }
 export declare const schemaHasInvalidTypeSytax: (schema: Manifest, struct: TypeStruct, visited?: {}) => SyntaxValidation;
 export declare const containsCyclicTypes: (schema: Manifest, struct: TypeStruct, visited?: {}) => boolean;
-export declare const validatePluginManifest: (manifest: Manifest, pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>) => Promise<SchemaValidationResponse | {
+export declare const validatePluginManifest: (datasource: DataSource, manifest: Manifest) => Promise<SchemaValidationResponse | {
     status: string;
     message: any;
 }>;
-export declare const defaultVoidedState: (schemaMap: {
+export declare const defaultVoidedState: (datasource: DataSource, schemaMap: {
     [key: string]: Manifest;
 }, stateMap: {
     [key: string]: object;
-}, pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>) => Promise<any[]>;
+}) => Promise<any[]>;
 export declare const writePathString: (pathParts: Array<DiffElement | string>) => string;
 export declare const decodeSchemaPath: (pathString: string) => Array<DiffElement | string>;
 export declare const getStateId: (schema: TypeStruct, state: object) => string;
@@ -123,16 +121,16 @@ export declare const getExpandedTypesForPlugin: (schemaMap: {
 export declare const getRootSchemaForPlugin: (schemaMap: {
     [key: string]: Manifest;
 }, pluginName: string) => TypeStruct;
-export declare const getRootSchemaMap: (schemaMap: {
+export declare const getRootSchemaMap: (datasource: DataSource, schemaMap: {
     [key: string]: Manifest;
-}, pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>) => Promise<{
+}) => Promise<{
     [key: string]: TypeStruct;
 }>;
-export declare const getKVStateForPlugin: (schema: {
+export declare const getKVStateForPlugin: (datasource: DataSource, schema: {
     [key: string]: Manifest;
 }, pluginName: string, stateMap: {
     [key: string]: object;
-}, pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>) => Promise<Array<DiffElement>>;
+}) => Promise<Array<DiffElement>>;
 export declare const getUpstreamDepsInSchemaMap: (schemaMap: {
     [key: string]: Manifest;
 }, pluginName: string) => Array<string>;
@@ -145,11 +143,11 @@ export declare const getDownstreamDepsInSchemaMap: (schemaMap: {
  * cascading is heavy but infrequent. It only needs to be
  * called when updating state. Not called when applying diffs
  */
-export declare const cascadePluginState: (schemaMap: {
+export declare const cascadePluginState: (datasource: DataSource, schemaMap: {
     [key: string]: Manifest;
 }, stateMap: {
     [key: string]: object;
-}, pluginName: string, pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>, rootSchemaMap?: {
+}, pluginName: string, rootSchemaMap?: {
     [key: string]: TypeStruct;
 }, memo?: {
     [key: string]: {
@@ -158,17 +156,17 @@ export declare const cascadePluginState: (schemaMap: {
 }) => Promise<{
     [key: string]: object;
 }>;
-export declare const validatePluginState: (schemaMap: {
+export declare const validatePluginState: (datasource: DataSource, schemaMap: {
     [key: string]: Manifest;
 }, stateMap: {
     [key: string]: object;
-}, pluginName: string, pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>) => Promise<boolean>;
-export declare const pluginManifestIsSubsetOfManifest: (currentSchemaMap: {
+}, pluginName: string) => Promise<boolean>;
+export declare const pluginManifestIsSubsetOfManifest: (datasource: DataSource, currentSchemaMap: {
     [key: string]: Manifest;
 }, nextSchemaMap: {
     [key: string]: Manifest;
-}, pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>) => Promise<boolean>;
-export declare const isTopologicalSubset: (oldSchemaMap: {
+}) => Promise<boolean>;
+export declare const isTopologicalSubset: (datasource: DataSource, oldSchemaMap: {
     [key: string]: Manifest;
 }, oldStateMap: {
     [key: string]: object;
@@ -176,7 +174,7 @@ export declare const isTopologicalSubset: (oldSchemaMap: {
     [key: string]: Manifest;
 }, newStateMap: {
     [key: string]: object;
-}, pluginName: string, pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>) => Promise<boolean>;
+}, pluginName: string) => Promise<boolean>;
 export declare const isTopologicalSubsetValid: (oldSchemaMap: {
     [key: string]: Manifest;
 }, oldStateMap: {

@@ -6,7 +6,6 @@ import {
   existsAsync,
   getPluginsJsonAsync,
   getRemoteHostAsync,
-  getUserSession,
   getUserSessionAsync,
   vDEVPath,
   vTMPPath,
@@ -28,7 +27,6 @@ import {
   verifyPluginDependencyCompatability,
   getUpstreamDependencyManifests,
   pluginManifestsAreCompatibleForUpdate,
-  readPluginManifest,
   validatePluginManifest,
   TypeStruct,
 } from "./plugins";
@@ -38,6 +36,7 @@ import { exec } from "child_process";
 import axios from "axios";
 import FormData from "form-data";
 import inquirer from "inquirer";
+import { DataSource, makeMemoizedDataSource } from "./datasource";
 
 axios.defaults.validateStatus = function () {
   return true;
@@ -197,12 +196,13 @@ export const validateLocalManifest = async (cwd: string) => {
     return false;
   }
   try {
+    const datasource = makeMemoizedDataSource();
     const floroManifestPath = path.join(cwd, "floro", "floro.manifest.json");
     const floroManifestString = await fs.promises.readFile(floroManifestPath);
     const manifest = JSON.parse(floroManifestString.toString());
     const result = await validatePluginManifest(
-      manifest as Manifest,
-      readPluginManifest
+      datasource,
+      manifest as Manifest
     );
     if (result.status == "error") {
       console.log(result.message);
@@ -226,11 +226,12 @@ export const getLocalManifestReadFunction = async (cwd: string) => {
     const floroManifestPath = path.join(cwd, "floro", "floro.manifest.json");
     const floroManifestString = await fs.promises.readFile(floroManifestPath);
     const manifest = JSON.parse(floroManifestString.toString());
+    const datasource = makeMemoizedDataSource();
     return async (pluginName, pluginVersion) => {
       if (pluginName == manifest.name && pluginVersion == manifest.version) {
         return manifest;
       }
-      return await readPluginManifest(pluginName, pluginVersion);
+      return await datasource.getPluginManifest(pluginName, pluginVersion);
     };
   } catch (e) {
     return null;
@@ -238,9 +239,9 @@ export const getLocalManifestReadFunction = async (cwd: string) => {
 };
 export const inspectLocalManifest = async (
   cwd: string,
-  expand = false,
-  pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>
+  expand = false
 ): Promise<TypeStruct|{[key: string]: Manifest}> => {
+  const datasource = makeMemoizedDataSource();
   const isPluginDir = await checkDirectoryIsPluginWorkingDirectory(cwd);
   if (!isPluginDir) {
     console.log(
@@ -253,11 +254,11 @@ export const inspectLocalManifest = async (
     const floroManifestString = await fs.promises.readFile(floroManifestPath);
     const manifest = JSON.parse(floroManifestString.toString());
     const schemaMap = await getSchemaMapForCreationManifest(
+      datasource,
       manifest,
-      pluginFetch
     );
     if (expand) {
-      const rootSchemaMap = await getRootSchemaMap(schemaMap, pluginFetch);
+      const rootSchemaMap = await getRootSchemaMap(datasource, schemaMap);
       return rootSchemaMap;
     }
     return schemaMap;
@@ -385,10 +386,11 @@ export const installDependency = async (
   if (!depManifest) {
     return null;
   }
-  const dependencyManifests = await getUpstreamDependencyManifests(
-    depManifest,
-    async (pluginName, version) => {
-      const localCopy = await pluginFetch(pluginName, version);
+
+  const datasource = makeMemoizedDataSource();
+  const memoizedDataSource = makeMemoizedDataSource({
+    getPluginManifest: async (pluginName, pluginVersion) => {
+      const localCopy = await datasource.getPluginManifest(pluginName, pluginVersion);
       if (localCopy) {
         return localCopy;
       }
@@ -404,7 +406,12 @@ export const installDependency = async (
         return request.data;
       }
       return null;
-    }
+
+    },
+  });
+  const dependencyManifests = await getUpstreamDependencyManifests(
+    memoizedDataSource,
+    depManifest
   );
   if (!dependencyManifests) {
     console.log(
@@ -418,9 +425,9 @@ export const installDependency = async (
   }
 
   const areCompatible = await pluginManifestsAreCompatibleForUpdate(
+    memoizedDataSource,
     manifest,
-    proposedManifest,
-    readPluginManifest
+    proposedManifest
   );
   if (!areCompatible) {
     console.log(
@@ -609,17 +616,17 @@ const coalesceDependencyVersions = (
 };
 
 export const getSchemaMapForCreationManifest = async (
+  datasource: DataSource,
   manifest: Manifest,
-  pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>
 ): Promise<{ [key: string]: Manifest } | null> => {
   // switch to getUpstreamDependencies
-  const depResult = await getDependenciesForManifest(manifest, pluginFetch);
+  const depResult = await getDependenciesForManifest(datasource, manifest);
   if (depResult.status == "error") {
     return null;
   }
   const areValid = await verifyPluginDependencyCompatability(
-    depResult.deps,
-    pluginFetch
+    datasource,
+    depResult.deps
   );
   if (!areValid.isValid) {
     return null;
@@ -638,8 +645,8 @@ export const getSchemaMapForCreationManifest = async (
 export const generateLocalTypescriptAPI = async (
   cwd: string,
   useReact = true,
-  pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>
 ): Promise<boolean> => {
+  const datasource = makeMemoizedDataSource();
   const isPluginDir = await checkDirectoryIsPluginWorkingDirectory(cwd);
   if (!isPluginDir) {
     console.log(
@@ -651,7 +658,7 @@ export const generateLocalTypescriptAPI = async (
     const floroManifestPath = path.join(cwd, "floro", "floro.manifest.json");
     const floroManifestString = await fs.promises.readFile(floroManifestPath);
     const manifest = JSON.parse(floroManifestString.toString());
-    const code = await generateTypeScriptAPI(manifest, useReact, pluginFetch);
+    const code = await generateTypeScriptAPI(datasource, manifest, useReact);
     if (code) {
       const writeApiPath = path.join(cwd, "src", "floro-schema-api.ts");
       if (await existsAsync(writeApiPath)) {
@@ -667,15 +674,16 @@ export const generateLocalTypescriptAPI = async (
 };
 
 export const generateTypeScriptAPI = async (
+  datasource: DataSource,
   manifest: Manifest,
-  useReact = true,
-  pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>
+  useReact = true
 ): Promise<string> => {
+
   const schemaMap = await getSchemaMapForCreationManifest(
+    datasource,
     manifest,
-    pluginFetch
   );
-  const rootSchemaMap = await getRootSchemaMap(schemaMap, pluginFetch);
+  const rootSchemaMap = await getRootSchemaMap(datasource, schemaMap);
   const referenceKeys = collectKeyRefs(rootSchemaMap);
   const expandedTypes = getExpandedTypesForPlugin(schemaMap, manifest.name);
   const referenceReturnTypeMap = buildPointerReturnTypeMap(

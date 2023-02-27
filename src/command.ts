@@ -3,21 +3,15 @@
 import pm2 from "pm2";
 import {
   buildFloroFilestructure,
-  reset,
-  userHome,
-  vConfigCORSPath,
-  vConfigPluginsPath,
-  vConfigRemotePath,
+  reset
 } from "./filestructure";
 import { startDaemon, killDaemon } from "./daemon";
 import { logout, promptEmail } from "./login";
 import {
   buildFloroTemplate,
-  canExportPlugin,
   checkDirectoryIsPluginWorkingDirectory,
   exportPluginToDev,
   generateLocalTypescriptAPI,
-  generateTypeScriptAPI,
   getLocalManifestReadFunction,
   inspectLocalManifest,
   installDependency,
@@ -294,7 +288,7 @@ yargs
           handler: async (options) => {
             const readFunction = await getLocalManifestReadFunction(process.cwd());
             if (readFunction != null) {
-              const out = await inspectLocalManifest(process.cwd(), options?.expanded ?? false, readFunction);
+              const out = await inspectLocalManifest(process.cwd(), options?.expanded ?? false);
               if (out) {
                 console.log(
                   render(
@@ -334,7 +328,7 @@ yargs
               );
               return;
             }
-            const apiGenSucceed = await generateLocalTypescriptAPI(process.cwd(), true, readFunction);
+            const apiGenSucceed = await generateLocalTypescriptAPI(process.cwd(), true);
             if (apiGenSucceed) {
               console.log(
                 clc.cyanBright.bgBlack.underline(

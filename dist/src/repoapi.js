@@ -599,7 +599,7 @@ const updatePlugins = async (datasource, repoId, plugins) => {
                 const upstreamManifest = await datasource.getPluginManifest(upstreamDep, addedDepImportsManifestMap[upstreamDep].version);
                 if (newManifestMap[upstreamDep]) {
                     if (newManifestMap[upstreamDep].version != upstreamManifest.version) {
-                        const areCompatible = await (0, plugins_1.pluginManifestsAreCompatibleForUpdate)(upstreamManifest, newManifestMap[upstreamDep], datasource.getPluginManifest);
+                        const areCompatible = await (0, plugins_1.pluginManifestsAreCompatibleForUpdate)(datasource, upstreamManifest, newManifestMap[upstreamDep]);
                         if (!areCompatible) {
                             return null;
                         }
@@ -625,7 +625,7 @@ const updatePlugins = async (datasource, repoId, plugins) => {
                 if (upstreamManifest.version != updatedManifestMap[upstreamDep].version) {
                     // we need to know that the depended upon version is subset of the version
                     // being used by the app to ensure read safety
-                    const areCompatible = await (0, plugins_1.pluginManifestsAreCompatibleForUpdate)(upstreamManifest, updatedManifestMap[upstreamDep], datasource.getPluginManifest);
+                    const areCompatible = await (0, plugins_1.pluginManifestsAreCompatibleForUpdate)(datasource, upstreamManifest, updatedManifestMap[upstreamDep]);
                     if (!areCompatible) {
                         return null;
                     }
@@ -659,8 +659,8 @@ const updatePlugins = async (datasource, repoId, plugins) => {
         let stateStore = await (0, repo_1.buildStateStore)(datasource, proposedCommitState);
         const rootDependencies = updatedManifests.filter((m) => Object.keys(m.imports).length == 0);
         for (const rootManifest of rootDependencies) {
-            const schemaMap = await (0, plugins_1.getSchemaMapForManifest)(rootManifest, datasource.getPluginManifest);
-            stateStore = await (0, plugins_1.cascadePluginState)(schemaMap, stateStore, rootManifest.name, datasource.getPluginManifest);
+            const schemaMap = await (0, plugins_1.getSchemaMapForManifest)(datasource, rootManifest);
+            stateStore = await (0, plugins_1.cascadePluginState)(datasource, schemaMap, stateStore, rootManifest.name);
         }
         const kvState = await (0, repo_1.convertStateStoreToKV)(datasource, proposedCommitState, stateStore);
         const lexicallyOrderedPlugins = updatedPlugins.sort((a, b) => {
@@ -711,10 +711,10 @@ const updatePluginState = async (datasource, repoId, pluginName, updatedState) =
         }
         const manifests = await (0, plugins_1.getPluginManifests)(current.plugins, datasource.getPluginManifest);
         const manifest = manifests.find((p) => p.name == pluginName);
-        const schemaMap = await (0, plugins_1.getSchemaMapForManifest)(manifest, datasource.getPluginManifest);
+        const schemaMap = await (0, plugins_1.getSchemaMapForManifest)(datasource, manifest);
         let stateStore = await (0, repo_1.buildStateStore)(datasource, current);
         stateStore[pluginName] = updatedState;
-        stateStore = await (0, plugins_1.cascadePluginState)(schemaMap, stateStore, pluginName, datasource.getPluginManifest);
+        stateStore = await (0, plugins_1.cascadePluginState)(datasource, schemaMap, stateStore, pluginName);
         const kvState = await (0, repo_1.convertStateStoreToKV)(datasource, current, stateStore);
         const diffList = [];
         for (const pluginName in schemaMap) {

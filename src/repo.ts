@@ -123,6 +123,16 @@ const EMPTY_COMMIT_DIFF: StateDiff = {
 
 const EMPTY_COMMIT_DIFF_STRING = JSON.stringify(EMPTY_COMMIT_DIFF);
 
+
+export const getRepos = async (): Promise<string[]> => {
+  const repoDir = await fs.promises.readdir(vReposPath);
+  return repoDir?.filter((repoName) => {
+    return /^[0-9a-fA-F]{8}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{12}$/.test(
+      repoName
+    );
+  });
+};
+
 export const getAddedDeps = (
   oldPlugins: Array<PluginElement>,
   newPlugins: Array<PluginElement>
@@ -685,8 +695,8 @@ export const buildStateStore = async (
   for (const pluginManifest of manifests) {
     const kv = state?.store?.[pluginManifest.name] ?? [];
     const schemaMap = await getSchemaMapForManifest(
-      pluginManifest,
-      datasource.getPluginManifest
+      datasource,
+      pluginManifest
     );
     const pluginState = getStateFromKVForPlugin(
       schemaMap,
@@ -710,14 +720,14 @@ export const convertStateStoreToKV = async (
   );
   for (const pluginManifest of manifests) {
     const schemaMap = await getSchemaMapForManifest(
+      datasource,
       pluginManifest,
-      datasource.getPluginManifest
     );
     const kv = await getKVStateForPlugin(
+      datasource,
       schemaMap,
       pluginManifest.name,
-      stateStore,
-      datasource.getPluginManifest
+      stateStore
     );
     out[pluginManifest.name] = kv;
   }
@@ -1056,14 +1066,14 @@ export const getMergedCommitState = async (
 
     for (const manifest of rootManifests) {
       const schemaMap = await getSchemaMapForManifest(
+        datasource,
         manifest,
-        datasource.getPluginManifest
       );
       stateStore = await cascadePluginState(
+        datasource,
         schemaMap,
         stateStore,
-        manifest.name,
-        datasource.getPluginManifest
+        manifest.name
       );
     }
 

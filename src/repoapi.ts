@@ -744,9 +744,9 @@ export const updatePlugins = async (
         if (newManifestMap[upstreamDep]) {
           if (newManifestMap[upstreamDep].version != upstreamManifest.version) {
             const areCompatible = await pluginManifestsAreCompatibleForUpdate(
+              datasource,
               upstreamManifest,
-              newManifestMap[upstreamDep],
-              datasource.getPluginManifest
+              newManifestMap[upstreamDep]
             );
             if (!areCompatible) {
               return null;
@@ -785,9 +785,9 @@ export const updatePlugins = async (
           // we need to know that the depended upon version is subset of the version
           // being used by the app to ensure read safety
           const areCompatible = await pluginManifestsAreCompatibleForUpdate(
+            datasource,
             upstreamManifest,
-            updatedManifestMap[upstreamDep],
-            datasource.getPluginManifest
+            updatedManifestMap[upstreamDep]
           );
           if (!areCompatible) {
             return null;
@@ -839,14 +839,14 @@ export const updatePlugins = async (
     );
     for (const rootManifest of rootDependencies) {
       const schemaMap = await getSchemaMapForManifest(
-        rootManifest,
-        datasource.getPluginManifest
+        datasource,
+        rootManifest
       );
       stateStore = await cascadePluginState(
+        datasource,
         schemaMap,
         stateStore,
-        rootManifest.name,
-        datasource.getPluginManifest
+        rootManifest.name
       );
     }
     const kvState = await convertStateStoreToKV(
@@ -916,16 +916,16 @@ export const updatePluginState = async (
 
     const manifest = manifests.find((p) => p.name == pluginName);
     const schemaMap = await getSchemaMapForManifest(
-      manifest,
-      datasource.getPluginManifest
+      datasource,
+      manifest
     );
     let stateStore = await buildStateStore(datasource, current);
     stateStore[pluginName] = updatedState;
     stateStore = await cascadePluginState(
+      datasource,
       schemaMap,
       stateStore,
-      pluginName,
-      datasource.getPluginManifest
+      pluginName
     );
 
     const kvState = await convertStateStoreToKV(

@@ -1,19 +1,14 @@
 import { fs, vol } from "memfs";
 import { makeMemoizedDataSource } from "../src/datasource";
 import { buildFloroFilestructure, userHome } from "../src/filestructure";
-import { Manifest, PluginElement, readPluginManifest } from "../src/plugins";
-import { buildStateStore, getCurrentBranch, getMergedCommitState, getRepoState, updateCurrentWithNewBranch } from "../src/repo";
+import { Manifest, PluginElement } from "../src/plugins";
+import { getHistory, getRepoState } from "../src/repo";
 import {
-  checkoutBranch,
   checkoutSha,
   mergeCommit,
-  readBranchHistory,
   readCommitState,
-  readCurrentHistory,
   readCurrentState,
-  readRepoCommit,
   readRepoDescription,
-  readRepoLicenses,
   switchRepoBranch,
   updatePlugins,
   updatePluginState,
@@ -21,7 +16,11 @@ import {
   writeRepoDescription,
   writeRepoLicenses,
 } from "../src/repoapi";
-import { createBlankRepo, makeSignedInUser, makeTestPlugin } from "./helpers/fsmocks";
+import {
+  createBlankRepo,
+  makeSignedInUser,
+  makeTestPlugin,
+} from "./helpers/fsmocks";
 
 jest.mock("fs");
 jest.mock("fs/promises");
@@ -41,17 +40,27 @@ describe("repoapi", () => {
   describe("description", () => {
     test("updates repo description", async () => {
       const datasource = makeMemoizedDataSource();
-      let description = (await getRepoState(datasource, "abc")).description.join("");
+      let description = (
+        await getRepoState(datasource, "abc")
+      ).description.join("");
       expect(description).toEqual("");
       description = "Initial description.";
-      description = (await writeRepoDescription(datasource, "abc", description)).description.join("");
+      description = (
+        await writeRepoDescription(datasource, "abc", description)
+      ).description.join("");
       expect(description).toEqual("Initial description.");
-      description = (await readCurrentState(datasource, "abc")).description.join("");
+      description = (
+        await readCurrentState(datasource, "abc")
+      ).description.join("");
       expect(description).toEqual("Initial description.");
       description = "Initial description. Updated";
-      description = (await writeRepoDescription(datasource, "abc", description)).description.join("");
+      description = (
+        await writeRepoDescription(datasource, "abc", description)
+      ).description.join("");
       expect(description).toEqual("Initial description. Updated");
-      description = (await readCurrentState(datasource, "abc")).description.join("");
+      description = (
+        await readCurrentState(datasource, "abc")
+      ).description.join("");
       expect(description).toEqual("Initial description. Updated");
     });
   });
@@ -71,7 +80,8 @@ describe("repoapi", () => {
           value: "MIT License",
         },
       ];
-      licenses = (await writeRepoLicenses(datasource, "abc", licenses)).licenses;
+      licenses = (await writeRepoLicenses(datasource, "abc", licenses))
+        .licenses;
       expect(licenses).toEqual([
         {
           key: "gnu_general_public_3",
@@ -99,7 +109,8 @@ describe("repoapi", () => {
           value: "MIT License",
         },
       ];
-      licenses = (await writeRepoLicenses(datasource, "abc", licenses)).licenses;
+      licenses = (await writeRepoLicenses(datasource, "abc", licenses))
+        .licenses;
       expect(licenses).toEqual([
         {
           key: "mit",
@@ -149,7 +160,7 @@ describe("repoapi", () => {
         displayName: "B",
         icon: "",
         imports: {
-          "A": "1.0.0"
+          A: "1.0.0",
         },
         types: {},
         store: {
@@ -163,16 +174,16 @@ describe("repoapi", () => {
               aRef: {
                 type: "ref<$(A).store.values>",
               },
-            }
-          }
+            },
+          },
         },
       };
       makeTestPlugin(PLUGIN_B_MANIFEST);
       let plugins: PluginElement[] = [
         {
           key: "B",
-          value: "0.0.0"
-        }
+          value: "0.0.0",
+        },
       ];
       const result = await updatePlugins(datasource, "abc", plugins);
       expect(result).toEqual({
@@ -216,8 +227,8 @@ describe("repoapi", () => {
               oldProp: {
                 type: "string",
               },
-            }
-          }
+            },
+          },
         },
       };
       makeTestPlugin(PLUGIN_A_0_MANIFEST);
@@ -240,8 +251,8 @@ describe("repoapi", () => {
               replacementProp: {
                 type: "int",
               },
-            }
-          }
+            },
+          },
         },
       };
       makeTestPlugin(PLUGIN_A_1_MANIFEST);
@@ -252,7 +263,7 @@ describe("repoapi", () => {
         displayName: "B",
         icon: "",
         imports: {
-          "A": "0.0.0"
+          A: "0.0.0",
         },
         types: {},
         store: {
@@ -266,20 +277,20 @@ describe("repoapi", () => {
               aRef: {
                 type: "ref<$(A).aSet.values>",
               },
-            }
-          }
+            },
+          },
         },
       };
       makeTestPlugin(PLUGIN_B_MANIFEST);
       let plugins: PluginElement[] = [
         {
           key: "A",
-          value: "1.0.0"
+          value: "1.0.0",
         },
         {
           key: "B",
-          value: "0.0.0"
-        }
+          value: "0.0.0",
+        },
       ];
       const result = await updatePlugins(datasource, "abc", plugins);
       expect(result).toEqual(null);
@@ -307,8 +318,8 @@ describe("repoapi", () => {
               someProp: {
                 type: "int",
               },
-            }
-          }
+            },
+          },
         },
       };
       makeTestPlugin(PLUGIN_A_0_MANIFEST);
@@ -327,16 +338,11 @@ describe("repoapi", () => {
       let plugins: PluginElement[] = [
         {
           key: "A",
-          value: "0.0.0"
+          value: "0.0.0",
         },
       ];
       await updatePlugins(datasource, "abc", plugins);
-      const result = await updatePluginState(
-        datasource,
-        "abc",
-        "A",
-        state
-      );
+      const result = await updatePluginState(datasource, "abc", "A", state);
       expect(result).toEqual({
         description: [],
         licenses: [],
@@ -371,13 +377,14 @@ describe("repoapi", () => {
       let description = (await readRepoDescription(datasource, "abc")).join("");
       expect(description).toEqual("");
       const descriptionA = "Initial description.";
-      await writeRepoDescription(datasource,"abc", descriptionA);
+      await writeRepoDescription(datasource, "abc", descriptionA);
       const commitA = await writeRepoCommit(datasource, "abc", "A");
-      const descriptionB = "Another description. Initial description. Description 2!";
-      await writeRepoDescription(datasource,"abc", descriptionB);
+      const descriptionB =
+        "Another description. Initial description. Description 2!";
+      await writeRepoDescription(datasource, "abc", descriptionB);
       const commitB = await writeRepoCommit(datasource, "abc", "B");
-      const readCommitA = await readCommitState(datasource, 'abc', commitA.sha);
-      const readCommitB = await readCommitState(datasource, 'abc', commitB.sha);
+      const readCommitA = await readCommitState(datasource, "abc", commitA.sha);
+      const readCommitB = await readCommitState(datasource, "abc", commitB.sha);
       expect(descriptionA).toEqual(readCommitA.description.join(""));
       expect(descriptionB).toEqual(readCommitB.description.join(""));
     });
@@ -394,11 +401,69 @@ describe("repoapi", () => {
       const commitB = await writeRepoCommit(datasource, "abc", "B");
       expect(commitB).toEqual(null);
     });
+  });
 
+  describe("benchmark", () => {
+    test.only("benchmark commits", async () => {
+      const datasource = makeMemoizedDataSource();
+      const PLUGIN_A_0_MANIFEST: Manifest = {
+        name: "A",
+        version: "0.0.0",
+        displayName: "A",
+        icon: "",
+        imports: {},
+        types: {},
+        store: {
+          aSet: {
+            type: "set",
+            values: {
+              mainKey: {
+                isKey: true,
+                type: "string",
+              },
+              someProp: {
+                value: {
+                  type: "float",
+                },
+              },
+            },
+          },
+        },
+      };
+      makeTestPlugin(PLUGIN_A_0_MANIFEST);
+      let plugins: PluginElement[] = [
+        {
+          key: "A",
+          value: "0.0.0",
+        },
+      ];
+      let lastCommit = null;
+      await updatePlugins(datasource, "abc", plugins);
+      for (let i = 0; i < 200; ++i) {
+        const state = {
+          aSet: [
+          ],
+        };
+        for (let j = 0; j < 10; ++j) {
+          state.aSet.push({
+              mainKey: "key1" + Math.random(),
+              someProp: {
+                value: Math.random(),
+              },
+          })
+        }
+        await updatePluginState(datasource, "abc", "A", state);
+        lastCommit = await writeRepoCommit(datasource, "abc", "commit: " + i);
+      }
+      console.time("RS")
+      const repoState = await getRepoState(datasource, "abc");
+      console.timeEnd("RS")
+      console.log("RS", JSON.stringify(repoState, null, 2))
+      //const history = await getHistory(datasource, "abc", lastCommit.sha)
+    });
   });
 
   describe("merge", () => {
-
     test("creates a new commit if can automerge", async () => {
       const datasource = makeMemoizedDataSource();
       let description = (await readRepoDescription(datasource, "abc")).join("");
@@ -421,10 +486,10 @@ describe("repoapi", () => {
               someProp: {
                 value: {
                   type: "int",
-                }
+                },
               },
-            }
-          }
+            },
+          },
         },
       };
       makeTestPlugin(PLUGIN_A_0_MANIFEST);
@@ -433,25 +498,25 @@ describe("repoapi", () => {
           {
             mainKey: "key1",
             someProp: {
-              value: 1
+              value: 1,
             },
           },
           {
             mainKey: "key2",
             someProp: {
-              value: 2
+              value: 2,
             },
           },
           {
             mainKey: "key3",
             someProp: {
-              value: 3
+              value: 3,
             },
           },
           {
             mainKey: "key4",
             someProp: {
-              value: 4
+              value: 4,
             },
           },
         ],
@@ -459,16 +524,11 @@ describe("repoapi", () => {
       let plugins: PluginElement[] = [
         {
           key: "A",
-          value: "0.0.0"
+          value: "0.0.0",
         },
       ];
       await updatePlugins(datasource, "abc", plugins);
-      await updatePluginState(
-        datasource,
-        "abc",
-        "A",
-        state1
-      );
+      await updatePluginState(datasource, "abc", "A", state1);
       await writeRepoDescription(datasource, "abc", "Testing the waters");
       const commitA = await writeRepoCommit(datasource, "abc", "A");
 
@@ -477,35 +537,30 @@ describe("repoapi", () => {
           {
             mainKey: "key1",
             someProp: {
-              value: 1
+              value: 1,
             },
           },
           {
             mainKey: "key1a",
             someProp: {
-              value: 11
+              value: 11,
             },
           },
           {
             mainKey: "key3",
             someProp: {
-              value: 3
+              value: 3,
             },
           },
           {
             mainKey: "key4",
             someProp: {
-              value: 4
+              value: 4,
             },
           },
         ],
       };
-      await updatePluginState(
-        datasource,
-        "abc",
-        "A",
-        state2
-      );
+      await updatePluginState(datasource, "abc", "A", state2);
       const commitB = await writeRepoCommit(datasource, "abc", "B");
       await checkoutSha(datasource, "abc", commitA.sha);
       await switchRepoBranch(datasource, "abc", "new-branch");
@@ -515,41 +570,36 @@ describe("repoapi", () => {
           {
             mainKey: "key0",
             someProp: {
-              value: 0
+              value: 0,
             },
           },
           {
             mainKey: "key1",
             someProp: {
-              value: 1
+              value: 1,
             },
           },
           {
             mainKey: "key2",
             someProp: {
-              value: 2
+              value: 2,
             },
           },
           {
             mainKey: "key3",
             someProp: {
-              value: 36
+              value: 36,
             },
           },
           {
             mainKey: "key5",
             someProp: {
-              value: 5
+              value: 5,
             },
           },
         ],
       };
-      await updatePluginState(
-        datasource,
-        "abc",
-        "A",
-        state3
-      );
+      await updatePluginState(datasource, "abc", "A", state3);
       const commitC = await writeRepoCommit(datasource, "abc", "C");
 
       const state4 = {
@@ -557,35 +607,30 @@ describe("repoapi", () => {
           {
             mainKey: "key0",
             someProp: {
-              value: 0
+              value: 0,
             },
           },
           {
             mainKey: "key1",
             someProp: {
-              value: 1
+              value: 1,
             },
           },
           {
             mainKey: "key2",
             someProp: {
-              value: 2
+              value: 2,
             },
           },
           {
             mainKey: "key3",
             someProp: {
-              value: 36
+              value: 36,
             },
           },
         ],
       };
-      await updatePluginState(
-        datasource,
-        "abc",
-        "A",
-        state4
-      );
+      await updatePluginState(datasource, "abc", "A", state4);
       const commitD = await writeRepoCommit(datasource, "abc", "D");
 
       const state5 = {
@@ -593,49 +638,39 @@ describe("repoapi", () => {
           {
             mainKey: "key0",
             someProp: {
-              value: 0
+              value: 0,
             },
           },
           {
             mainKey: "key1",
             someProp: {
-              value: 1
+              value: 1,
             },
           },
           {
             mainKey: "key2",
             someProp: {
-              value: 2
+              value: 2,
             },
           },
           {
             mainKey: "key3",
             someProp: {
-              value: 36
+              value: 36,
             },
           },
           {
             mainKey: "key7",
             someProp: {
-              value: 7
+              value: 7,
             },
           },
         ],
       };
-      await updatePluginState(
-        datasource,
-        "abc",
-        "A",
-        state5,
-      );
-      console.log("WTF", commitB.sha)
-      const out = await mergeCommit(
-        datasource,
-        "abc",
-        commitB.sha
-      );
+      await updatePluginState(datasource, "abc", "A", state5);
+      console.log("WTF", commitB.sha);
+      const out = await mergeCommit(datasource, "abc", commitB.sha);
       console.log("OUT", JSON.stringify(out, null, 2));
     });
-
   });
 });

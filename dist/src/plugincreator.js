@@ -15,6 +15,7 @@ const child_process_1 = require("child_process");
 const axios_1 = __importDefault(require("axios"));
 const form_data_1 = __importDefault(require("form-data"));
 const inquirer_1 = __importDefault(require("inquirer"));
+const datasource_1 = require("./datasource");
 axios_1.default.defaults.validateStatus = function () {
     return true;
 };
@@ -149,10 +150,11 @@ const validateLocalManifest = async (cwd) => {
         return false;
     }
     try {
+        const datasource = (0, datasource_1.makeMemoizedDataSource)();
         const floroManifestPath = path_1.default.join(cwd, "floro", "floro.manifest.json");
         const floroManifestString = await fs_1.default.promises.readFile(floroManifestPath);
         const manifest = JSON.parse(floroManifestString.toString());
-        const result = await (0, plugins_1.validatePluginManifest)(manifest, plugins_1.readPluginManifest);
+        const result = await (0, plugins_1.validatePluginManifest)(datasource, manifest);
         if (result.status == "error") {
             console.log(result.message);
             return false;
@@ -174,11 +176,12 @@ const getLocalManifestReadFunction = async (cwd) => {
         const floroManifestPath = path_1.default.join(cwd, "floro", "floro.manifest.json");
         const floroManifestString = await fs_1.default.promises.readFile(floroManifestPath);
         const manifest = JSON.parse(floroManifestString.toString());
+        const datasource = (0, datasource_1.makeMemoizedDataSource)();
         return async (pluginName, pluginVersion) => {
             if (pluginName == manifest.name && pluginVersion == manifest.version) {
                 return manifest;
             }
-            return await (0, plugins_1.readPluginManifest)(pluginName, pluginVersion);
+            return await datasource.getPluginManifest(pluginName, pluginVersion);
         };
     }
     catch (e) {
@@ -186,7 +189,8 @@ const getLocalManifestReadFunction = async (cwd) => {
     }
 };
 exports.getLocalManifestReadFunction = getLocalManifestReadFunction;
-const inspectLocalManifest = async (cwd, expand = false, pluginFetch) => {
+const inspectLocalManifest = async (cwd, expand = false) => {
+    const datasource = (0, datasource_1.makeMemoizedDataSource)();
     const isPluginDir = await (0, exports.checkDirectoryIsPluginWorkingDirectory)(cwd);
     if (!isPluginDir) {
         console.log(cli_color_1.default.redBright.bgBlack.underline("Invalid floro plugin directory"));
@@ -196,9 +200,9 @@ const inspectLocalManifest = async (cwd, expand = false, pluginFetch) => {
         const floroManifestPath = path_1.default.join(cwd, "floro", "floro.manifest.json");
         const floroManifestString = await fs_1.default.promises.readFile(floroManifestPath);
         const manifest = JSON.parse(floroManifestString.toString());
-        const schemaMap = await (0, exports.getSchemaMapForCreationManifest)(manifest, pluginFetch);
+        const schemaMap = await (0, exports.getSchemaMapForCreationManifest)(datasource, manifest);
         if (expand) {
-            const rootSchemaMap = await (0, plugins_1.getRootSchemaMap)(schemaMap, pluginFetch);
+            const rootSchemaMap = await (0, plugins_1.getRootSchemaMap)(datasource, schemaMap);
             return rootSchemaMap;
         }
         return schemaMap;
@@ -311,21 +315,25 @@ const installDependency = async (cwd, depname, pluginFetch) => {
     if (!depManifest) {
         return null;
     }
-    const dependencyManifests = await (0, plugins_1.getUpstreamDependencyManifests)(depManifest, async (pluginName, version) => {
-        const localCopy = await pluginFetch(pluginName, version);
-        if (localCopy) {
-            return localCopy;
-        }
-        const request = await axios_1.default.get(`${remote}/api/plugin/${pluginName}/${version}/manifest`, {
-            headers: {
-                ["session_key"]: session?.clientKey,
-            },
-        });
-        if (request.status == 200) {
-            return request.data;
-        }
-        return null;
+    const datasource = (0, datasource_1.makeMemoizedDataSource)();
+    const memoizedDataSource = (0, datasource_1.makeMemoizedDataSource)({
+        getPluginManifest: async (pluginName, pluginVersion) => {
+            const localCopy = await datasource.getPluginManifest(pluginName, pluginVersion);
+            if (localCopy) {
+                return localCopy;
+            }
+            const request = await axios_1.default.get(`${remote}/api/plugin/${pluginName}/${version}/manifest`, {
+                headers: {
+                    ["session_key"]: session?.clientKey,
+                },
+            });
+            if (request.status == 200) {
+                return request.data;
+            }
+            return null;
+        },
     });
+    const dependencyManifests = await (0, plugins_1.getUpstreamDependencyManifests)(memoizedDataSource, depManifest);
     if (!dependencyManifests) {
         console.log(cli_color_1.default.redBright.bgBlack.underline("Failed to fetch deps for " + depname));
         return null;
@@ -334,7 +342,7 @@ const installDependency = async (cwd, depname, pluginFetch) => {
     for (const upstreamManifest of dependencyManifests) {
         proposedManifest.imports[upstreamManifest.name] = upstreamManifest.version;
     }
-    const areCompatible = await (0, plugins_1.pluginManifestsAreCompatibleForUpdate)(manifest, proposedManifest, plugins_1.readPluginManifest);
+    const areCompatible = await (0, plugins_1.pluginManifestsAreCompatibleForUpdate)(memoizedDataSource, manifest, proposedManifest);
     if (!areCompatible) {
         console.log(cli_color_1.default.redBright.bgBlack.underline(depname +
             " is incompatible with other dependencies. Please specifiy a different version or remove conflicting dependencies."));
@@ -487,13 +495,13 @@ const coalesceDependencyVersions = (deps) => {
         return null;
     }
 };
-const getSchemaMapForCreationManifest = async (manifest, pluginFetch) => {
+const getSchemaMapForCreationManifest = async (datasource, manifest) => {
     // switch to getUpstreamDependencies
-    const depResult = await (0, plugins_1.getDependenciesForManifest)(manifest, pluginFetch);
+    const depResult = await (0, plugins_1.getDependenciesForManifest)(datasource, manifest);
     if (depResult.status == "error") {
         return null;
     }
-    const areValid = await (0, plugins_1.verifyPluginDependencyCompatability)(depResult.deps, pluginFetch);
+    const areValid = await (0, plugins_1.verifyPluginDependencyCompatability)(datasource, depResult.deps);
     if (!areValid.isValid) {
         return null;
     }
@@ -508,7 +516,8 @@ const getSchemaMapForCreationManifest = async (manifest, pluginFetch) => {
     return out;
 };
 exports.getSchemaMapForCreationManifest = getSchemaMapForCreationManifest;
-const generateLocalTypescriptAPI = async (cwd, useReact = true, pluginFetch) => {
+const generateLocalTypescriptAPI = async (cwd, useReact = true) => {
+    const datasource = (0, datasource_1.makeMemoizedDataSource)();
     const isPluginDir = await (0, exports.checkDirectoryIsPluginWorkingDirectory)(cwd);
     if (!isPluginDir) {
         console.log(cli_color_1.default.redBright.bgBlack.underline("Invalid floro plugin directory"));
@@ -518,7 +527,7 @@ const generateLocalTypescriptAPI = async (cwd, useReact = true, pluginFetch) => 
         const floroManifestPath = path_1.default.join(cwd, "floro", "floro.manifest.json");
         const floroManifestString = await fs_1.default.promises.readFile(floroManifestPath);
         const manifest = JSON.parse(floroManifestString.toString());
-        const code = await (0, exports.generateTypeScriptAPI)(manifest, useReact, pluginFetch);
+        const code = await (0, exports.generateTypeScriptAPI)(datasource, manifest, useReact);
         if (code) {
             const writeApiPath = path_1.default.join(cwd, "src", "floro-schema-api.ts");
             if (await (0, filestructure_1.existsAsync)(writeApiPath)) {
@@ -534,9 +543,9 @@ const generateLocalTypescriptAPI = async (cwd, useReact = true, pluginFetch) => 
     }
 };
 exports.generateLocalTypescriptAPI = generateLocalTypescriptAPI;
-const generateTypeScriptAPI = async (manifest, useReact = true, pluginFetch) => {
-    const schemaMap = await (0, exports.getSchemaMapForCreationManifest)(manifest, pluginFetch);
-    const rootSchemaMap = await (0, plugins_1.getRootSchemaMap)(schemaMap, pluginFetch);
+const generateTypeScriptAPI = async (datasource, manifest, useReact = true) => {
+    const schemaMap = await (0, exports.getSchemaMapForCreationManifest)(datasource, manifest);
+    const rootSchemaMap = await (0, plugins_1.getRootSchemaMap)(datasource, schemaMap);
     const referenceKeys = (0, plugins_1.collectKeyRefs)(rootSchemaMap);
     const expandedTypes = (0, plugins_1.getExpandedTypesForPlugin)(schemaMap, manifest.name);
     const referenceReturnTypeMap = (0, plugins_1.buildPointerReturnTypeMap)(rootSchemaMap, expandedTypes, referenceKeys);

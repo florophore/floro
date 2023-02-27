@@ -50,7 +50,8 @@ describe("repoapi", () => {
                     value: "MIT License",
                 },
             ];
-            licenses = (await (0, repoapi_1.writeRepoLicenses)(datasource, "abc", licenses)).licenses;
+            licenses = (await (0, repoapi_1.writeRepoLicenses)(datasource, "abc", licenses))
+                .licenses;
             expect(licenses).toEqual([
                 {
                     key: "gnu_general_public_3",
@@ -78,7 +79,8 @@ describe("repoapi", () => {
                     value: "MIT License",
                 },
             ];
-            licenses = (await (0, repoapi_1.writeRepoLicenses)(datasource, "abc", licenses)).licenses;
+            licenses = (await (0, repoapi_1.writeRepoLicenses)(datasource, "abc", licenses))
+                .licenses;
             expect(licenses).toEqual([
                 {
                     key: "mit",
@@ -126,7 +128,7 @@ describe("repoapi", () => {
                 displayName: "B",
                 icon: "",
                 imports: {
-                    "A": "1.0.0"
+                    A: "1.0.0",
                 },
                 types: {},
                 store: {
@@ -140,16 +142,16 @@ describe("repoapi", () => {
                             aRef: {
                                 type: "ref<$(A).store.values>",
                             },
-                        }
-                    }
+                        },
+                    },
                 },
             };
             (0, fsmocks_1.makeTestPlugin)(PLUGIN_B_MANIFEST);
             let plugins = [
                 {
                     key: "B",
-                    value: "0.0.0"
-                }
+                    value: "0.0.0",
+                },
             ];
             const result = await (0, repoapi_1.updatePlugins)(datasource, "abc", plugins);
             expect(result).toEqual({
@@ -192,8 +194,8 @@ describe("repoapi", () => {
                             oldProp: {
                                 type: "string",
                             },
-                        }
-                    }
+                        },
+                    },
                 },
             };
             (0, fsmocks_1.makeTestPlugin)(PLUGIN_A_0_MANIFEST);
@@ -215,8 +217,8 @@ describe("repoapi", () => {
                             replacementProp: {
                                 type: "int",
                             },
-                        }
-                    }
+                        },
+                    },
                 },
             };
             (0, fsmocks_1.makeTestPlugin)(PLUGIN_A_1_MANIFEST);
@@ -226,7 +228,7 @@ describe("repoapi", () => {
                 displayName: "B",
                 icon: "",
                 imports: {
-                    "A": "0.0.0"
+                    A: "0.0.0",
                 },
                 types: {},
                 store: {
@@ -240,20 +242,20 @@ describe("repoapi", () => {
                             aRef: {
                                 type: "ref<$(A).aSet.values>",
                             },
-                        }
-                    }
+                        },
+                    },
                 },
             };
             (0, fsmocks_1.makeTestPlugin)(PLUGIN_B_MANIFEST);
             let plugins = [
                 {
                     key: "A",
-                    value: "1.0.0"
+                    value: "1.0.0",
                 },
                 {
                     key: "B",
-                    value: "0.0.0"
-                }
+                    value: "0.0.0",
+                },
             ];
             const result = await (0, repoapi_1.updatePlugins)(datasource, "abc", plugins);
             expect(result).toEqual(null);
@@ -280,8 +282,8 @@ describe("repoapi", () => {
                             someProp: {
                                 type: "int",
                             },
-                        }
-                    }
+                        },
+                    },
                 },
             };
             (0, fsmocks_1.makeTestPlugin)(PLUGIN_A_0_MANIFEST);
@@ -300,7 +302,7 @@ describe("repoapi", () => {
             let plugins = [
                 {
                     key: "A",
-                    value: "0.0.0"
+                    value: "0.0.0",
                 },
             ];
             await (0, repoapi_1.updatePlugins)(datasource, "abc", plugins);
@@ -343,8 +345,8 @@ describe("repoapi", () => {
             const descriptionB = "Another description. Initial description. Description 2!";
             await (0, repoapi_1.writeRepoDescription)(datasource, "abc", descriptionB);
             const commitB = await (0, repoapi_1.writeRepoCommit)(datasource, "abc", "B");
-            const readCommitA = await (0, repoapi_1.readCommitState)(datasource, 'abc', commitA.sha);
-            const readCommitB = await (0, repoapi_1.readCommitState)(datasource, 'abc', commitB.sha);
+            const readCommitA = await (0, repoapi_1.readCommitState)(datasource, "abc", commitA.sha);
+            const readCommitB = await (0, repoapi_1.readCommitState)(datasource, "abc", commitB.sha);
             expect(descriptionA).toEqual(readCommitA.description.join(""));
             expect(descriptionB).toEqual(readCommitB.description.join(""));
         });
@@ -359,6 +361,64 @@ describe("repoapi", () => {
             await (0, repoapi_1.writeRepoDescription)(datasource, "abc", descriptionB);
             const commitB = await (0, repoapi_1.writeRepoCommit)(datasource, "abc", "B");
             expect(commitB).toEqual(null);
+        });
+    });
+    describe("benchmark", () => {
+        test.only("benchmark commits", async () => {
+            const datasource = (0, datasource_1.makeMemoizedDataSource)();
+            const PLUGIN_A_0_MANIFEST = {
+                name: "A",
+                version: "0.0.0",
+                displayName: "A",
+                icon: "",
+                imports: {},
+                types: {},
+                store: {
+                    aSet: {
+                        type: "set",
+                        values: {
+                            mainKey: {
+                                isKey: true,
+                                type: "string",
+                            },
+                            someProp: {
+                                value: {
+                                    type: "float",
+                                },
+                            },
+                        },
+                    },
+                },
+            };
+            (0, fsmocks_1.makeTestPlugin)(PLUGIN_A_0_MANIFEST);
+            let plugins = [
+                {
+                    key: "A",
+                    value: "0.0.0",
+                },
+            ];
+            let lastCommit = null;
+            await (0, repoapi_1.updatePlugins)(datasource, "abc", plugins);
+            for (let i = 0; i < 200; ++i) {
+                const state = {
+                    aSet: [],
+                };
+                for (let j = 0; j < 10; ++j) {
+                    state.aSet.push({
+                        mainKey: "key1" + Math.random(),
+                        someProp: {
+                            value: Math.random(),
+                        },
+                    });
+                }
+                await (0, repoapi_1.updatePluginState)(datasource, "abc", "A", state);
+                lastCommit = await (0, repoapi_1.writeRepoCommit)(datasource, "abc", "commit: " + i);
+            }
+            console.time("RS");
+            const repoState = await (0, repo_1.getRepoState)(datasource, "abc");
+            console.timeEnd("RS");
+            console.log("RS", JSON.stringify(repoState, null, 2));
+            //const history = await getHistory(datasource, "abc", lastCommit.sha)
         });
     });
     describe("merge", () => {
@@ -384,10 +444,10 @@ describe("repoapi", () => {
                             someProp: {
                                 value: {
                                     type: "int",
-                                }
+                                },
                             },
-                        }
-                    }
+                        },
+                    },
                 },
             };
             (0, fsmocks_1.makeTestPlugin)(PLUGIN_A_0_MANIFEST);
@@ -396,25 +456,25 @@ describe("repoapi", () => {
                     {
                         mainKey: "key1",
                         someProp: {
-                            value: 1
+                            value: 1,
                         },
                     },
                     {
                         mainKey: "key2",
                         someProp: {
-                            value: 2
+                            value: 2,
                         },
                     },
                     {
                         mainKey: "key3",
                         someProp: {
-                            value: 3
+                            value: 3,
                         },
                     },
                     {
                         mainKey: "key4",
                         someProp: {
-                            value: 4
+                            value: 4,
                         },
                     },
                 ],
@@ -422,7 +482,7 @@ describe("repoapi", () => {
             let plugins = [
                 {
                     key: "A",
-                    value: "0.0.0"
+                    value: "0.0.0",
                 },
             ];
             await (0, repoapi_1.updatePlugins)(datasource, "abc", plugins);
@@ -434,25 +494,25 @@ describe("repoapi", () => {
                     {
                         mainKey: "key1",
                         someProp: {
-                            value: 1
+                            value: 1,
                         },
                     },
                     {
                         mainKey: "key1a",
                         someProp: {
-                            value: 11
+                            value: 11,
                         },
                     },
                     {
                         mainKey: "key3",
                         someProp: {
-                            value: 3
+                            value: 3,
                         },
                     },
                     {
                         mainKey: "key4",
                         someProp: {
-                            value: 4
+                            value: 4,
                         },
                     },
                 ],
@@ -466,31 +526,31 @@ describe("repoapi", () => {
                     {
                         mainKey: "key0",
                         someProp: {
-                            value: 0
+                            value: 0,
                         },
                     },
                     {
                         mainKey: "key1",
                         someProp: {
-                            value: 1
+                            value: 1,
                         },
                     },
                     {
                         mainKey: "key2",
                         someProp: {
-                            value: 2
+                            value: 2,
                         },
                     },
                     {
                         mainKey: "key3",
                         someProp: {
-                            value: 36
+                            value: 36,
                         },
                     },
                     {
                         mainKey: "key5",
                         someProp: {
-                            value: 5
+                            value: 5,
                         },
                     },
                 ],
@@ -502,25 +562,25 @@ describe("repoapi", () => {
                     {
                         mainKey: "key0",
                         someProp: {
-                            value: 0
+                            value: 0,
                         },
                     },
                     {
                         mainKey: "key1",
                         someProp: {
-                            value: 1
+                            value: 1,
                         },
                     },
                     {
                         mainKey: "key2",
                         someProp: {
-                            value: 2
+                            value: 2,
                         },
                     },
                     {
                         mainKey: "key3",
                         someProp: {
-                            value: 36
+                            value: 36,
                         },
                     },
                 ],
@@ -532,31 +592,31 @@ describe("repoapi", () => {
                     {
                         mainKey: "key0",
                         someProp: {
-                            value: 0
+                            value: 0,
                         },
                     },
                     {
                         mainKey: "key1",
                         someProp: {
-                            value: 1
+                            value: 1,
                         },
                     },
                     {
                         mainKey: "key2",
                         someProp: {
-                            value: 2
+                            value: 2,
                         },
                     },
                     {
                         mainKey: "key3",
                         someProp: {
-                            value: 36
+                            value: 36,
                         },
                     },
                     {
                         mainKey: "key7",
                         someProp: {
-                            value: 7
+                            value: 7,
                         },
                     },
                 ],
