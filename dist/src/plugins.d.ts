@@ -46,7 +46,7 @@ export declare const schemaMapsAreCompatible: (datasource: DataSource, oldSchema
     [key: string]: Manifest;
 }) => Promise<boolean | null>;
 export declare const topSortManifests: (manifests: Array<Manifest>) => Manifest[];
-export declare const getPluginManifests: (pluginList: Array<PluginElement>, pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>) => Promise<Array<Manifest>>;
+export declare const getPluginManifests: (datasource: DataSource, pluginList: Array<PluginElement>) => Promise<Array<Manifest>>;
 export declare const getManifestMapFromManifestList: (manifests: Array<Manifest>) => {};
 export declare const pluginListToMap: (pluginList: Array<PluginElement>) => {
     [pluginName: string]: string;
@@ -111,7 +111,7 @@ export declare const flattenStateToSchemaPathKV: (schemaRoot: Manifest, state: o
 export declare const indexArrayDuplicates: (kvs: Array<DiffElement>) => Array<DiffElement>;
 export declare const buildObjectsAtPath: (rootSchema: Manifest, path: string, properties: {
     [key: string]: string | number | boolean;
-}, out?: {}) => object;
+}, visitedLists?: {}, out?: {}) => object;
 export declare const getStateFromKVForPlugin: (schemaMap: {
     [key: string]: Manifest;
 }, kv: Array<DiffElement>, pluginName: string) => object;

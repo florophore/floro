@@ -403,65 +403,69 @@ describe("repoapi", () => {
     });
   });
 
-  describe("benchmark", () => {
-    test.only("benchmark commits", async () => {
-      const datasource = makeMemoizedDataSource();
-      const PLUGIN_A_0_MANIFEST: Manifest = {
-        name: "A",
-        version: "0.0.0",
-        displayName: "A",
-        icon: "",
-        imports: {},
-        types: {},
-        store: {
-          aSet: {
-            type: "set",
-            values: {
-              mainKey: {
-                isKey: true,
-                type: "string",
-              },
-              someProp: {
-                value: {
-                  type: "float",
-                },
-              },
-            },
-          },
-        },
-      };
-      makeTestPlugin(PLUGIN_A_0_MANIFEST);
-      let plugins: PluginElement[] = [
-        {
-          key: "A",
-          value: "0.0.0",
-        },
-      ];
-      let lastCommit = null;
-      await updatePlugins(datasource, "abc", plugins);
-      for (let i = 0; i < 200; ++i) {
-        const state = {
-          aSet: [
-          ],
-        };
-        for (let j = 0; j < 10; ++j) {
-          state.aSet.push({
-              mainKey: "key1" + Math.random(),
-              someProp: {
-                value: Math.random(),
-              },
-          })
-        }
-        await updatePluginState(datasource, "abc", "A", state);
-        lastCommit = await writeRepoCommit(datasource, "abc", "commit: " + i);
-      }
-      console.time("RS")
-      const repoState = await getRepoState(datasource, "abc");
-      console.timeEnd("RS")
-      console.log("RS", JSON.stringify(repoState, null, 2))
-      //const history = await getHistory(datasource, "abc", lastCommit.sha)
-    });
-  });
+  //describe("benchmark", () => {
+  //  test.only("commit benchmark", async () => {
+  //    const datasource = makeMemoizedDataSource();
+  //    const PLUGIN_A_0_MANIFEST: Manifest = {
+  //      name: "A",
+  //      version: "0.0.0",
+  //      displayName: "A",
+  //      icon: "",
+  //      imports: {},
+  //      types: {},
+  //      store: {
+  //        aSet: {
+  //          type: "set",
+  //          values: {
+  //            mainKey: {
+  //              isKey: true,
+  //              type: "string",
+  //            },
+  //            someProp: {
+  //              type: "float",
+  //            },
+  //          },
+  //        },
+  //      },
+  //    };
+  //    makeTestPlugin(PLUGIN_A_0_MANIFEST);
+  //    let plugins: PluginElement[] = [
+  //      {
+  //        key: "A",
+  //        value: "0.0.0",
+  //      },
+  //    ];
+  //    await updatePlugins(datasource, "abc", plugins);
+
+  //    let lastCom;
+  //    for (let i = 0; i < 2; ++i) {
+  //      const state = {
+  //        aSet: []
+  //      }
+  //      for (let j = 0; j < 20_000; ++j) {
+  //        state.aSet.push({
+  //          mainKey: "key" + j,
+  //          someProp: 100
+  //        })
+  //      }
+  //      for (let k  = 0; k < 20; ++k) {
+  //        const index = Math.round((20_000 - 1) * Math.random())
+  //        state.aSet[index].someProp = k * 10;
+  //      }
+
+  //      console.time("UPDATE" + i)
+  //      await updatePluginState(datasource, "abc", "A", state);
+  //      console.timeEnd("UPDATE" + i)
+  //      console.time("COMMIT" + i)
+  //      lastCom = await writeRepoCommit(datasource, "abc", "commit: " + i);
+  //      console.timeEnd("COMMIT" + i)
+  //    }
+
+  //    console.time("TEST");
+  //    await getRepoState(datasource, "abc");
+  //    console.timeEnd("TEST");
+  //  });
+  //});
 
   describe("merge", () => {
     test("creates a new commit if can automerge", async () => {
@@ -529,7 +533,7 @@ describe("repoapi", () => {
       ];
       await updatePlugins(datasource, "abc", plugins);
       await updatePluginState(datasource, "abc", "A", state1);
-      await writeRepoDescription(datasource, "abc", "Testing the waters");
+      await writeRepoDescription(datasource, "abc", "Testing the waters.");
       const commitA = await writeRepoCommit(datasource, "abc", "A");
 
       const state2 = {
@@ -600,6 +604,7 @@ describe("repoapi", () => {
         ],
       };
       await updatePluginState(datasource, "abc", "A", state3);
+      await writeRepoDescription(datasource, "abc", "Testing the waters. OKAY");
       const commitC = await writeRepoCommit(datasource, "abc", "C");
 
       const state4 = {

@@ -71,9 +71,9 @@ const topSortManifests = (manifests) => {
     return out;
 };
 exports.topSortManifests = topSortManifests;
-const getPluginManifests = async (pluginList, pluginFetch) => {
+const getPluginManifests = async (datasource, pluginList) => {
     const manifests = await Promise.all(pluginList.map(({ key: pluginName, value: pluginVersion }) => {
-        return pluginFetch(pluginName, pluginVersion);
+        return datasource.getPluginManifest(pluginName, pluginVersion);
     }));
     return manifests?.filter((manifest) => {
         if (manifest == null) {
@@ -1079,13 +1079,19 @@ const indexArrayDuplicates = (kvs) => {
     return out;
 };
 exports.indexArrayDuplicates = indexArrayDuplicates;
-const buildObjectsAtPath = (rootSchema, path, properties, out = {}) => {
+const buildObjectsAtPath = (rootSchema, path, properties, visitedLists = {}, out = {}) => {
     // ignore $(store)
     const [, ...decodedPath] = (0, exports.decodeSchemaPath)(path);
     let current = out;
     let currentSchema = rootSchema;
+    const partialPath = [];
     for (const part of decodedPath) {
+        partialPath.push(part);
         if (typeof part == "string" && currentSchema?.[part]?.type == "set") {
+            const listPath = (0, exports.writePathString)(partialPath);
+            if (!visitedLists[listPath]) {
+                visitedLists[listPath] = {};
+            }
             if (!current[part]) {
                 current[part] = [];
             }
@@ -1094,6 +1100,10 @@ const buildObjectsAtPath = (rootSchema, path, properties, out = {}) => {
             continue;
         }
         if (typeof part == "string" && currentSchema?.[part]?.type == "array") {
+            const listPath = (0, exports.writePathString)(partialPath);
+            if (!visitedLists[listPath]) {
+                visitedLists[listPath] = {};
+            }
             if (!current[part]) {
                 current[part] = [];
             }
@@ -1110,10 +1120,13 @@ const buildObjectsAtPath = (rootSchema, path, properties, out = {}) => {
             continue;
         }
         if (Array.isArray(current)) {
-            const element = current?.find?.((v) => v?.[part.key] == part.value) ?? {
+            const listPath = (0, exports.writePathString)(partialPath.slice(0, -1));
+            const listElement = visitedLists[listPath]?.[part.value];
+            const element = listElement ?? {
                 [part.key]: part.value,
             };
-            if (!current.find((v) => v?.[part.key] == part.value)) {
+            if (!listElement) {
+                visitedLists[listPath][part.value] = element;
                 current.push(element);
             }
             current = element;
@@ -1311,8 +1324,9 @@ const getStateFromKVForPlugin = (schemaMap, kv, pluginName) => {
     const rootSchema = (0, exports.getRootSchemaForPlugin)(schemaMap, pluginName);
     const kvArray = (0, exports.indexArrayDuplicates)(kv);
     let out = {};
+    let memo = {};
     for (const pair of kvArray) {
-        out = (0, exports.buildObjectsAtPath)(rootSchema, pair.key, pair.value, out);
+        out = (0, exports.buildObjectsAtPath)(rootSchema, pair.key, pair.value, memo, out);
     }
     return cleanArrayIDsFromState(out);
 };

@@ -143,12 +143,12 @@ export const topSortManifests = (manifests: Array<Manifest>) => {
 };
 
 export const getPluginManifests = async (
+  datasource: DataSource,
   pluginList: Array<PluginElement>,
-  pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>
 ): Promise<Array<Manifest>> => {
   const manifests = await Promise.all(
     pluginList.map(({ key: pluginName, value: pluginVersion }) => {
-      return pluginFetch(pluginName, pluginVersion);
+      return datasource.getPluginManifest(pluginName, pluginVersion);
     })
   );
   return manifests?.filter((manifest: Manifest | null) => {
@@ -1467,14 +1467,21 @@ export const buildObjectsAtPath = (
   rootSchema: Manifest,
   path: string,
   properties: { [key: string]: number | string | boolean },
-  out = {}
+  visitedLists = {},
+  out = {},
 ): object => {
   // ignore $(store)
   const [, ...decodedPath] = decodeSchemaPath(path);
   let current = out;
   let currentSchema = rootSchema;
+  const partialPath = [];
   for (const part of decodedPath) {
+    partialPath.push(part);
     if (typeof part == "string" && currentSchema?.[part]?.type == "set") {
+      const listPath = writePathString(partialPath);
+      if (!visitedLists[listPath]) {
+          visitedLists[listPath] = {}
+      }
       if (!current[part as string]) {
         current[part as string] = [];
       }
@@ -1483,6 +1490,10 @@ export const buildObjectsAtPath = (
       continue;
     }
     if (typeof part == "string" && currentSchema?.[part]?.type == "array") {
+      const listPath = writePathString(partialPath);
+      if (!visitedLists[listPath]) {
+          visitedLists[listPath] = {}
+      }
       if (!current[part as string]) {
         current[part as string] = [];
       }
@@ -1499,10 +1510,13 @@ export const buildObjectsAtPath = (
       continue;
     }
     if (Array.isArray(current)) {
-      const element = current?.find?.((v) => v?.[part.key] == part.value) ?? {
+      const listPath = writePathString(partialPath.slice(0, -1));
+      const listElement = visitedLists[listPath]?.[part.value];
+      const element = listElement ?? {
         [part.key]: part.value,
       };
-      if (!current.find((v) => v?.[part.key] == part.value)) {
+      if (!listElement) {
+        visitedLists[listPath][part.value] = element;
         current.push(element);
       }
       current = element;
@@ -1787,11 +1801,13 @@ export const getStateFromKVForPlugin = (
   const rootSchema = getRootSchemaForPlugin(schemaMap, pluginName);
   const kvArray = indexArrayDuplicates(kv);
   let out = {};
+  let memo = {};
   for (const pair of kvArray) {
     out = buildObjectsAtPath(
       rootSchema as unknown as Manifest,
       pair.key,
       pair.value,
+      memo,
       out
     );
   }

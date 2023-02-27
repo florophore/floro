@@ -2,7 +2,7 @@ import path from "path";
 import fs, { createWriteStream } from "fs";
 import { existsAsync, getPluginsJsonAsync, getRemoteHostAsync, getUserSessionAsync, vDEVPath, vPluginsPath, vReposPath, vTMPPath } from "./filestructure";
 import { Manifest } from "./plugins";
-import { Branch, RepoSetting, State } from "./repo";
+import { Branch, CheckpointMap, CommitState, RepoSetting, State } from "./repo";
 import { CommitData } from "./versioncontrol";
 import axios from "axios";
 import { broadcastAllDevices } from "./multiplexer";
@@ -44,6 +44,30 @@ export interface DataSource {
     commitData: CommitData
   ) => Promise<CommitData>;
   readCommit?: (repoId: string, sha: string) => Promise<CommitData>;
+  readCheckpoint?(
+    repoId: string,
+    sha: string
+  ): Promise<CommitState>;
+
+  saveCheckpoint?(
+    repoId: string,
+    sha: string,
+    commitState: CommitState
+  ): Promise<CommitState>;
+
+  readHotCheckpoint?(
+    repoId: string
+  ): Promise<[string, CommitState]>;
+
+  saveHotCheckpoint?(
+    repoId: string,
+    sha: string,
+    commitState: CommitState
+  ): Promise<[string, CommitState]>;
+
+  deleteHotCheckpoint?(
+    repoId: string
+  ): Promise<boolean>;
 }
 
 /* PLUGINS */
@@ -417,6 +441,95 @@ const readCommit = async (repoId: string, sha: string): Promise<CommitData> => {
   }
 };
 
+const readHotCheckpoint = async (repoId: string): Promise<[string, CommitState]> => {
+  try {
+    const hotPath = path.join(vReposPath, repoId, "hotcheckpoint.json");
+    const hotPointExists = await existsAsync(hotPath);
+    if (!hotPointExists) {
+      return null;
+    }
+    const hotpointString = await fs.promises.readFile(hotPath, 'utf8');
+    const hotpoint = JSON.parse(hotpointString);
+    return hotpoint as [string, CommitState];
+  } catch(e) {
+    return null;
+  }
+
+}
+
+const saveHotCheckpoint = async (repoId: string, sha: string, commitState: CommitState): Promise<[string, CommitState]> => {
+  try {
+    const hotPath = path.join(vReposPath, repoId, "hotcheckpoint.json");
+    await fs.promises.writeFile(hotPath, JSON.stringify([sha, commitState]), 'utf8');
+    return [sha, commitState];
+  } catch(e) {
+    return null;
+  }
+}
+
+const deleteHotCheckpoint = async (repoId: string): Promise<boolean> => {
+  try {
+    const hotPath = path.join(vReposPath, repoId, "hotcheckpoint.json");
+    const hotPointExists = await existsAsync(hotPath);
+    if (!hotPointExists) {
+      return false;
+    }
+    await fs.promises.rm(hotPath);
+    return true;
+  } catch(e) {
+    return false;
+  }
+}
+
+/**
+ *
+ * CHECKPOINTS
+ */
+
+const getCheckpointDirPath = (repoId: string, commitSha: string): string => {
+  return path.join(vReposPath, repoId, "checkpoints", commitSha.substring(0, 2));
+};
+
+const readCheckpoint = async (
+  repoId: string,
+  sha: string
+): Promise<CommitState> => {
+  try {
+    const checkpointDirPath = getCheckpointDirPath(repoId, sha);
+    const checkpointPath = path.join(checkpointDirPath, sha + ".json");
+    const checkpointExists = await existsAsync(checkpointPath);
+    if (!checkpointExists) {
+      return null;
+    }
+    const checkpointString = await fs.promises.readFile(checkpointPath, "utf8");
+    return JSON.parse(checkpointString);
+  } catch (e) {
+    console.log("e", e)
+    return null;
+  }
+};
+
+const saveCheckpoint = async(repoId: string, sha: string, commitState: CommitState): Promise<CommitState> => {
+  try {
+    const baseCheckpoint = path.join(vReposPath, repoId, "checkpoints");
+    const baseCheckpointDirExists = await existsAsync(baseCheckpoint);
+    if (!baseCheckpointDirExists) {
+      await fs.promises.mkdir(baseCheckpoint);
+    }
+    const checkpointDirPath = getCheckpointDirPath(repoId, sha);
+    const checkpointDirExists = await existsAsync(checkpointDirPath);
+    if (!checkpointDirExists) {
+      await fs.promises.mkdir(checkpointDirPath);
+    }
+    const checkpointPath = path.join(checkpointDirPath, sha + ".json");
+    const checkpointString = JSON.stringify(commitState);
+    await fs.promises.writeFile(checkpointPath, checkpointString, 'utf-8');
+    return commitState;
+  } catch(e) {
+    return null;
+  }
+}
+
 export const makeDataSource = (datasource: DataSource = {}) => {
   const defaultDataSource: DataSource = {
     getRepos,
@@ -432,6 +545,11 @@ export const makeDataSource = (datasource: DataSource = {}) => {
     saveBranch,
     saveCommit,
     readCommit,
+    readCheckpoint,
+    saveCheckpoint,
+    readHotCheckpoint,
+    deleteHotCheckpoint,
+    saveHotCheckpoint
   };
   return {
     ...defaultDataSource,
@@ -605,6 +723,28 @@ export const makeMemoizedDataSource = (dataSourceOverride: DataSource = {}) => {
     return result;
   };
 
+  const checkpointMemo = {};
+  const _readCheckpoint = async (repoId: string, sha: string): Promise<CommitState> => {
+    const checkpointString = repoId + "-" + sha;
+    if (checkpointMemo[checkpointString]) {
+      return checkpointMemo[checkpointString];
+    }
+    const result = await dataSource.readCheckpoint(repoId, sha);
+    if (result) {
+      checkpointMemo[checkpointString] = result;
+    }
+    return result;
+  }
+
+  const _saveCheckpoint = async (repoId: string, sha: string, commitState: CommitState): Promise<CommitState> => {
+    const checkpointString = repoId + "-" + sha;
+    const result = await dataSource.saveCheckpoint(repoId, sha, commitState);
+    if (result) {
+      checkpointMemo[checkpointString] = result;
+    }
+    return result;
+  }
+
   const defaultDataSource: DataSource = {
     repoExists: _repoExists,
     pluginManifestExists: _pluginManifestExists,
@@ -618,6 +758,8 @@ export const makeMemoizedDataSource = (dataSourceOverride: DataSource = {}) => {
     deleteBranch: _deleteBranch,
     saveCommit: _saveCommit,
     readCommit: _readCommit,
+    readCheckpoint: _readCheckpoint,
+    saveCheckpoint: _saveCheckpoint,
   };
   return {
     ...dataSource,

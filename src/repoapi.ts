@@ -685,13 +685,14 @@ export const updatePlugins = async (
     const addedPlugins = getAddedDeps(unstagedState.plugins, plugins);
     const removedPlugins = getRemovedDeps(unstagedState.plugins, plugins);
     const oldManifests = await getPluginManifests(
+      datasource,
       unstagedState.plugins,
-      datasource.getPluginManifest
     );
     const newManifests = await getPluginManifests(
+      datasource,
       plugins,
-      datasource.getPluginManifest
     );
+
     const oldManifestMap = getManifestMapFromManifestList(oldManifests);
     const newManifestMap = getManifestMapFromManifestList(newManifests);
     for (const removedManifest of removedPlugins) {
@@ -717,15 +718,14 @@ export const updatePlugins = async (
         }
       }
     }
-
     const pluginsToAppend: Array<PluginElement> = [];
     for (const addedDep of addedPlugins) {
       const addedDepImportsList = pluginMapToList(
         newManifestMap[addedDep.key].imports
       );
       const addedDepImportManifests = await getPluginManifests(
+        datasource,
         addedDepImportsList,
-        datasource.getPluginManifest
       );
       const addedDepImportsManifestMap = getManifestMapFromManifestList([
         newManifestMap[addedDep.key],
@@ -765,8 +765,8 @@ export const updatePlugins = async (
     // do top sort
     const updatedPlugins = uniqueKV([...plugins, ...pluginsToAppend]);
     const updatedManifests = await getPluginManifests(
+      datasource,
       updatedPlugins,
-      datasource.getPluginManifest
     );
     const updatedManifestMap = getManifestMapFromManifestList(updatedManifests);
     for (let updatedPlugin of updatedManifests) {
@@ -908,10 +908,9 @@ export const updatePluginState = async (
     if (!pluginVersion) {
       return null;
     }
-
     const manifests = await getPluginManifests(
+      datasource,
       current.plugins,
-      datasource.getPluginManifest
     );
 
     const manifest = manifests.find((p) => p.name == pluginName);
@@ -951,7 +950,8 @@ export const updatePluginState = async (
       unstagedState,
       state.diff
     );
-    return await renderCommitState(datasource, nextState);
+    const out = await renderCommitState(datasource, nextState);
+    return out;
   } catch (e) {
     return null;
   }

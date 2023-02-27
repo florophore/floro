@@ -1,5 +1,5 @@
 import { Manifest } from "./plugins";
-import { Branch, RepoSetting, State } from "./repo";
+import { Branch, CommitState, RepoSetting, State } from "./repo";
 import { CommitData } from "./versioncontrol";
 export interface DataSource {
     getPluginManifest?: (pluginName: string, pluginVersion: string) => Promise<Manifest>;
@@ -15,6 +15,11 @@ export interface DataSource {
     saveBranch?: (repoId: string, branchName: string, branchData: Branch) => Promise<Branch>;
     saveCommit?: (repoId: string, sha: string, commitData: CommitData) => Promise<CommitData>;
     readCommit?: (repoId: string, sha: string) => Promise<CommitData>;
+    readCheckpoint?(repoId: string, sha: string): Promise<CommitState>;
+    saveCheckpoint?(repoId: string, sha: string, commitState: CommitState): Promise<CommitState>;
+    readHotCheckpoint?(repoId: string): Promise<[string, CommitState]>;
+    saveHotCheckpoint?(repoId: string, sha: string, commitState: CommitState): Promise<[string, CommitState]>;
+    deleteHotCheckpoint?(repoId: string): Promise<boolean>;
 }
 /**
  * We need to export readDevPluginManifest for the daemon server
@@ -39,6 +44,11 @@ export declare const makeDataSource: (datasource?: DataSource) => {
     saveBranch?: (repoId: string, branchName: string, branchData: Branch) => Promise<Branch>;
     saveCommit?: (repoId: string, sha: string, commitData: CommitData) => Promise<CommitData>;
     readCommit?: (repoId: string, sha: string) => Promise<CommitData>;
+    readCheckpoint?: (repoId: string, sha: string) => Promise<CommitState>;
+    saveCheckpoint?: (repoId: string, sha: string, commitState: CommitState) => Promise<CommitState>;
+    readHotCheckpoint?: (repoId: string) => Promise<[string, CommitState]>;
+    saveHotCheckpoint?: (repoId: string, sha: string, commitState: CommitState) => Promise<[string, CommitState]>;
+    deleteHotCheckpoint?: (repoId: string) => Promise<boolean>;
 };
 export declare const makeMemoizedDataSource: (dataSourceOverride?: DataSource) => {
     getPluginManifest?: (pluginName: string, pluginVersion: string) => Promise<Manifest>;
@@ -54,6 +64,11 @@ export declare const makeMemoizedDataSource: (dataSourceOverride?: DataSource) =
     saveBranch?: (repoId: string, branchName: string, branchData: Branch) => Promise<Branch>;
     saveCommit?: (repoId: string, sha: string, commitData: CommitData) => Promise<CommitData>;
     readCommit?: (repoId: string, sha: string) => Promise<CommitData>;
+    readCheckpoint?: (repoId: string, sha: string) => Promise<CommitState>;
+    saveCheckpoint?: (repoId: string, sha: string, commitState: CommitState) => Promise<CommitState>;
+    readHotCheckpoint?: (repoId: string) => Promise<[string, CommitState]>;
+    saveHotCheckpoint?: (repoId: string, sha: string, commitState: CommitState) => Promise<[string, CommitState]>;
+    deleteHotCheckpoint?: (repoId: string) => Promise<boolean>;
 };
 declare const _default: {
     getPluginManifest?: (pluginName: string, pluginVersion: string) => Promise<Manifest>;
@@ -69,5 +84,10 @@ declare const _default: {
     saveBranch?: (repoId: string, branchName: string, branchData: Branch) => Promise<Branch>;
     saveCommit?: (repoId: string, sha: string, commitData: CommitData) => Promise<CommitData>;
     readCommit?: (repoId: string, sha: string) => Promise<CommitData>;
+    readCheckpoint?: (repoId: string, sha: string) => Promise<CommitState>;
+    saveCheckpoint?: (repoId: string, sha: string, commitState: CommitState) => Promise<CommitState>;
+    readHotCheckpoint?: (repoId: string) => Promise<[string, CommitState]>;
+    saveHotCheckpoint?: (repoId: string, sha: string, commitState: CommitState) => Promise<[string, CommitState]>;
+    deleteHotCheckpoint?: (repoId: string) => Promise<boolean>;
 };
 export default _default;

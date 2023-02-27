@@ -88,6 +88,9 @@ export interface CommitHistory {
     idx: number;
     message: string;
 }
+export interface CheckpointMap {
+    [sha: string]: CommitState;
+}
 export declare const getRepos: () => Promise<string[]>;
 export declare const getAddedDeps: (oldPlugins: Array<PluginElement>, newPlugins: Array<PluginElement>) => Array<PluginElement>;
 export declare const getRemovedDeps: (oldPlugins: Array<PluginElement>, newPlugins: Array<PluginElement>) => Array<PluginElement>;
@@ -99,7 +102,7 @@ export declare const buildCommitData: (parentSha: string, historicalParent: stri
 export declare const getHistory: (datasource: DataSource, repoId: string, sha: string | null) => Promise<Array<CommitHistory> | null>;
 export declare const getBaseDivergenceSha: (history: Array<CommitHistory>, origin: CommitData) => CommitHistory;
 export declare const getDivergenceOriginSha: (datasource: DataSource, repoId: string, sha1: string, sha2: string) => Promise<string>;
-export declare const getCommitState: (datasource: DataSource, repoId: string, sha?: string) => Promise<CommitState | null>;
+export declare const getCommitState: (datasource: DataSource, repoId: string, sha: string | null, historyLength?: number) => Promise<CommitState | null>;
 /**
  *  REFACTOR ABOVE WITH FOLLOWINg
  *  */

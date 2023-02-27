@@ -49,6 +49,7 @@ const EMPTY_COMMIT_DIFF = {
     store: {},
     binaries: { add: {}, remove: {} },
 };
+const CHECKPOINT_MODULO = 50;
 const EMPTY_COMMIT_DIFF_STRING = JSON.stringify(EMPTY_COMMIT_DIFF);
 const getRepos = async () => {
     const repoDir = await fs_1.default.promises.readdir(filestructure_1.vReposPath);
@@ -251,33 +252,26 @@ const getDivergenceOriginSha = async (datasource, repoId, sha1, sha2) => {
     return null;
 };
 exports.getDivergenceOriginSha = getDivergenceOriginSha;
-const getCommitState = async (datasource, repoId, sha) => {
+const getCommitState = async (datasource, repoId, sha, historyLength) => {
     if (!sha) {
         return EMPTY_COMMIT_STATE;
     }
     const commitData = await datasource.readCommit(repoId, sha);
-    if (commitData == null) {
-        return null;
+    if (!historyLength) {
+        historyLength = commitData.idx + 1;
     }
-    const state = await (0, exports.getCommitState)(datasource, repoId, commitData.parent);
-    return Object.keys(commitData.diff).reduce((acc, namespace) => {
-        if (namespace == "store") {
-            const store = Object.keys(commitData?.diff?.store ?? {}).reduce((storeAcc, pluginName) => {
-                return {
-                    ...storeAcc,
-                    [pluginName]: (0, versioncontrol_1.applyDiff)(commitData.diff?.store?.[pluginName] ?? { add: {}, remove: {} }, storeAcc?.[pluginName] ?? []),
-                };
-            }, state?.store ?? {});
-            return {
-                ...acc,
-                store,
-            };
+    if (commitData.idx % CHECKPOINT_MODULO == 0) {
+        const checkpointState = await datasource.readCheckpoint(repoId, sha);
+        if (checkpointState) {
+            return checkpointState;
         }
-        return {
-            ...acc,
-            [namespace]: (0, versioncontrol_1.applyDiff)(commitData.diff[namespace], state[namespace]),
-        };
-    }, {});
+    }
+    const state = await (0, exports.getCommitState)(datasource, repoId, commitData.parent, historyLength);
+    const out = await (0, exports.applyStateDiffToCommitState)(state, commitData.diff);
+    if (commitData.idx % CHECKPOINT_MODULO == 0 && commitData.idx < (historyLength - CHECKPOINT_MODULO)) {
+        await datasource.saveCheckpoint(repoId, sha, out);
+    }
+    return out;
 };
 exports.getCommitState = getCommitState;
 /**
@@ -315,36 +309,34 @@ const getCurrentBranch = async (datasource, repoId) => {
 exports.getCurrentBranch = getCurrentBranch;
 const getUnstagedCommitState = async (datasource, repoId) => {
     const current = await datasource.getCurrentState(repoId);
+    const hotCheckpoint = await datasource.readHotCheckpoint(repoId);
     if (current.branch) {
         const branch = await datasource.getBranch(repoId, current.branch);
+        if (hotCheckpoint) {
+            if (hotCheckpoint[0] == branch.lastCommit) {
+                return hotCheckpoint[1];
+            }
+            await datasource.deleteHotCheckpoint(repoId);
+        }
         const commitState = await (0, exports.getCommitState)(datasource, repoId, branch.lastCommit);
+        await datasource.saveHotCheckpoint(repoId, branch.lastCommit, commitState);
         return commitState;
     }
+    if (hotCheckpoint) {
+        if (hotCheckpoint[0] == current.commit) {
+            return hotCheckpoint[1];
+        }
+        await datasource.deleteHotCheckpoint(repoId);
+    }
     const commitState = await (0, exports.getCommitState)(datasource, repoId, current.commit);
+    await datasource.saveHotCheckpoint(repoId, current.commit, commitState);
     return commitState;
 };
 exports.getUnstagedCommitState = getUnstagedCommitState;
 const getRepoState = async (datasource, repoId) => {
     const current = await datasource.getCurrentState(repoId);
     const state = await (0, exports.getUnstagedCommitState)(datasource, repoId);
-    return Object.keys(current.diff).reduce((acc, namespace) => {
-        if (namespace == "store") {
-            const store = Object.keys(current.diff?.store ?? {}).reduce((storeAcc, pluginName) => {
-                return {
-                    ...storeAcc,
-                    [pluginName]: (0, versioncontrol_1.applyDiff)(current.diff?.store?.[pluginName] ?? { add: {}, remove: {} }, storeAcc?.[pluginName] ?? []),
-                };
-            }, acc?.store ?? {});
-            return {
-                ...acc,
-                store,
-            };
-        }
-        return {
-            ...acc,
-            [namespace]: (0, versioncontrol_1.applyDiff)(current.diff[namespace], state[namespace]),
-        };
-    }, state);
+    return (0, exports.applyStateDiffToCommitState)(state, current.diff);
 };
 exports.getRepoState = getRepoState;
 const getProposedStateFromDiffListOnCurrent = async (datasource, repoId, diffList) => {
@@ -500,7 +492,7 @@ const getPluginsToRunUpdatesOn = (pastPlugins, nextPlugins) => {
 exports.getPluginsToRunUpdatesOn = getPluginsToRunUpdatesOn;
 const buildStateStore = async (datasource, state) => {
     let out = {};
-    const manifests = await (0, plugins_1.getPluginManifests)(state.plugins, datasource.getPluginManifest);
+    const manifests = await (0, plugins_1.getPluginManifests)(datasource, state.plugins);
     for (const pluginManifest of manifests) {
         const kv = state?.store?.[pluginManifest.name] ?? [];
         const schemaMap = await (0, plugins_1.getSchemaMapForManifest)(datasource, pluginManifest);
@@ -512,7 +504,7 @@ const buildStateStore = async (datasource, state) => {
 exports.buildStateStore = buildStateStore;
 const convertStateStoreToKV = async (datasource, state, stateStore) => {
     let out = {};
-    const manifests = await (0, plugins_1.getPluginManifests)(state.plugins, datasource.getPluginManifest);
+    const manifests = await (0, plugins_1.getPluginManifests)(datasource, state.plugins);
     for (const pluginManifest of manifests) {
         const schemaMap = await (0, plugins_1.getSchemaMapForManifest)(datasource, pluginManifest);
         const kv = await (0, plugins_1.getKVStateForPlugin)(datasource, schemaMap, pluginManifest.name, stateStore);
@@ -738,7 +730,7 @@ const getMergedCommitState = async (datasource, commit1, commit2, originCommit, 
         mergeState.binaries = (0, exports.uniqueKV)(mergeState.binaries);
         mergeState.licenses = (0, exports.uniqueKV)(mergeState.licenses);
         let stateStore = await (0, exports.buildStateStore)(datasource, mergeState);
-        const manifests = await (0, plugins_1.getPluginManifests)(mergeState.plugins, datasource.getPluginManifest);
+        const manifests = await (0, plugins_1.getPluginManifests)(datasource, mergeState.plugins);
         const rootManifests = manifests.filter((m) => Object.keys(m.imports).length === 0);
         for (const manifest of rootManifests) {
             const schemaMap = await (0, plugins_1.getSchemaMapForManifest)(datasource, manifest);

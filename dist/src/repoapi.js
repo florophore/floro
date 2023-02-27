@@ -563,8 +563,8 @@ const updatePlugins = async (datasource, repoId, plugins) => {
         const unstagedState = await (0, repo_1.getUnstagedCommitState)(datasource, repoId);
         const addedPlugins = (0, repo_1.getAddedDeps)(unstagedState.plugins, plugins);
         const removedPlugins = (0, repo_1.getRemovedDeps)(unstagedState.plugins, plugins);
-        const oldManifests = await (0, plugins_1.getPluginManifests)(unstagedState.plugins, datasource.getPluginManifest);
-        const newManifests = await (0, plugins_1.getPluginManifests)(plugins, datasource.getPluginManifest);
+        const oldManifests = await (0, plugins_1.getPluginManifests)(datasource, unstagedState.plugins);
+        const newManifests = await (0, plugins_1.getPluginManifests)(datasource, plugins);
         const oldManifestMap = (0, plugins_1.getManifestMapFromManifestList)(oldManifests);
         const newManifestMap = (0, plugins_1.getManifestMapFromManifestList)(newManifests);
         for (const removedManifest of removedPlugins) {
@@ -588,7 +588,7 @@ const updatePlugins = async (datasource, repoId, plugins) => {
         const pluginsToAppend = [];
         for (const addedDep of addedPlugins) {
             const addedDepImportsList = (0, plugins_1.pluginMapToList)(newManifestMap[addedDep.key].imports);
-            const addedDepImportManifests = await (0, plugins_1.getPluginManifests)(addedDepImportsList, datasource.getPluginManifest);
+            const addedDepImportManifests = await (0, plugins_1.getPluginManifests)(datasource, addedDepImportsList);
             const addedDepImportsManifestMap = (0, plugins_1.getManifestMapFromManifestList)([
                 newManifestMap[addedDep.key],
                 ...addedDepImportManifests,
@@ -616,7 +616,7 @@ const updatePlugins = async (datasource, repoId, plugins) => {
         }
         // do top sort
         const updatedPlugins = (0, repo_1.uniqueKV)([...plugins, ...pluginsToAppend]);
-        const updatedManifests = await (0, plugins_1.getPluginManifests)(updatedPlugins, datasource.getPluginManifest);
+        const updatedManifests = await (0, plugins_1.getPluginManifests)(datasource, updatedPlugins);
         const updatedManifestMap = (0, plugins_1.getManifestMapFromManifestList)(updatedManifests);
         for (let updatedPlugin of updatedManifests) {
             const upstreamDeps = (0, plugins_1.getUpstreamDepsInSchemaMap)(updatedManifestMap, updatedPlugin.name);
@@ -709,7 +709,7 @@ const updatePluginState = async (datasource, repoId, pluginName, updatedState) =
         if (!pluginVersion) {
             return null;
         }
-        const manifests = await (0, plugins_1.getPluginManifests)(current.plugins, datasource.getPluginManifest);
+        const manifests = await (0, plugins_1.getPluginManifests)(datasource, current.plugins);
         const manifest = manifests.find((p) => p.name == pluginName);
         const schemaMap = await (0, plugins_1.getSchemaMapForManifest)(datasource, manifest);
         let stateStore = await (0, repo_1.buildStateStore)(datasource, current);
@@ -727,7 +727,8 @@ const updatePluginState = async (datasource, repoId, pluginName, updatedState) =
         }
         const state = await (0, repo_1.saveDiffListToCurrent)(datasource, repoId, diffList);
         const nextState = await (0, repo_1.applyStateDiffToCommitState)(unstagedState, state.diff);
-        return await (0, repo_1.renderCommitState)(datasource, nextState);
+        const out = await (0, repo_1.renderCommitState)(datasource, nextState);
+        return out;
     }
     catch (e) {
         return null;

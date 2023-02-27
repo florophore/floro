@@ -1,5 +1,5 @@
 import axios from "axios";
-import fs, { access, createWriteStream, existsSync } from "fs";
+import fs, { createWriteStream, existsSync } from "fs";
 import path from "path";
 import tar from "tar";
 import { DataSource } from "./datasource";
@@ -105,6 +105,10 @@ export interface CommitHistory {
   message: string;
 }
 
+export interface CheckpointMap {
+  [sha: string]: CommitState
+}
+
 const EMPTY_COMMIT_STATE: CommitState = {
   description: [],
   licenses: [],
@@ -121,8 +125,9 @@ const EMPTY_COMMIT_DIFF: StateDiff = {
   binaries: { add: {}, remove: {} },
 };
 
-const EMPTY_COMMIT_DIFF_STRING = JSON.stringify(EMPTY_COMMIT_DIFF);
+const CHECKPOINT_MODULO = 50;
 
+const EMPTY_COMMIT_DIFF_STRING = JSON.stringify(EMPTY_COMMIT_DIFF);
 
 export const getRepos = async (): Promise<string[]> => {
   const repoDir = await fs.promises.readdir(vReposPath);
@@ -365,40 +370,30 @@ export const getDivergenceOriginSha = async (
 export const getCommitState = async (
   datasource: DataSource,
   repoId: string,
-  sha?: string
+  sha: string|null,
+  historyLength?: number
 ): Promise<CommitState | null> => {
   if (!sha) {
     return EMPTY_COMMIT_STATE;
   }
+
   const commitData = await datasource.readCommit(repoId, sha);
-  if (commitData == null) {
-    return null;
+  if (!historyLength) {
+    historyLength = commitData.idx + 1;
   }
-  const state = await getCommitState(datasource, repoId, commitData.parent);
-  return Object.keys(commitData.diff).reduce((acc, namespace): CommitState => {
-    if (namespace == "store") {
-      const store: RawStore = Object.keys(commitData?.diff?.store ?? {}).reduce(
-        (storeAcc, pluginName) => {
-          return {
-            ...storeAcc,
-            [pluginName]: applyDiff(
-              commitData.diff?.store?.[pluginName] ?? { add: {}, remove: {} },
-              storeAcc?.[pluginName] ?? []
-            ),
-          };
-        },
-        state?.store ?? ({} as RawStore)
-      );
-      return {
-        ...acc,
-        store,
-      };
+  if (commitData.idx % CHECKPOINT_MODULO == 0) {
+    const checkpointState = await datasource.readCheckpoint(repoId, sha);
+    if (checkpointState) {
+      return checkpointState;
     }
-    return {
-      ...acc,
-      [namespace]: applyDiff(commitData.diff[namespace], state[namespace]),
-    };
-  }, {} as CommitState);
+  }
+  const state = await getCommitState(datasource, repoId, commitData.parent, historyLength);
+  const out = await applyStateDiffToCommitState(state, commitData.diff);
+
+  if (commitData.idx % CHECKPOINT_MODULO == 0 && commitData.idx < (historyLength - CHECKPOINT_MODULO)) {
+    await datasource.saveCheckpoint(repoId, sha, out);
+  }
+  return out;
 };
 
 /**
@@ -451,16 +446,31 @@ export const getUnstagedCommitState = async (
   repoId: string
 ): Promise<CommitState> => {
   const current = await datasource.getCurrentState(repoId);
+  const hotCheckpoint = await datasource.readHotCheckpoint(repoId);
   if (current.branch) {
     const branch = await datasource.getBranch(repoId, current.branch);
+    if (hotCheckpoint) {
+      if (hotCheckpoint[0] == branch.lastCommit) {
+        return hotCheckpoint[1];
+      }
+      await datasource.deleteHotCheckpoint(repoId);
+    }
     const commitState = await getCommitState(
       datasource,
       repoId,
       branch.lastCommit
     );
+    await datasource.saveHotCheckpoint(repoId, branch.lastCommit, commitState);
     return commitState;
   }
+  if (hotCheckpoint) {
+    if (hotCheckpoint[0] == current.commit) {
+      return hotCheckpoint[1];
+    }
+    await datasource.deleteHotCheckpoint(repoId);
+  }
   const commitState = await getCommitState(datasource, repoId, current.commit);
+  await datasource.saveHotCheckpoint(repoId, current.commit, commitState);
   return commitState;
 };
 
@@ -470,31 +480,7 @@ export const getRepoState = async (
 ): Promise<CommitState> => {
   const current = await datasource.getCurrentState(repoId);
   const state = await getUnstagedCommitState(datasource, repoId);
-  return Object.keys(current.diff).reduce((acc, namespace): CommitState => {
-    if (namespace == "store") {
-      const store: RawStore = Object.keys(current.diff?.store ?? {}).reduce(
-        (storeAcc, pluginName) => {
-          return {
-            ...storeAcc,
-            [pluginName]: applyDiff(
-              current.diff?.store?.[pluginName] ?? { add: {}, remove: {} },
-              storeAcc?.[pluginName] ?? []
-            ),
-          };
-        },
-        acc?.store ?? ({} as RawStore)
-      );
-
-      return {
-        ...acc,
-        store,
-      };
-    }
-    return {
-      ...acc,
-      [namespace]: applyDiff(current.diff[namespace], state[namespace]),
-    };
-  }, state as CommitState);
+  return applyStateDiffToCommitState(state, current.diff);
 };
 
 export const getProposedStateFromDiffListOnCurrent = async (
@@ -689,8 +675,8 @@ export const buildStateStore = async (
 ): Promise<{ [key: string]: object }> => {
   let out = {};
   const manifests = await getPluginManifests(
-    state.plugins,
-    datasource.getPluginManifest
+    datasource,
+    state.plugins
   );
   for (const pluginManifest of manifests) {
     const kv = state?.store?.[pluginManifest.name] ?? [];
@@ -715,8 +701,8 @@ export const convertStateStoreToKV = async (
 ): Promise<RawStore> => {
   let out = {};
   const manifests = await getPluginManifests(
-    state.plugins,
-    datasource.getPluginManifest
+    datasource,
+    state.plugins
   );
   for (const pluginManifest of manifests) {
     const schemaMap = await getSchemaMapForManifest(
@@ -1057,8 +1043,8 @@ export const getMergedCommitState = async (
     let stateStore = await buildStateStore(datasource, mergeState);
 
     const manifests = await getPluginManifests(
-      mergeState.plugins,
-      datasource.getPluginManifest
+      datasource,
+      mergeState.plugins
     );
     const rootManifests = manifests.filter(
       (m) => Object.keys(m.imports).length === 0

@@ -32,9 +32,7 @@ const getKVHashes = (obj) => {
 exports.getKVHashes = getKVHashes;
 const getKVHash = (obj) => {
     if (typeof obj.value == "string") {
-        const keyHash = cryptojs_1.Crypto.SHA256(obj.key);
-        const valueHash = cryptojs_1.Crypto.SHA256(obj.value);
-        return cryptojs_1.Crypto.SHA256(keyHash + valueHash);
+        return cryptojs_1.Crypto.SHA256(obj.key + obj.value);
     }
     const keyHash = cryptojs_1.Crypto.SHA256(obj.key);
     const valueHash = cryptojs_1.Crypto.SHA256(JSON.stringify(obj.value));
@@ -43,7 +41,7 @@ const getKVHash = (obj) => {
 exports.getKVHash = getKVHash;
 const getRowHash = (obj) => {
     const { keyHash, valueHash } = (0, exports.getKVHashes)(obj);
-    return cryptojs_1.Crypto.SHA256(keyHash + valueHash);
+    return cryptojs_1.Crypto.SHA1(keyHash + valueHash);
 };
 exports.getRowHash = getRowHash;
 const getDiffHash = (commitData) => {
