@@ -547,6 +547,8 @@ export const writeRepoCommit = async (
     if (!commitIsValid) {
       return null;
     }
+
+    //const repoCommitState = await getRepoState(datasource, repoId);
     const currentState = await datasource.getCurrentState(repoId);
     const currentSha = await getCurrentCommitSha(datasource, repoId);
     const parent = currentSha
@@ -589,6 +591,7 @@ export const writeRepoCommit = async (
     } else {
       await updateCurrentCommitSHA(datasource, repoId, sha, false);
     }
+    //await datasource.saveHotCheckpoint(repoId, sha, repoCommitState);
     return commit;
   } catch (e) {
     return null;
@@ -926,7 +929,6 @@ export const updatePluginState = async (
       stateStore,
       pluginName
     );
-
     const kvState = await convertStateStoreToKV(
       datasource,
       current,

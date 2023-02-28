@@ -560,6 +560,31 @@ const makeMemoizedDataSource = (dataSourceOverride = {}) => {
         }
         return result;
     };
+    const hotCheckpointMemo = {};
+    const _readHotCheckpoint = async (repoId) => {
+        if (hotCheckpointMemo[repoId]) {
+            return hotCheckpointMemo[repoId];
+        }
+        const result = await dataSource.readHotCheckpoint(repoId);
+        if (result) {
+            hotCheckpointMemo[repoId] = result;
+        }
+        return result;
+    };
+    const _saveHotCheckpoint = async (repoId, sha, checkpoint) => {
+        const result = await dataSource.saveHotCheckpoint(repoId, sha, checkpoint);
+        if (result) {
+            hotCheckpointMemo[repoId] = result;
+        }
+        return result;
+    };
+    const _deleteHotCheckpoint = async (repoId) => {
+        const result = await dataSource.deleteHotCheckpoint(repoId);
+        if (result) {
+            delete hotCheckpointMemo[repoId];
+        }
+        return result;
+    };
     const defaultDataSource = {
         repoExists: _repoExists,
         pluginManifestExists: _pluginManifestExists,
@@ -575,6 +600,9 @@ const makeMemoizedDataSource = (dataSourceOverride = {}) => {
         readCommit: _readCommit,
         readCheckpoint: _readCheckpoint,
         saveCheckpoint: _saveCheckpoint,
+        readHotCheckpoint: _readHotCheckpoint,
+        saveHotCheckpoint: _saveHotCheckpoint,
+        deleteHotCheckpoint: _deleteHotCheckpoint,
     };
     return {
         ...dataSource,

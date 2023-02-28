@@ -102,7 +102,7 @@ export declare const buildCommitData: (parentSha: string, historicalParent: stri
 export declare const getHistory: (datasource: DataSource, repoId: string, sha: string | null) => Promise<Array<CommitHistory> | null>;
 export declare const getBaseDivergenceSha: (history: Array<CommitHistory>, origin: CommitData) => CommitHistory;
 export declare const getDivergenceOriginSha: (datasource: DataSource, repoId: string, sha1: string, sha2: string) => Promise<string>;
-export declare const getCommitState: (datasource: DataSource, repoId: string, sha: string | null, historyLength?: number) => Promise<CommitState | null>;
+export declare const getCommitState: (datasource: DataSource, repoId: string, sha: string | null, historyLength?: number, checkedHot?: boolean, hotCheckpoint?: [string, CommitState]) => Promise<CommitState | null>;
 /**
  *  REFACTOR ABOVE WITH FOLLOWINg
  *  */

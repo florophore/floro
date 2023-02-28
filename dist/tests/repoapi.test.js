@@ -363,66 +363,68 @@ describe("repoapi", () => {
             expect(commitB).toEqual(null);
         });
     });
-    //describe("benchmark", () => {
-    //  test.only("commit benchmark", async () => {
-    //    const datasource = makeMemoizedDataSource();
-    //    const PLUGIN_A_0_MANIFEST: Manifest = {
-    //      name: "A",
-    //      version: "0.0.0",
-    //      displayName: "A",
-    //      icon: "",
-    //      imports: {},
-    //      types: {},
-    //      store: {
-    //        aSet: {
-    //          type: "set",
-    //          values: {
-    //            mainKey: {
-    //              isKey: true,
-    //              type: "string",
-    //            },
-    //            someProp: {
-    //              type: "float",
-    //            },
-    //          },
-    //        },
-    //      },
-    //    };
-    //    makeTestPlugin(PLUGIN_A_0_MANIFEST);
-    //    let plugins: PluginElement[] = [
-    //      {
-    //        key: "A",
-    //        value: "0.0.0",
-    //      },
-    //    ];
-    //    await updatePlugins(datasource, "abc", plugins);
-    //    let lastCom;
-    //    for (let i = 0; i < 2; ++i) {
-    //      const state = {
-    //        aSet: []
-    //      }
-    //      for (let j = 0; j < 20_000; ++j) {
-    //        state.aSet.push({
-    //          mainKey: "key" + j,
-    //          someProp: 100
-    //        })
-    //      }
-    //      for (let k  = 0; k < 20; ++k) {
-    //        const index = Math.round((20_000 - 1) * Math.random())
-    //        state.aSet[index].someProp = k * 10;
-    //      }
-    //      console.time("UPDATE" + i)
-    //      await updatePluginState(datasource, "abc", "A", state);
-    //      console.timeEnd("UPDATE" + i)
-    //      console.time("COMMIT" + i)
-    //      lastCom = await writeRepoCommit(datasource, "abc", "commit: " + i);
-    //      console.timeEnd("COMMIT" + i)
-    //    }
-    //    console.time("TEST");
-    //    await getRepoState(datasource, "abc");
-    //    console.timeEnd("TEST");
-    //  });
-    //});
+    describe("benchmark", () => {
+        test.only("commit benchmark", async () => {
+            const datasource = (0, datasource_1.makeMemoizedDataSource)();
+            const PLUGIN_A_0_MANIFEST = {
+                name: "A",
+                version: "0.0.0",
+                displayName: "A",
+                icon: "",
+                imports: {},
+                types: {},
+                store: {
+                    aSet: {
+                        type: "set",
+                        values: {
+                            mainKey: {
+                                isKey: true,
+                                type: "string",
+                            },
+                            someProp: {
+                                type: "float",
+                            },
+                        },
+                    },
+                },
+            };
+            (0, fsmocks_1.makeTestPlugin)(PLUGIN_A_0_MANIFEST);
+            let plugins = [
+                {
+                    key: "A",
+                    value: "0.0.0",
+                },
+            ];
+            await (0, repoapi_1.updatePlugins)(datasource, "abc", plugins);
+            let lastCom;
+            for (let i = 0; i < 3; ++i) {
+                const state = {
+                    aSet: []
+                };
+                for (let j = 0; j < 10_000; ++j) {
+                    state.aSet.push({
+                        mainKey: "key" + j,
+                        someProp: 100
+                    });
+                }
+                for (let k = 0; k < 1000; ++k) {
+                    const index = Math.round((10_000 - 1) * Math.random());
+                    state.aSet[index].someProp = k * 10;
+                }
+                if (i == 2) {
+                    console.time("UPDATE" + i);
+                    await (0, repoapi_1.updatePluginState)(datasource, "abc", "A", state);
+                    console.timeEnd("UPDATE" + i);
+                    console.time("COMMIT" + i);
+                    lastCom = await (0, repoapi_1.writeRepoCommit)(datasource, "abc", "commit: " + i);
+                    console.timeEnd("COMMIT" + i);
+                }
+            }
+            console.time("TEST");
+            await (0, repo_1.getRepoState)(datasource, "abc");
+            console.timeEnd("TEST");
+        });
+    });
     describe("merge", () => {
         test("creates a new commit if can automerge", async () => {
             const datasource = (0, datasource_1.makeMemoizedDataSource)();

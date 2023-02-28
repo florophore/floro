@@ -441,6 +441,7 @@ const writeRepoCommit = async (datasource, repoId, message) => {
         if (!commitIsValid) {
             return null;
         }
+        //const repoCommitState = await getRepoState(datasource, repoId);
         const currentState = await datasource.getCurrentState(repoId);
         const currentSha = await (0, repo_1.getCurrentCommitSha)(datasource, repoId);
         const parent = currentSha
@@ -481,6 +482,7 @@ const writeRepoCommit = async (datasource, repoId, message) => {
         else {
             await (0, repo_1.updateCurrentCommitSHA)(datasource, repoId, sha, false);
         }
+        //await datasource.saveHotCheckpoint(repoId, sha, repoCommitState);
         return commit;
     }
     catch (e) {

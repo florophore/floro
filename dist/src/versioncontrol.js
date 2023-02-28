@@ -18,12 +18,12 @@ const getObjectStringValue = (obj) => {
     }, "");
 };
 const hashString = (str) => {
-    return cryptojs_1.Crypto.SHA256(str);
+    return cryptojs_1.Crypto.SHA1(str);
 };
 exports.hashString = hashString;
 const getKVHashes = (obj) => {
-    const keyHash = cryptojs_1.Crypto.SHA256(obj.key);
-    const valueHash = cryptojs_1.Crypto.SHA256(getObjectStringValue(obj.value));
+    const keyHash = cryptojs_1.Crypto.SHA1(obj.key);
+    const valueHash = cryptojs_1.Crypto.SHA1(getObjectStringValue(obj.value));
     return {
         keyHash,
         valueHash,
@@ -32,16 +32,13 @@ const getKVHashes = (obj) => {
 exports.getKVHashes = getKVHashes;
 const getKVHash = (obj) => {
     if (typeof obj.value == "string") {
-        return cryptojs_1.Crypto.SHA256(obj.key + obj.value);
+        return cryptojs_1.Crypto.SHA1(obj.key + obj.value);
     }
-    const keyHash = cryptojs_1.Crypto.SHA256(obj.key);
-    const valueHash = cryptojs_1.Crypto.SHA256(JSON.stringify(obj.value));
-    return cryptojs_1.Crypto.SHA256(keyHash + valueHash);
+    return cryptojs_1.Crypto.SHA1(obj.key + JSON.stringify(obj.value));
 };
 exports.getKVHash = getKVHash;
 const getRowHash = (obj) => {
-    const { keyHash, valueHash } = (0, exports.getKVHashes)(obj);
-    return cryptojs_1.Crypto.SHA1(keyHash + valueHash);
+    return (obj.key + getObjectStringValue(obj.value));
 };
 exports.getRowHash = getRowHash;
 const getDiffHash = (commitData) => {
@@ -73,7 +70,8 @@ const getDiffHash = (commitData) => {
 exports.getDiffHash = getDiffHash;
 const getLCS = (left, right) => {
     const diff = (0, mdiff_1.default)(left, right);
-    return diff.getLcs();
+    const lcs = diff.getLcs();
+    return lcs;
 };
 exports.getLCS = getLCS;
 const getDiff = (before, after) => {
@@ -146,11 +144,11 @@ exports.getTextDiff = getTextDiff;
 const applyDiff = (diffset, state) => {
     let assets = [...(state ?? [])];
     const addIndices = Object.keys(diffset.add)
-        .map((v) => parseInt(v))
-        .sort((a, b) => a - b);
+        .map((v) => parseInt(v));
+    //.sort((a, b) => a - b);
     const removeIndices = Object.keys(diffset.remove)
-        .map((v) => parseInt(v))
-        .sort((a, b) => a - b);
+        .map((v) => parseInt(v));
+    ///.sort((a, b) => a - b);
     let offset = 0;
     for (let removeIndex of removeIndices) {
         const index = removeIndex - offset;

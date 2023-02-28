@@ -252,9 +252,21 @@ const getDivergenceOriginSha = async (datasource, repoId, sha1, sha2) => {
     return null;
 };
 exports.getDivergenceOriginSha = getDivergenceOriginSha;
-const getCommitState = async (datasource, repoId, sha, historyLength) => {
+const getCommitState = async (datasource, repoId, sha, historyLength, checkedHot, hotCheckpoint) => {
     if (!sha) {
         return EMPTY_COMMIT_STATE;
+    }
+    if (checkedHot && hotCheckpoint) {
+        if (hotCheckpoint[0] == sha) {
+            return hotCheckpoint[1];
+        }
+    }
+    if (!checkedHot) {
+        checkedHot = true;
+        hotCheckpoint = await datasource.readHotCheckpoint(repoId);
+        if (hotCheckpoint && hotCheckpoint?.[0] == sha) {
+            return hotCheckpoint[1];
+        }
     }
     const commitData = await datasource.readCommit(repoId, sha);
     if (!historyLength) {
@@ -266,7 +278,7 @@ const getCommitState = async (datasource, repoId, sha, historyLength) => {
             return checkpointState;
         }
     }
-    const state = await (0, exports.getCommitState)(datasource, repoId, commitData.parent, historyLength);
+    const state = await (0, exports.getCommitState)(datasource, repoId, commitData.parent, historyLength, checkedHot, hotCheckpoint);
     const out = await (0, exports.applyStateDiffToCommitState)(state, commitData.diff);
     if (commitData.idx % CHECKPOINT_MODULO == 0 && commitData.idx < (historyLength - CHECKPOINT_MODULO)) {
         await datasource.saveCheckpoint(repoId, sha, out);
@@ -310,26 +322,15 @@ exports.getCurrentBranch = getCurrentBranch;
 const getUnstagedCommitState = async (datasource, repoId) => {
     const current = await datasource.getCurrentState(repoId);
     const hotCheckpoint = await datasource.readHotCheckpoint(repoId);
-    if (current.branch) {
-        const branch = await datasource.getBranch(repoId, current.branch);
-        if (hotCheckpoint) {
-            if (hotCheckpoint[0] == branch.lastCommit) {
-                return hotCheckpoint[1];
-            }
-            await datasource.deleteHotCheckpoint(repoId);
-        }
-        const commitState = await (0, exports.getCommitState)(datasource, repoId, branch.lastCommit);
-        await datasource.saveHotCheckpoint(repoId, branch.lastCommit, commitState);
-        return commitState;
-    }
-    if (hotCheckpoint) {
+    if (hotCheckpoint && current.commit) {
         if (hotCheckpoint[0] == current.commit) {
             return hotCheckpoint[1];
         }
-        await datasource.deleteHotCheckpoint(repoId);
     }
     const commitState = await (0, exports.getCommitState)(datasource, repoId, current.commit);
-    await datasource.saveHotCheckpoint(repoId, current.commit, commitState);
+    if (current.commit) {
+        await datasource.saveHotCheckpoint(repoId, current.commit, commitState);
+    }
     return commitState;
 };
 exports.getUnstagedCommitState = getUnstagedCommitState;
@@ -364,7 +365,6 @@ const getProposedStateFromDiffListOnCurrent = async (datasource, repoId, diffLis
                 },
             };
         }, current);
-        // PRUNE DANGLING PLUGINS FROM UNCOMITED STORE STATE
         const nextPlugins = (0, versioncontrol_1.applyDiff)(updated.diff.plugins, commitState.plugins);
         const pluginNameSet = new Set(nextPlugins.map((p) => p.key));
         for (let pluginName in updated.diff.store) {
