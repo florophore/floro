@@ -87,7 +87,7 @@ export const getRowHash = (obj: {
     [key: string]: number | string | boolean | Array<number | string | boolean>;
   };
 }): string => {
-  return (obj.key + getObjectStringValue(obj.value));
+  return (obj.key + JSON.stringify(obj.value));
 };
 
 export const getDiffHash = (commitData: CommitData): string => {
@@ -204,30 +204,22 @@ export const applyDiff = <T extends DiffElement | string>(
   let assets = [...(state ?? [])];
   const addIndices = Object.keys(diffset.add)
     .map((v) => parseInt(v));
-    //.sort((a, b) => a - b);
   const removeIndices = Object.keys(diffset.remove)
     .map((v) => parseInt(v));
-    ///.sort((a, b) => a - b);
 
   let offset = 0;
   for (let removeIndex of removeIndices) {
     const index = removeIndex - offset;
-    assets = [
-      ...assets.slice(0, index),
-      ...assets.slice(index + 1, assets.length),
-    ];
+    assets.splice(index, 1);
     offset++;
   }
+
   for (let addIndex of addIndices) {
     const index = addIndex;
-    assets = [
-      ...assets.slice(0, index),
-      diffset.add[addIndex] as T,
-      ...assets.slice(index),
-    ];
+    assets.splice(index, 0, diffset.add[addIndex])
   }
   return assets;
-};
+}
 
 export const getMergeSequence = (
   origin: Array<string>,

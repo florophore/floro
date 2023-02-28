@@ -53,6 +53,7 @@ import {
 } from "./plugins";
 import { LicenseCodes } from "./licensecodes";
 import { DataSource } from "./datasource";
+import sizeof from 'object-sizeof';
 
 export const writeRepoDescription = async (
   datasource: DataSource,
@@ -900,8 +901,12 @@ export const updatePluginState = async (
     return null;
   }
   try {
+    console.time("getUnstagedCommitState")
     const unstagedState = await getUnstagedCommitState(datasource, repoId);
+    console.timeEnd("getUnstagedCommitState")
+    console.time("getRepoState")
     const current = await getRepoState(datasource, repoId);
+    console.timeEnd("getRepoState")
     if (current == null) {
       return null;
     }
@@ -921,20 +926,27 @@ export const updatePluginState = async (
       datasource,
       manifest
     );
+    console.time("buildStateStore")
     let stateStore = await buildStateStore(datasource, current);
+    console.timeEnd("buildStateStore")
     stateStore[pluginName] = updatedState;
+    console.time("cascadePluginState")
     stateStore = await cascadePluginState(
       datasource,
       schemaMap,
       stateStore,
       pluginName
     );
+    console.timeEnd("cascadePluginState")
+    console.time("convertStateStoreToKV")
     const kvState = await convertStateStoreToKV(
       datasource,
       current,
       stateStore
     );
+    console.timeEnd("convertStateStoreToKV")
     const diffList = [];
+    console.time("getDiff")
     for (const pluginName in schemaMap) {
       const diff = getDiff(
         unstagedState.store?.[pluginName] ?? [],
@@ -946,13 +958,19 @@ export const updatePluginState = async (
         pluginName,
       });
     }
-
+    console.timeEnd("getDiff")
+    console.time("saveDiffListToCurrent")
     const state = await saveDiffListToCurrent(datasource, repoId, diffList);
+    console.timeEnd("saveDiffListToCurrent")
+    console.time("applyStateDiffToCommitState")
     const nextState = await applyStateDiffToCommitState(
       unstagedState,
       state.diff
     );
+    console.timeEnd("applyStateDiffToCommitState")
+    console.time("renderCommitState")
     const out = await renderCommitState(datasource, nextState);
+    console.timeEnd("renderCommitState")
     return out;
   } catch (e) {
     return null;

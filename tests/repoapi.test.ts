@@ -1,4 +1,5 @@
 import { fs, vol } from "memfs";
+import sizeof from "object-sizeof";
 import { makeMemoizedDataSource } from "../src/datasource";
 import { buildFloroFilestructure, userHome } from "../src/filestructure";
 import { Manifest, PluginElement } from "../src/plugins";
@@ -442,25 +443,23 @@ describe("repoapi", () => {
         const state = {
           aSet: []
         }
-        for (let j = 0; j < 10_000; ++j) {
+        for (let j = 0; j < 100_000; ++j) {
           state.aSet.push({
             mainKey: "key" + j,
             someProp: 100
           })
         }
-        for (let k  = 0; k < 1000; ++k) {
-          const index = Math.round((10_000 - 1) * Math.random())
+        for (let k  = 0; k < 100; ++k) {
+          const index = Math.round((50_000 - 1) * Math.random())
           state.aSet[index].someProp = k * 10;
         }
 
-        if (i == 2) {
-          console.time("UPDATE" + i)
-          await updatePluginState(datasource, "abc", "A", state);
-          console.timeEnd("UPDATE" + i)
-          console.time("COMMIT" + i)
-          lastCom = await writeRepoCommit(datasource, "abc", "commit: " + i);
-          console.timeEnd("COMMIT" + i)
-        }
+        console.time("UPDATE" + i)
+        await updatePluginState(datasource, "abc", "A", state);
+        console.timeEnd("UPDATE" + i)
+        console.time("COMMIT" + i)
+        lastCom = await writeRepoCommit(datasource, "abc", "commit: " + i);
+        console.timeEnd("COMMIT" + i)
       }
 
       console.time("TEST");

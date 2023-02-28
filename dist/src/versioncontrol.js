@@ -38,7 +38,7 @@ const getKVHash = (obj) => {
 };
 exports.getKVHash = getKVHash;
 const getRowHash = (obj) => {
-    return (obj.key + getObjectStringValue(obj.value));
+    return (obj.key + JSON.stringify(obj.value));
 };
 exports.getRowHash = getRowHash;
 const getDiffHash = (commitData) => {
@@ -145,26 +145,17 @@ const applyDiff = (diffset, state) => {
     let assets = [...(state ?? [])];
     const addIndices = Object.keys(diffset.add)
         .map((v) => parseInt(v));
-    //.sort((a, b) => a - b);
     const removeIndices = Object.keys(diffset.remove)
         .map((v) => parseInt(v));
-    ///.sort((a, b) => a - b);
     let offset = 0;
     for (let removeIndex of removeIndices) {
         const index = removeIndex - offset;
-        assets = [
-            ...assets.slice(0, index),
-            ...assets.slice(index + 1, assets.length),
-        ];
+        assets.splice(index, 1);
         offset++;
     }
     for (let addIndex of addIndices) {
         const index = addIndex;
-        assets = [
-            ...assets.slice(0, index),
-            diffset.add[addIndex],
-            ...assets.slice(index),
-        ];
+        assets.splice(index, 0, diffset.add[addIndex]);
     }
     return assets;
 };

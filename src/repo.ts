@@ -411,9 +411,6 @@ export const getCommitState = async (
   return out;
 };
 
-/**
- *  REFACTOR ABOVE WITH FOLLOWINg
- *  */
 export const applyStateDiffToCommitState = async (
   commitState: CommitState,
   stateDiff: StateDiff

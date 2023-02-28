@@ -286,9 +286,6 @@ const getCommitState = async (datasource, repoId, sha, historyLength, checkedHot
     return out;
 };
 exports.getCommitState = getCommitState;
-/**
- *  REFACTOR ABOVE WITH FOLLOWINg
- *  */
 const applyStateDiffToCommitState = async (commitState, stateDiff) => {
     return Object.keys(stateDiff).reduce((acc, namespace) => {
         if (namespace == "store") {

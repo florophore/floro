@@ -702,8 +702,12 @@ const updatePluginState = async (datasource, repoId, pluginName, updatedState) =
         return null;
     }
     try {
+        console.time("getUnstagedCommitState");
         const unstagedState = await (0, repo_1.getUnstagedCommitState)(datasource, repoId);
+        console.timeEnd("getUnstagedCommitState");
+        console.time("getRepoState");
         const current = await (0, repo_1.getRepoState)(datasource, repoId);
+        console.timeEnd("getRepoState");
         if (current == null) {
             return null;
         }
@@ -714,11 +718,18 @@ const updatePluginState = async (datasource, repoId, pluginName, updatedState) =
         const manifests = await (0, plugins_1.getPluginManifests)(datasource, current.plugins);
         const manifest = manifests.find((p) => p.name == pluginName);
         const schemaMap = await (0, plugins_1.getSchemaMapForManifest)(datasource, manifest);
+        console.time("buildStateStore");
         let stateStore = await (0, repo_1.buildStateStore)(datasource, current);
+        console.timeEnd("buildStateStore");
         stateStore[pluginName] = updatedState;
+        console.time("cascadePluginState");
         stateStore = await (0, plugins_1.cascadePluginState)(datasource, schemaMap, stateStore, pluginName);
+        console.timeEnd("cascadePluginState");
+        console.time("convertStateStoreToKV");
         const kvState = await (0, repo_1.convertStateStoreToKV)(datasource, current, stateStore);
+        console.timeEnd("convertStateStoreToKV");
         const diffList = [];
+        console.time("getDiff");
         for (const pluginName in schemaMap) {
             const diff = (0, versioncontrol_1.getDiff)(unstagedState.store?.[pluginName] ?? [], kvState[pluginName]);
             diffList.push({
@@ -727,9 +738,16 @@ const updatePluginState = async (datasource, repoId, pluginName, updatedState) =
                 pluginName,
             });
         }
+        console.timeEnd("getDiff");
+        console.time("saveDiffListToCurrent");
         const state = await (0, repo_1.saveDiffListToCurrent)(datasource, repoId, diffList);
+        console.timeEnd("saveDiffListToCurrent");
+        console.time("applyStateDiffToCommitState");
         const nextState = await (0, repo_1.applyStateDiffToCommitState)(unstagedState, state.diff);
+        console.timeEnd("applyStateDiffToCommitState");
+        console.time("renderCommitState");
         const out = await (0, repo_1.renderCommitState)(datasource, nextState);
+        console.timeEnd("renderCommitState");
         return out;
     }
     catch (e) {

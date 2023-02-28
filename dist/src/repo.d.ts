@@ -103,9 +103,6 @@ export declare const getHistory: (datasource: DataSource, repoId: string, sha: s
 export declare const getBaseDivergenceSha: (history: Array<CommitHistory>, origin: CommitData) => CommitHistory;
 export declare const getDivergenceOriginSha: (datasource: DataSource, repoId: string, sha1: string, sha2: string) => Promise<string>;
 export declare const getCommitState: (datasource: DataSource, repoId: string, sha: string | null, historyLength?: number, checkedHot?: boolean, hotCheckpoint?: [string, CommitState]) => Promise<CommitState | null>;
-/**
- *  REFACTOR ABOVE WITH FOLLOWINg
- *  */
 export declare const applyStateDiffToCommitState: (commitState: CommitState, stateDiff: StateDiff) => Promise<CommitState>;
 export declare const getCurrentBranch: (datasource: DataSource, repoId: string) => Promise<Branch | null>;
 export declare const getUnstagedCommitState: (datasource: DataSource, repoId: string) => Promise<CommitState>;

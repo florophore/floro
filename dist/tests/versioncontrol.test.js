@@ -2,28 +2,32 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 const versioncontrol_1 = require("../src/versioncontrol");
 describe("versioncontrol", () => {
-    describe('getDiff', () => {
+    describe("getDiff", () => {
         test("can perform myers diff", () => {
             const beforeString = "ABCDEF";
             const afterString = "XYAYCEFZ";
-            const before = beforeString.split("").map(key => ({ key, value: {} }));
-            const after = afterString.split("").map(key => ({ key, value: {} }));
+            const before = beforeString.split("").map((key) => ({ key, value: {} }));
+            const after = afterString.split("").map((key) => ({ key, value: {} }));
             const diff = (0, versioncontrol_1.getDiff)(before, after);
-            const appliedDiff = (0, versioncontrol_1.applyDiff)(diff, before).map(({ key }) => key).join("");
+            const appliedDiff = (0, versioncontrol_1.applyDiff)(diff, before)
+                .map(({ key }) => key)
+                .join("");
             expect(appliedDiff).toEqual(afterString);
         });
         test("can perform myers diff", () => {
             const beforeString = "ABCDE";
             const afterString = "XAEBE";
-            const before = beforeString.split("").map(key => ({ key, value: {} }));
-            const after = afterString.split("").map(key => ({ key, value: {} }));
+            const before = beforeString.split("").map((key) => ({ key, value: {} }));
+            const after = afterString.split("").map((key) => ({ key, value: {} }));
             const diff = (0, versioncontrol_1.getDiff)(before, after);
-            const appliedDiff = (0, versioncontrol_1.applyDiff)(diff, before).map(({ key }) => key).join("");
+            const appliedDiff = (0, versioncontrol_1.applyDiff)(diff, before)
+                .map(({ key }) => key)
+                .join("");
             expect(appliedDiff).toEqual(afterString);
         });
         test("can perform myers diff", () => {
-            const before = "ABCDE".split("").map(key => ({ key, value: {} }));
-            const after = "XAEBCDFABD".split("").map(key => ({ key, value: {} }));
+            const before = "ABCDE".split("").map((key) => ({ key, value: {} }));
+            const after = "XAEBCDFABD".split("").map((key) => ({ key, value: {} }));
             const diff = (0, versioncontrol_1.getDiff)(before, after);
             expect(Object.keys(diff.add)).toHaveLength(6);
             expect(Object.keys(diff.remove)).toHaveLength(1);
@@ -34,25 +38,27 @@ describe("versioncontrol", () => {
             expect(diff.add[8].key).toBe("B");
             expect(diff.add[9].key).toBe("D");
             expect(diff.remove[4].key).toBe("E");
-            const appliedDiff = (0, versioncontrol_1.applyDiff)(diff, before).map(({ key }) => key).join("");
+            const appliedDiff = (0, versioncontrol_1.applyDiff)(diff, before)
+                .map(({ key }) => key)
+                .join("");
             expect(appliedDiff).toEqual("XAEBCDFABD");
         });
         test("can perform myers diff on empty values", () => {
-            const before = "".split("").map(key => ({ key, value: {} }));
-            const after = "".split("").map(key => ({ key, value: {} }));
+            const before = "".split("").map((key) => ({ key, value: {} }));
+            const after = "".split("").map((key) => ({ key, value: {} }));
             const diff = (0, versioncontrol_1.getDiff)(before, after);
             expect(Object.keys(diff.add)).toHaveLength(0);
             expect(Object.keys(diff.remove)).toHaveLength(0);
         });
         test("can perform myers diff on swap", () => {
-            const before = "AB".split("").map(key => ({ key, value: {} }));
-            const after = "BA".split("").map(key => ({ key, value: {} }));
+            const before = "AB".split("").map((key) => ({ key, value: {} }));
+            const after = "BA".split("").map((key) => ({ key, value: {} }));
             const diff = (0, versioncontrol_1.getDiff)(before, after);
             expect(Object.keys(diff.add)).toHaveLength(1);
             expect(Object.keys(diff.remove)).toHaveLength(1);
         });
     });
-    describe('getTextDiff', () => {
+    describe("getTextDiff", () => {
         test("successfully applies text diff", () => {
             const paragraphA = "How the paragraph currently is. Will update soon! End of sentence";
             const diff0 = (0, versioncontrol_1.getTextDiff)([].join(""), paragraphA);
@@ -68,8 +74,8 @@ describe("versioncontrol", () => {
             expect(pC.join("")).toEqual(paragraphC);
         });
     });
-    describe('getMergeSequence', () => {
-        test('creates merge with conflicts without a common origin when no subsequence overlap', () => {
+    describe("getMergeSequence", () => {
+        test("creates merge with conflicts without a common origin when no subsequence overlap", () => {
             const A = "".split("");
             const B = "DA".split("");
             const C = "BC".split("");
@@ -78,7 +84,7 @@ describe("versioncontrol", () => {
             const canMerge = (0, versioncontrol_1.canAutoMerge)(A, B, C);
             expect(canMerge).toBe(false);
         });
-        test('creates merge without conflicts without a common origin when subsequences overlap', () => {
+        test("creates merge without conflicts without a common origin when subsequences overlap", () => {
             const A = "".split("");
             const B = "DA".split("");
             const C = "ABC".split("");
@@ -87,7 +93,7 @@ describe("versioncontrol", () => {
             const canMerge = (0, versioncontrol_1.canAutoMerge)(A, B, C);
             expect(canMerge).toBe(true);
         });
-        test('creates merge without conflict when all subsquences are consistent', () => {
+        test("creates merge without conflict when all subsquences are consistent", () => {
             const A = "ABCDEF".split("");
             const B = "RXALDEFSKZ".split("");
             const C = "ABCDFSJK".split("");
@@ -96,7 +102,7 @@ describe("versioncontrol", () => {
             const canMerge = (0, versioncontrol_1.canAutoMerge)(A, B, C);
             expect(canMerge).toBe(true);
         });
-        test('creates merge without conflict when a subsequence cannot be reconciled', () => {
+        test("creates merge without conflict when a subsequence cannot be reconciled", () => {
             const A = "ABCDEF".split("");
             const B = "RXALDEFSKZ".split("");
             const C = "ABCDFSJKL".split("");
@@ -106,7 +112,7 @@ describe("versioncontrol", () => {
             expect(canMerge).toBe(false);
             expect((0, versioncontrol_1.getMergeSequence)(A, B, C, "theirs").join("")).toEqual("RXALDFSJKLZ");
         });
-        test('creates merge without conflict if subsequences with deletions can be reconciled', () => {
+        test("creates merge without conflict if subsequences with deletions can be reconciled", () => {
             const A = "DENF".split("");
             const B = "DTENPF".split("");
             const C = "DF".split("");
@@ -115,7 +121,7 @@ describe("versioncontrol", () => {
             const canMerge = (0, versioncontrol_1.canAutoMerge)(A, B, C);
             expect(canMerge).toBe(true);
         });
-        test('creates merge with conflict if subsequences with deletions cannot be reconciled', () => {
+        test("creates merge with conflict if subsequences with deletions cannot be reconciled", () => {
             const A = "DENF".split("");
             const B = "DTENPF".split("");
             const C = "DXF".split("");
