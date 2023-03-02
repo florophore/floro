@@ -50,10 +50,11 @@ import {
   topSortManifests,
   manifestListToPluginList,
   cascadePluginState,
+  cascadePluginStateDeprecated,
 } from "./plugins";
 import { LicenseCodes } from "./licensecodes";
 import { DataSource } from "./datasource";
-import sizeof from 'object-sizeof';
+import sizeof from "object-sizeof";
 
 export const writeRepoDescription = async (
   datasource: DataSource,
@@ -690,12 +691,9 @@ export const updatePlugins = async (
     const removedPlugins = getRemovedDeps(unstagedState.plugins, plugins);
     const oldManifests = await getPluginManifests(
       datasource,
-      unstagedState.plugins,
+      unstagedState.plugins
     );
-    const newManifests = await getPluginManifests(
-      datasource,
-      plugins,
-    );
+    const newManifests = await getPluginManifests(datasource, plugins);
 
     const oldManifestMap = getManifestMapFromManifestList(oldManifests);
     const newManifestMap = getManifestMapFromManifestList(newManifests);
@@ -729,7 +727,7 @@ export const updatePlugins = async (
       );
       const addedDepImportManifests = await getPluginManifests(
         datasource,
-        addedDepImportsList,
+        addedDepImportsList
       );
       const addedDepImportsManifestMap = getManifestMapFromManifestList([
         newManifestMap[addedDep.key],
@@ -770,7 +768,7 @@ export const updatePlugins = async (
     const updatedPlugins = uniqueKV([...plugins, ...pluginsToAppend]);
     const updatedManifests = await getPluginManifests(
       datasource,
-      updatedPlugins,
+      updatedPlugins
     );
     const updatedManifestMap = getManifestMapFromManifestList(updatedManifests);
     for (let updatedPlugin of updatedManifests) {
@@ -842,17 +840,10 @@ export const updatePlugins = async (
       (m) => Object.keys(m.imports).length == 0
     );
     for (const rootManifest of rootDependencies) {
-      const schemaMap = await getSchemaMapForManifest(
-        datasource,
-        rootManifest
-      );
-      stateStore = await cascadePluginState(
-        datasource,
-        schemaMap,
-        stateStore,
-        rootManifest.name
-      );
+      const schemaMap = await getSchemaMapForManifest(datasource, rootManifest);
+      stateStore = await cascadePluginState(datasource, schemaMap, stateStore);
     }
+
     const kvState = await convertStateStoreToKV(
       datasource,
       proposedCommitState,
@@ -901,12 +892,8 @@ export const updatePluginState = async (
     return null;
   }
   try {
-    console.time("getUnstagedCommitState")
     const unstagedState = await getUnstagedCommitState(datasource, repoId);
-    console.timeEnd("getUnstagedCommitState")
-    console.time("getRepoState")
     const current = await getRepoState(datasource, repoId);
-    console.timeEnd("getRepoState")
     if (current == null) {
       return null;
     }
@@ -916,37 +903,19 @@ export const updatePluginState = async (
     if (!pluginVersion) {
       return null;
     }
-    const manifests = await getPluginManifests(
-      datasource,
-      current.plugins,
-    );
+    const manifests = await getPluginManifests(datasource, current.plugins);
 
     const manifest = manifests.find((p) => p.name == pluginName);
-    const schemaMap = await getSchemaMapForManifest(
-      datasource,
-      manifest
-    );
-    console.time("buildStateStore")
+    const schemaMap = await getSchemaMapForManifest(datasource, manifest);
     let stateStore = await buildStateStore(datasource, current);
-    console.timeEnd("buildStateStore")
     stateStore[pluginName] = updatedState;
-    console.time("cascadePluginState")
-    stateStore = await cascadePluginState(
-      datasource,
-      schemaMap,
-      stateStore,
-      pluginName
-    );
-    console.timeEnd("cascadePluginState")
-    console.time("convertStateStoreToKV")
+    stateStore = await cascadePluginState(datasource, schemaMap, stateStore);
     const kvState = await convertStateStoreToKV(
       datasource,
       current,
       stateStore
     );
-    console.timeEnd("convertStateStoreToKV")
     const diffList = [];
-    console.time("getDiff")
     for (const pluginName in schemaMap) {
       const diff = getDiff(
         unstagedState.store?.[pluginName] ?? [],
@@ -958,19 +927,12 @@ export const updatePluginState = async (
         pluginName,
       });
     }
-    console.timeEnd("getDiff")
-    console.time("saveDiffListToCurrent")
     const state = await saveDiffListToCurrent(datasource, repoId, diffList);
-    console.timeEnd("saveDiffListToCurrent")
-    console.time("applyStateDiffToCommitState")
     const nextState = await applyStateDiffToCommitState(
       unstagedState,
       state.diff
     );
-    console.timeEnd("applyStateDiffToCommitState")
-    console.time("renderCommitState")
     const out = await renderCommitState(datasource, nextState);
-    console.timeEnd("renderCommitState")
     return out;
   } catch (e) {
     return null;

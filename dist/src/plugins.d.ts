@@ -100,7 +100,7 @@ export declare const defaultVoidedState: (datasource: DataSource, schemaMap: {
     [key: string]: Manifest;
 }, stateMap: {
     [key: string]: object;
-}) => Promise<any[]>;
+}) => Promise<{}>;
 export declare const writePathString: (pathParts: Array<DiffElement | string>) => string;
 export declare const decodeSchemaPath: (pathString: string) => Array<DiffElement | string>;
 export declare const getStateId: (schema: TypeStruct, state: object) => string;
@@ -139,11 +139,75 @@ export declare const getDownstreamDepsInSchemaMap: (schemaMap: {
 }, pluginName: string, memo?: {
     [pluginName: string]: boolean;
 }) => Array<string>;
+interface StaticStateMapChild {
+    parent: Array<{
+        [key: string]: object;
+    }>;
+    object: StaticStateMapObject;
+    instance: unknown;
+    keyProp: string;
+    keyPropIsRef: boolean;
+}
+interface StaticStateMapObject {
+    values: Array<StaticStateMapChild>;
+    parent: Array<{
+        [key: string]: object;
+    }>;
+}
+interface StaticPointer {
+    staticPath: Array<string>;
+    relativePath: Array<string>;
+    refType: string;
+    onDelete: "delete" | "nullify";
+}
+interface StateMapPointer {
+    parentSetPath: Array<string | {
+        key: string;
+        value: "string";
+    }>;
+    setPath: Array<string | {
+        key: string;
+        value: "string";
+    }>;
+    refPath: Array<string | {
+        key: string;
+        value: "string";
+    }>;
+    ownerObject: unknown;
+    refKey: string;
+    ref: string;
+    onDelete: "delete" | "nullify";
+    refType: "string";
+}
+export declare const compileStatePointers: (staticPointers: Array<StaticPointer>, stateMap: {
+    [key: string]: object;
+}) => Array<StateMapPointer>;
+export declare const recursivelyCheckIfReferenceExists: (ref: string, refPath: Array<string | {
+    key: string;
+    value: string;
+}>, referenceMap: {
+    [key: string]: StaticStateMapObject;
+}, visited?: {}) => boolean;
+/**
+ *
+ * This is a really ugly function but it gets called frequently
+ * and must not depend upon serialization/deserialization to and
+ * from KV. It also has to be able to work in place to stay performant.
+ * It get called on every update call.
+ */
+export declare const cascadePluginState: (datasource: DataSource, schemaMap: {
+    [key: string]: Manifest;
+}, stateMap: {
+    [key: string]: object;
+}) => Promise<{
+    [key: string]: object;
+}>;
 /***
  * cascading is heavy but infrequent. It only needs to be
  * called when updating state. Not called when applying diffs
+ * @deprecated because it is not scalable at all
  */
-export declare const cascadePluginState: (datasource: DataSource, schemaMap: {
+export declare const cascadePluginStateDeprecated: (datasource: DataSource, schemaMap: {
     [key: string]: Manifest;
 }, stateMap: {
     [key: string]: object;
@@ -228,3 +292,4 @@ export declare const drawGetReferencedObject: (argMap: {
 export declare const drawGetPluginStore: (rootSchemaMap: {
     [key: string]: TypeStruct;
 }, useReact?: boolean) => string;
+export {};

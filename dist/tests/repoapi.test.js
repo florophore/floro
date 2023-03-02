@@ -364,7 +364,7 @@ describe("repoapi", () => {
         });
     });
     describe("benchmark", () => {
-        test.only("commit benchmark", async () => {
+        test.skip("commit benchmark", async () => {
             const datasource = (0, datasource_1.makeMemoizedDataSource)();
             const PLUGIN_A_0_MANIFEST = {
                 name: "A",
@@ -401,7 +401,7 @@ describe("repoapi", () => {
                 const state = {
                     aSet: []
                 };
-                for (let j = 0; j < 100_000; ++j) {
+                for (let j = 0; j < 50_000; ++j) {
                     state.aSet.push({
                         mainKey: "key" + j,
                         someProp: 100
@@ -419,7 +419,7 @@ describe("repoapi", () => {
                 console.timeEnd("COMMIT" + i);
             }
             console.time("TEST");
-            await (0, repo_1.getRepoState)(datasource, "abc");
+            const a = await (0, repo_1.getRepoState)(datasource, "abc");
             console.timeEnd("TEST");
         });
     });
@@ -625,7 +625,6 @@ describe("repoapi", () => {
                 ],
             };
             await (0, repoapi_1.updatePluginState)(datasource, "abc", "A", state5);
-            console.log("WTF", commitB.sha);
             const out = await (0, repoapi_1.mergeCommit)(datasource, "abc", commitB.sha);
             console.log("OUT", JSON.stringify(out, null, 2));
         });

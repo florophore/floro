@@ -280,7 +280,8 @@ const getCommitState = async (datasource, repoId, sha, historyLength, checkedHot
     }
     const state = await (0, exports.getCommitState)(datasource, repoId, commitData.parent, historyLength, checkedHot, hotCheckpoint);
     const out = await (0, exports.applyStateDiffToCommitState)(state, commitData.diff);
-    if (commitData.idx % CHECKPOINT_MODULO == 0 && commitData.idx < (historyLength - CHECKPOINT_MODULO)) {
+    if (commitData.idx % CHECKPOINT_MODULO == 0 &&
+        commitData.idx < historyLength - CHECKPOINT_MODULO) {
         await datasource.saveCheckpoint(repoId, sha, out);
     }
     return out;
@@ -731,7 +732,7 @@ const getMergedCommitState = async (datasource, commit1, commit2, originCommit, 
         const rootManifests = manifests.filter((m) => Object.keys(m.imports).length === 0);
         for (const manifest of rootManifests) {
             const schemaMap = await (0, plugins_1.getSchemaMapForManifest)(datasource, manifest);
-            stateStore = await (0, plugins_1.cascadePluginState)(datasource, schemaMap, stateStore, manifest.name);
+            stateStore = await (0, plugins_1.cascadePluginState)(datasource, schemaMap, stateStore);
         }
         mergeState.store = await (0, exports.convertStateStoreToKV)(datasource, mergeState, stateStore);
         return mergeState;

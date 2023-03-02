@@ -1,6 +1,5 @@
 import axios from "axios";
 import { DiffElement } from "./versioncontrol";
-import { Crypto } from "cryptojs";
 import semver from "semver";
 import datasource, { DataSource } from "./datasource";
 
@@ -144,7 +143,7 @@ export const topSortManifests = (manifests: Array<Manifest>) => {
 
 export const getPluginManifests = async (
   datasource: DataSource,
-  pluginList: Array<PluginElement>,
+  pluginList: Array<PluginElement>
 ): Promise<Array<Manifest>> => {
   const manifests = await Promise.all(
     pluginList.map(({ key: pluginName, value: pluginVersion }) => {
@@ -978,17 +977,16 @@ export const defaultVoidedState = async (
   stateMap: { [key: string]: object }
 ) => {
   const rootSchemaMap = (await getRootSchemaMap(datasource, schemaMap)) ?? {};
-  return Object.keys(rootSchemaMap).reduce((acc, pluginName) => {
+  const defaultedState = {};
+  for (const pluginName of Object.keys(rootSchemaMap)) {
     const struct = rootSchemaMap[pluginName];
     const state = stateMap?.[pluginName] ?? {};
-    return {
-      ...acc,
-      [pluginName]: sanitizePrimitivesWithSchema(
-        struct,
-        defaultMissingSchemaState(struct, state, stateMap)
-      ),
-    };
-  }, []);
+    defaultedState[pluginName] = sanitizePrimitivesWithSchema(
+      struct,
+      defaultMissingSchemaState(struct, state, stateMap)
+    );
+  }
+  return defaultedState;
 };
 
 const defaultMissingSchemaState = (
@@ -1282,6 +1280,15 @@ export const decodeSchemaPath = (
   });
 };
 
+const fastHash = (str: string) => {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = (hash << 5) - hash + str.charCodeAt(i);
+    hash |= 0;
+  }
+  return hash.toString(36).padEnd(6, "0");
+};
+
 export const getStateId = (schema: TypeStruct, state: object): string => {
   const hashPairs: Array<DiffElement> = [];
   const sortedProps = Object.keys(schema).sort();
@@ -1295,10 +1302,11 @@ export const getStateId = (schema: TypeStruct, state: object): string => {
     if (primitives.has(schema[prop].type as string)) {
       hashPairs.push({
         key: prop,
-        value: Crypto.SHA256(`${state[prop]}`),
+        value: fastHash(`${state[prop]}`),
       });
     }
     if (schema[prop].type == "set" || schema[prop].type == "array") {
+      // TODO: REMOVE REDUCE
       hashPairs.push({
         key: prop,
         value: state[prop]?.reduce((s: string, element) => {
@@ -1306,16 +1314,17 @@ export const getStateId = (schema: TypeStruct, state: object): string => {
             typeof schema[prop].values == "string" &&
             primitives.has(schema[prop].values as string)
           ) {
-            return Crypto.SHA256(s + `${element}`);
+            return fastHash(s + `${element}`);
           }
-          return Crypto.SHA256(
+          return fastHash(
             s + getStateId(schema[prop].values as TypeStruct, element)
           );
         }, ""),
       });
     }
   }
-  return Crypto.SHA256(
+  // TODO: REMOVE REDUCE
+  return fastHash(
     hashPairs.reduce((s, { key, value }) => {
       if (key == "(id)") {
         return s;
@@ -1468,7 +1477,7 @@ export const buildObjectsAtPath = (
   path: string,
   properties: { [key: string]: number | string | boolean },
   visitedLists = {},
-  out = {},
+  out = {}
 ): object => {
   // ignore $(store)
   const [, ...decodedPath] = decodeSchemaPath(path);
@@ -1480,7 +1489,7 @@ export const buildObjectsAtPath = (
     if (typeof part == "string" && currentSchema?.[part]?.type == "set") {
       const listPath = writePathString(partialPath);
       if (!visitedLists[listPath]) {
-          visitedLists[listPath] = {}
+        visitedLists[listPath] = {};
       }
       if (!current[part as string]) {
         current[part as string] = [];
@@ -1492,7 +1501,7 @@ export const buildObjectsAtPath = (
     if (typeof part == "string" && currentSchema?.[part]?.type == "array") {
       const listPath = writePathString(partialPath);
       if (!visitedLists[listPath]) {
-          visitedLists[listPath] = {}
+        visitedLists[listPath] = {};
       }
       if (!current[part as string]) {
         current[part as string] = [];
@@ -2028,11 +2037,464 @@ const asyncReduce = async <T, U>(
   return out;
 };
 
+interface StaticSetPath {
+  staticPath: Array<string>;
+  relativePath: Array<string>;
+  staticChildren: Array<StaticSetPath>;
+  keyProp: string;
+  keyPropIsRef: boolean;
+}
+
+const traverseSchemaMapForStaticSetPaths = (
+  rootSchemaMap: { [key: string]: TypeStruct },
+  typeStruct: { [key: string]: TypeStruct } | TypeStruct,
+  path = [],
+  relativePath = [],
+  parent = null
+): Array<StaticSetPath> => {
+  const refs = [];
+  for (const prop in typeStruct) {
+    if (typeof typeStruct[prop] == "object" && !typeStruct[prop]?.type) {
+      const subRefs = traverseSchemaMapForStaticSetPaths(
+        rootSchemaMap,
+        typeStruct[prop] as TypeStruct,
+        [...path, prop],
+        [...relativePath, prop],
+        parent
+      );
+      refs.push(...subRefs);
+      continue;
+    }
+    if (
+      typeStruct[prop]?.type == "set" &&
+      typeof typeStruct[prop].values != "string"
+    ) {
+      const staticChildren = traverseSchemaMapForStaticSetPaths(
+        rootSchemaMap,
+        typeStruct[prop].values as TypeStruct,
+        [...path, prop, "values"],
+        [],
+        [...path, prop, "values"]
+      );
+      let keyProp = null;
+      let keyPropIsRef = false;
+      for (const key in typeStruct[prop].values as object) {
+        if (typeStruct[prop].values[key]?.isKey) {
+          keyProp = key;
+          if (typeStruct[prop].values[key].type == "ref") {
+            keyPropIsRef = true;
+          }
+          break;
+        }
+      }
+      refs.push({
+        staticPath: [...path, prop, "values"],
+        staticChildren,
+        relativePath: [...relativePath, prop, "values"],
+        keyProp,
+        keyPropIsRef,
+      });
+    }
+  }
+  return refs;
+};
+
+const getSetInStateMapFromStaticPath = (
+  path: string[],
+  stateMap: { [key: string]: object }
+): Array<{ [key: string]: object }> => {
+  let current: object = stateMap;
+  for (let part of path) {
+    if (part == "values") {
+      return current as Array<{ [key: string]: object }>;
+    }
+    current = current[part];
+  }
+  return null;
+};
+
+interface StaticStateMapChild {
+  parent: Array<{ [key: string]: object }>;
+  object: StaticStateMapObject;
+  instance: unknown;
+  keyProp: string;
+  keyPropIsRef: boolean;
+}
+
+interface StaticStateMapObject {
+  values: Array<StaticStateMapChild>;
+  parent: Array<{ [key: string]: object }>;
+}
+
+const compileStateRefs = (
+  staticSetPaths: Array<StaticSetPath>,
+  stateMap: { [key: string]: object }
+): { [key: string]: StaticStateMapObject } => {
+  const out = {};
+  for (const staticSet of staticSetPaths) {
+    const parent = getSetInStateMapFromStaticPath(
+      staticSet.relativePath,
+      stateMap
+    );
+    const values = {};
+    if (parent) {
+      for (let child of parent) {
+        const object = compileStateRefs(
+          staticSet.staticChildren,
+          child as { [key: string]: object }
+        );
+        values[child[staticSet.keyProp] as unknown as string] = {
+          object,
+          instance: child,
+          parent,
+          keyProp: staticSet.keyProp,
+          keyPropIsRef: staticSet.keyPropIsRef,
+        };
+      }
+    }
+    const keys = staticSet.relativePath.slice(0, -1);
+    if (keys.length == 1) {
+      out[keys[0]] = {
+        values,
+        parent,
+      };
+    } else {
+      let curr = out[keys[0]] ?? {};
+      let top = curr;
+      out[keys[0]] = top;
+      for (let i = 1; i < keys.length - 1; ++i) {
+        const key = keys[i];
+        if (!curr[key]) {
+          curr[key] = {};
+        }
+        curr = curr[key];
+      }
+      curr[keys[keys.length - 1]] = {
+        values,
+        parent,
+      };
+    }
+  }
+  return out;
+};
+
+interface StaticPointer {
+  staticPath: Array<string>;
+  relativePath: Array<string>;
+  refType: string;
+  onDelete: "delete" | "nullify";
+}
+
+const traverseSchemaMapForStaticPointerPaths = (
+  rootSchemaMap: { [key: string]: TypeStruct },
+  typeStruct: { [key: string]: TypeStruct } | TypeStruct,
+  path = [],
+  relativePath = [],
+  parent = null
+): Array<StaticPointer> => {
+  const refs = [];
+  for (const prop in typeStruct) {
+    if (typeof typeStruct[prop] == "object" && !typeStruct[prop]?.type) {
+      const subRefs = traverseSchemaMapForStaticPointerPaths(
+        rootSchemaMap,
+        typeStruct[prop] as TypeStruct,
+        [...path, prop],
+        [...relativePath, prop],
+        parent
+      );
+      refs.push(...subRefs);
+      continue;
+    }
+    if (
+      (typeStruct[prop]?.type == "set" || typeStruct[prop]?.type == "array") &&
+      typeof typeStruct[prop].values != "string"
+    ) {
+      // find key value
+      let keyProp = null;
+      for (const key in typeStruct[prop].values as object) {
+        if (typeStruct[prop].values[key]?.isKey) {
+          keyProp = key;
+          break;
+        }
+      }
+      const staticChildren = traverseSchemaMapForStaticPointerPaths(
+        rootSchemaMap,
+        typeStruct[prop].values as TypeStruct,
+        [...path, prop, `values_key:${keyProp}`],
+        [],
+        [...path, prop, `values_key:${keyProp}`]
+      );
+      refs.push(...staticChildren);
+      continue;
+    }
+    if (typeStruct[prop]?.type == "ref") {
+      refs.push({
+        staticPath: [...path, prop],
+        relativePath: [...relativePath, prop],
+        refType: typeStruct[prop]?.refType,
+        onDelete: typeStruct[prop]?.onDelete,
+      });
+    }
+  }
+  return refs;
+};
+
+interface StateMapPointer {
+  parentSetPath: Array<string | { key: string; value: "string" }>;
+  setPath: Array<string | { key: string; value: "string" }>;
+  refPath: Array<string | { key: string; value: "string" }>;
+  ownerObject: unknown;
+  refKey: string;
+  ref: string;
+  onDelete: "delete" | "nullify";
+  refType: "string";
+}
+
+const getPointersAtPath = (
+  pointerPath: Array<string>,
+  staticPointer: StaticPointer,
+  stateMap: { [key: string]: unknown } | Array<unknown>,
+  path: Array<string | { key: string; value: string }> = [],
+  index = 0
+): Array<StateMapPointer> => {
+  const pointers = [];
+  const subPath = [...path];
+  let current = stateMap;
+  for (let i = index; i < pointerPath.length; ++i) {
+    if (i + 1 == pointerPath.length) {
+      if (!current?.[pointerPath[i]]) {
+        continue;
+      }
+      const [pluginNameEncoded, ...remainingRefPath] = decodeSchemaPath(
+        current[pointerPath[i]]
+      );
+      const pluginName = /\$\((.+)\)/.exec(pluginNameEncoded as string)[1];
+      const refPath = [pluginName, ...remainingRefPath];
+      pointers.push({
+        setPath: path,
+        parentSetPath: path.slice(0, -1),
+        ownerObject: current,
+        refKey: pointerPath[i],
+        ref: current[pointerPath[i]],
+        refPath,
+        onDelete: staticPointer.onDelete,
+        refType: staticPointer.refType,
+      });
+      break;
+    }
+    if (pointerPath[i].startsWith("values_key:")) {
+      const [, keyProp] = pointerPath[i].split(":");
+      for (let j = 0; j < (current as Array<unknown>).length; ++j) {
+        const subState = current[j];
+        const keyValue = subState[keyProp];
+        const subPointers = getPointersAtPath(
+          pointerPath,
+          staticPointer,
+          subState,
+          [...subPath, { key: keyProp, value: keyValue }],
+          i + 1
+        );
+        pointers.push(...subPointers);
+      }
+      break;
+    }
+
+    subPath.push(pointerPath[i]);
+    current = current[pointerPath[i]];
+  }
+  return pointers;
+};
+
+export const compileStatePointers = (
+  staticPointers: Array<StaticPointer>,
+  stateMap: { [key: string]: object }
+): Array<StateMapPointer> => {
+  const pointers = [];
+  for (const staticPointer of staticPointers) {
+    const ptrs = getPointersAtPath(
+      staticPointer.staticPath,
+      staticPointer,
+      stateMap
+    );
+    pointers.push(...ptrs);
+  }
+  return pointers;
+};
+
+const accessObjectInReferenceMap = (
+  referenceMap: { [key: string]: StaticStateMapObject },
+  path: Array<string | { key: string; value: string }>
+): StaticStateMapChild => {
+  let curr:
+    | { [key: string]: StaticStateMapObject }
+    | StaticStateMapObject
+    | StaticStateMapChild = referenceMap;
+  for (let i = 0; i < path.length; ++i) {
+    const part = path[i];
+    const isLast = i + 1 == path.length;
+    if (typeof part == "string") {
+      curr = curr[part];
+      continue;
+    }
+    const { value } = part;
+    curr = (curr as StaticStateMapObject).values[value] as StaticStateMapChild;
+    if (!curr) {
+      return null;
+    }
+    if (!isLast) {
+      curr = curr["object"];
+    }
+  }
+  if (curr === referenceMap) {
+    return null;
+  }
+  return curr as StaticStateMapChild;
+};
+
+const accessSetInReferenceMap = (
+  referenceMap: { [key: string]: StaticStateMapObject },
+  path: Array<string | { key: string; value: string }>
+): Array<unknown> => {
+  let curr:
+    | { [key: string]: StaticStateMapObject }
+    | StaticStateMapObject
+    | StaticStateMapChild
+    | Array<unknown> = referenceMap;
+  for (let i = 0; i < path.length; ++i) {
+    const part = path[i];
+    const isLast = i + 1 == path.length;
+    if (typeof part == "string") {
+      curr = curr[part];
+      continue;
+    }
+    const { value } = part;
+    curr = (curr as StaticStateMapObject).values[value] as StaticStateMapChild;
+    if (!curr) {
+      return null;
+    }
+    if (!isLast) {
+      curr = curr.object;
+    }
+  }
+  return curr as any;
+};
+
+export const recursivelyCheckIfReferenceExists = (
+  ref: string,
+  refPath: Array<string | { key: string; value: string }>,
+  referenceMap: { [key: string]: StaticStateMapObject },
+  visited = {}
+): boolean => {
+  if (visited[ref]) {
+    return true;
+  }
+  visited[ref] = true;
+  const referenceObject = accessObjectInReferenceMap(referenceMap, refPath);
+  if (!referenceObject) {
+    return false;
+  }
+  if (referenceObject.keyPropIsRef) {
+    const nextRef = referenceObject.instance[referenceObject.keyProp];
+    const [pluginNameEncoded, ...remainingRefPath] = decodeSchemaPath(
+      referenceObject.instance[referenceObject.keyProp]
+    );
+    const pluginName = /\$\((.+)\)/.exec(pluginNameEncoded as string)[1];
+    const nextRefPath = [pluginName, ...remainingRefPath];
+    return recursivelyCheckIfReferenceExists(
+      nextRef,
+      nextRefPath,
+      referenceMap,
+      visited
+    );
+  }
+  return true;
+};
+
+/**
+ *
+ * This is a really ugly function but it gets called frequently
+ * and must not depend upon serialization/deserialization to and
+ * from KV. It also has to be able to work in place to stay performant.
+ * It get called on every update call.
+ */
+export const cascadePluginState = async (
+  datasource: DataSource,
+  schemaMap: { [key: string]: Manifest },
+  stateMap: { [key: string]: object }
+): Promise<{ [key: string]: object }> => {
+  try {
+    const rootSchemaMap = (await getRootSchemaMap(datasource, schemaMap)) ?? {};
+    const staticPointers = traverseSchemaMapForStaticPointerPaths(
+      rootSchemaMap,
+      rootSchemaMap
+    );
+    const pointers = compileStatePointers(staticPointers, stateMap);
+    // if no pointers just return the stateMap
+    if (pointers.length == 0) {
+      return stateMap;
+    }
+    const staticSetPaths = traverseSchemaMapForStaticSetPaths(
+      rootSchemaMap,
+      rootSchemaMap
+    );
+    const references = compileStateRefs(staticSetPaths, stateMap);
+    let deletions = 0;
+    for (let ptr of pointers) {
+      const refExists = recursivelyCheckIfReferenceExists(
+        ptr.ref,
+        ptr.refPath,
+        references
+      );
+      if (!refExists) {
+        if (ptr.onDelete == "delete") {
+          deletions++;
+          const parentSet = accessSetInReferenceMap(
+            references,
+            ptr.parentSetPath
+          );
+          if (!parentSet) {
+            continue;
+          }
+          delete parentSet.values[ptr.ref];
+          let pointerIndex = -1;
+          for (
+            let i = 0;
+            i < (parentSet["parent"] as Array<object>).length;
+            ++i
+          ) {
+            if (parentSet["parent"][i][ptr.refKey] == ptr.ref) {
+              pointerIndex = i;
+              break;
+            }
+          }
+          if (pointerIndex != -1) {
+            parentSet["parent"].splice(pointerIndex, 1);
+          }
+        }
+        if (
+          ptr.onDelete == "nullify" &&
+          ptr?.ownerObject?.[ptr.refKey] != null
+        ) {
+          ptr.ownerObject[ptr.refKey] = null;
+        }
+      }
+    }
+    if (deletions > 0) {
+      // bad but highly infrequent
+      return cascadePluginState(datasource, schemaMap, stateMap);
+    }
+    return stateMap;
+  } catch (e) {
+    return stateMap;
+  }
+};
+
 /***
  * cascading is heavy but infrequent. It only needs to be
  * called when updating state. Not called when applying diffs
+ * @deprecated because it is not scalable at all
  */
-export const cascadePluginState = async (
+export const cascadePluginStateDeprecated = async (
   datasource: DataSource,
   schemaMap: { [key: string]: Manifest },
   stateMap: { [key: string]: object },
@@ -2106,7 +2568,7 @@ export const cascadePluginState = async (
   const newPluginState = getStateFromKVForPlugin(schemaMap, next, pluginName);
   const nextStateMap = { ...stateMap, [pluginName]: newPluginState };
   if (next.length != kvs.length) {
-    return cascadePluginState(
+    const out = cascadePluginStateDeprecated(
       datasource,
       schemaMap,
       { ...stateMap, [pluginName]: newPluginState },
@@ -2114,6 +2576,7 @@ export const cascadePluginState = async (
       rootSchemaMap,
       memo
     );
+    return out;
   }
   const downstreamDeps = getDownstreamDepsInSchemaMap(schemaMap, pluginName);
   const result = await asyncReduce(
@@ -2128,7 +2591,7 @@ export const cascadePluginState = async (
       }
       const result = {
         ...stateMap,
-        ...(await cascadePluginState(
+        ...(await cascadePluginStateDeprecated(
           datasource,
           schemaMap,
           stateMap,

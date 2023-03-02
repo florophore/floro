@@ -1019,7 +1019,7 @@ describe("plugins", () => {
                 getPluginManifest: async (pluginName) => {
                     return schemaMap[pluginName];
                 },
-            }, schemaMap, stateMap, A_PLUGIN_MANIFEST.name);
+            }, schemaMap, stateMap);
             expect(cascadedAState).toEqual({
                 "a-plugin": {
                     aObjects: [
@@ -1154,7 +1154,7 @@ describe("plugins", () => {
                 getPluginManifest: async (pluginName) => {
                     return schemaMap[pluginName];
                 },
-            }, schemaMap, stateMap, A_PLUGIN_MANIFEST.name);
+            }, schemaMap, stateMap);
             expect(cascadedAState).toEqual({
                 "a-plugin": {
                     aObjects: [
@@ -1266,7 +1266,7 @@ describe("plugins", () => {
                 getPluginManifest: async (pluginName) => {
                     return schemaMap[pluginName];
                 },
-            }, schemaMap, stateMap, PLUGIN_A_MANIFEST.name);
+            }, schemaMap, stateMap);
             expect(cascadedAState).toEqual({
                 A: {
                     aObjects: [
@@ -1280,6 +1280,292 @@ describe("plugins", () => {
                         },
                     ],
                     cObjects: [
+                        {
+                            cVal: "$(A).bObjects.mainKey<$(A).aObjects.name<def>>",
+                        },
+                    ],
+                },
+            });
+        });
+        test("cascades nested refs", async () => {
+            const PLUGIN_A_MANIFEST = {
+                name: "A",
+                version: "0.0.0",
+                displayName: "A",
+                icon: "",
+                imports: {},
+                types: {},
+                store: {
+                    aObjects: {
+                        type: "set",
+                        values: {
+                            name: {
+                                isKey: true,
+                                type: "string",
+                            },
+                        },
+                    },
+                    bObjects: {
+                        type: "set",
+                        values: {
+                            mainKey: {
+                                isKey: true,
+                                type: "ref<$(A).aObjects.values>",
+                            },
+                            otherThings: {
+                                type: "set",
+                                values: {
+                                    pKey: {
+                                        type: "int",
+                                        isKey: true
+                                    },
+                                    someRef: {
+                                        type: "ref<$(A).cObjects.values>",
+                                    },
+                                    nested: {
+                                        nestedRef: {
+                                            type: "ref<$(A).cObjects.values>",
+                                            onDelete: "nullify"
+                                        },
+                                        nestedSet: {
+                                            type: "set",
+                                            values: {
+                                                dKey: {
+                                                    isKey: true,
+                                                    type: "string"
+                                                },
+                                                randomRef: {
+                                                    type: "ref<$(A).cObjects.values>",
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                    },
+                    cObjects: {
+                        type: "set",
+                        values: {
+                            cVal: {
+                                isKey: true,
+                                type: "ref<$(A).bObjects.values>",
+                            },
+                        },
+                    },
+                },
+            };
+            const schemaMap = {
+                [PLUGIN_A_MANIFEST.name]: PLUGIN_A_MANIFEST,
+            };
+            const stateMap = {
+                [PLUGIN_A_MANIFEST.name]: {
+                    aObjects: [
+                        {
+                            name: "abc",
+                        },
+                        {
+                            name: "def",
+                        },
+                        //{
+                        //  name: "xyz",
+                        //},
+                    ],
+                    bObjects: [
+                        {
+                            mainKey: "$(A).aObjects.name<abc>",
+                            someRef: "$(A).cObjects.cVal<$(A).bObjects.mainKey<$(A).aObjects.name<abc>>>",
+                            otherThings: [
+                                {
+                                    pKey: 1,
+                                    someRef: "$(A).cObjects.cVal<$(A).bObjects.mainKey<$(A).aObjects.name<def>>>",
+                                    nested: {
+                                        nestedRef: "$(A).cObjects.cVal<$(A).bObjects.mainKey<$(A).aObjects.name<def>>>",
+                                        nestedSet: [
+                                            {
+                                                dKey: "a",
+                                                randomRef: "$(A).cObjects.cVal<$(A).bObjects.mainKey<$(A).aObjects.name<abc>>>"
+                                            },
+                                            {
+                                                dKey: "b",
+                                                randomRef: "$(A).cObjects.cVal<$(A).bObjects.mainKey<$(A).aObjects.name<def>>>"
+                                            }
+                                        ]
+                                    }
+                                },
+                                {
+                                    pKey: 2,
+                                    someRef: "$(A).cObjects.cVal<$(A).bObjects.mainKey<$(A).aObjects.name<def>>>",
+                                    nested: {
+                                        nestedRef: "$(A).cObjects.cVal<$(A).bObjects.mainKey<$(A).aObjects.name<def>>>",
+                                        nestedSet: [
+                                            {
+                                                dKey: "a",
+                                                randomRef: "$(A).cObjects.cVal<$(A).bObjects.mainKey<$(A).aObjects.name<abc>>>"
+                                            },
+                                            {
+                                                dKey: "b",
+                                                randomRef: "$(A).cObjects.cVal<$(A).bObjects.mainKey<$(A).aObjects.name<def>>>"
+                                            }
+                                        ]
+                                    }
+                                },
+                            ]
+                        },
+                        {
+                            mainKey: "$(A).aObjects.name<def>",
+                            otherThings: [
+                                {
+                                    pKey: 1,
+                                    someRef: "$(A).cObjects.cVal<$(A).bObjects.mainKey<$(A).aObjects.name<abc>>>",
+                                    nested: {
+                                        nestedRef: "$(A).cObjects.cVal<$(A).bObjects.mainKey<$(A).aObjects.name<abc>>>",
+                                        nestedSet: [
+                                            {
+                                                dKey: "a",
+                                                randomRef: "$(A).cObjects.cVal<$(A).bObjects.mainKey<$(A).aObjects.name<abc>>>"
+                                            },
+                                            {
+                                                dKey: "x",
+                                                randomRef: "$(A).cObjects.cVal<$(A).bObjects.mainKey<$(A).aObjects.name<xyz>>>"
+                                            }
+                                        ]
+                                    }
+                                },
+                                {
+                                    pKey: 2,
+                                    someRef: "$(A).cObjects.cVal<$(A).bObjects.mainKey<$(A).aObjects.name<def>>>",
+                                    nested: {
+                                        nestedRef: "$(A).cObjects.cVal<$(A).bObjects.mainKey<$(A).aObjects.name<xyz>>>",
+                                        nestedSet: [
+                                            {
+                                                dKey: "a",
+                                                randomRef: "$(A).cObjects.cVal<$(A).bObjects.mainKey<$(A).aObjects.name<abc>>>"
+                                            },
+                                            {
+                                                dKey: "x",
+                                                randomRef: "$(A).cObjects.cVal<$(A).bObjects.mainKey<$(A).aObjects.name<xyz>>>"
+                                            },
+                                            {
+                                                dKey: "b",
+                                                randomRef: "$(A).cObjects.cVal<$(A).bObjects.mainKey<$(A).aObjects.name<def>>>"
+                                            }
+                                        ]
+                                    }
+                                },
+                            ]
+                        },
+                    ],
+                    cObjects: [
+                        {
+                            cVal: "$(A).bObjects.mainKey<$(A).aObjects.name<abc>>",
+                        },
+                        {
+                            cVal: "$(A).bObjects.mainKey<$(A).aObjects.name<def>>",
+                        },
+                        {
+                            cVal: "$(A).bObjects.mainKey<$(A).aObjects.name<xyz>>",
+                        },
+                    ],
+                },
+            };
+            const cascadedAState = await (0, plugins_1.cascadePluginState)({
+                ...datasource,
+                getPluginManifest: async (pluginName) => {
+                    return schemaMap[pluginName];
+                },
+            }, schemaMap, stateMap);
+            expect(cascadedAState).toEqual({
+                A: {
+                    aObjects: [
+                        {
+                            name: "abc",
+                        },
+                        {
+                            name: "def",
+                        },
+                    ],
+                    bObjects: [
+                        {
+                            mainKey: "$(A).aObjects.name<abc>",
+                            someRef: "$(A).cObjects.cVal<$(A).bObjects.mainKey<$(A).aObjects.name<abc>>>",
+                            otherThings: [
+                                {
+                                    pKey: 1,
+                                    someRef: "$(A).cObjects.cVal<$(A).bObjects.mainKey<$(A).aObjects.name<def>>>",
+                                    nested: {
+                                        nestedRef: "$(A).cObjects.cVal<$(A).bObjects.mainKey<$(A).aObjects.name<def>>>",
+                                        nestedSet: [
+                                            {
+                                                dKey: "a",
+                                                randomRef: "$(A).cObjects.cVal<$(A).bObjects.mainKey<$(A).aObjects.name<abc>>>",
+                                            },
+                                            {
+                                                dKey: "b",
+                                                randomRef: "$(A).cObjects.cVal<$(A).bObjects.mainKey<$(A).aObjects.name<def>>>",
+                                            },
+                                        ],
+                                    },
+                                },
+                                {
+                                    pKey: 2,
+                                    someRef: "$(A).cObjects.cVal<$(A).bObjects.mainKey<$(A).aObjects.name<def>>>",
+                                    nested: {
+                                        nestedRef: "$(A).cObjects.cVal<$(A).bObjects.mainKey<$(A).aObjects.name<def>>>",
+                                        nestedSet: [
+                                            {
+                                                dKey: "a",
+                                                randomRef: "$(A).cObjects.cVal<$(A).bObjects.mainKey<$(A).aObjects.name<abc>>>",
+                                            },
+                                            {
+                                                dKey: "b",
+                                                randomRef: "$(A).cObjects.cVal<$(A).bObjects.mainKey<$(A).aObjects.name<def>>>",
+                                            },
+                                        ],
+                                    },
+                                },
+                            ],
+                        },
+                        {
+                            mainKey: "$(A).aObjects.name<def>",
+                            otherThings: [
+                                {
+                                    pKey: 1,
+                                    someRef: "$(A).cObjects.cVal<$(A).bObjects.mainKey<$(A).aObjects.name<abc>>>",
+                                    nested: {
+                                        nestedRef: "$(A).cObjects.cVal<$(A).bObjects.mainKey<$(A).aObjects.name<abc>>>",
+                                        nestedSet: [
+                                            {
+                                                dKey: "a",
+                                                randomRef: "$(A).cObjects.cVal<$(A).bObjects.mainKey<$(A).aObjects.name<abc>>>",
+                                            },
+                                        ],
+                                    },
+                                },
+                                {
+                                    pKey: 2,
+                                    someRef: "$(A).cObjects.cVal<$(A).bObjects.mainKey<$(A).aObjects.name<def>>>",
+                                    nested: {
+                                        nestedRef: null,
+                                        nestedSet: [
+                                            {
+                                                dKey: "a",
+                                                randomRef: "$(A).cObjects.cVal<$(A).bObjects.mainKey<$(A).aObjects.name<abc>>>",
+                                            },
+                                            {
+                                                dKey: "b",
+                                                randomRef: "$(A).cObjects.cVal<$(A).bObjects.mainKey<$(A).aObjects.name<def>>>",
+                                            },
+                                        ],
+                                    },
+                                },
+                            ],
+                        },
+                    ],
+                    cObjects: [
+                        {
+                            cVal: "$(A).bObjects.mainKey<$(A).aObjects.name<abc>>",
+                        },
                         {
                             cVal: "$(A).bObjects.mainKey<$(A).aObjects.name<def>>",
                         },

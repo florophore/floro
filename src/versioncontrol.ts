@@ -42,18 +42,42 @@ const getObjectStringValue = (obj: {
   [key: string]: number | string | boolean | Array<number | string | boolean>;
 }): string => {
   if (typeof obj == "string") return obj;
-  return Object.keys(obj).sort().reduce((s, key) => {
-    if (Array.isArray(obj[key])) {
-      const value = (obj[key] as Array<number | string | boolean>).join("-");
-      return `${s}/${key}:${value}`;
-    }
-    return `${s}/${key}:${obj[key]}`;
-  }, "");
+  // remove reduce
+  const sortedKeys = Object.keys(obj).sort()
+  let s = "";
+  for (const key in sortedKeys) {
+      if (Array.isArray(obj[key])) {
+        const value = (obj[key] as Array<number | string | boolean>).join("-");
+        s += `/${key}:${value}`;
+      } else {
+
+      }
+      s += `/${key}:${obj[key]}`;
+  }
+  return s;
+  //return Object.keys(obj)
+  //  .sort()
+  //  .reduce((s, key) => {
+  //    if (Array.isArray(obj[key])) {
+  //      const value = (obj[key] as Array<number | string | boolean>).join("-");
+  //      return `${s}/${key}:${value}`;
+  //    }
+  //    return `${s}/${key}:${obj[key]}`;
+  //  }, "");
+};
+
+const fastHash = (str: string) => {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = (hash << 5) - hash + str.charCodeAt(i);
+    hash |= 0;
+  }
+  return hash.toString(36).padEnd(6, "0");
 };
 
 export const hashString = (str: string) => {
-  return Crypto.SHA1(str);
-}
+  return fastHash(str);
+};
 
 export const getKVHashes = (obj: {
   key: string;
@@ -61,24 +85,19 @@ export const getKVHashes = (obj: {
     [key: string]: number | string | boolean | Array<number | string | boolean>;
   };
 }): { keyHash: string; valueHash: string } => {
-  const keyHash = Crypto.SHA1(obj.key);
-  const valueHash = Crypto.SHA1(getObjectStringValue(obj.value));
+  const keyHash = fastHash(obj.key);
+  const valueHash = fastHash(getObjectStringValue(obj.value));
   return {
     keyHash,
     valueHash,
   };
 };
 
-
-export const getKVHash = (obj: {
-  key: string;
-  value: unknown
-}
-): string => {
+export const getKVHash = (obj: { key: string; value: {[key: string]: number | string | boolean | Array<number | string | boolean>}|string }): string => {
   if (typeof obj.value == "string") {
-    return Crypto.SHA1(obj.key + obj.value);
+    return fastHash(obj.key + obj.value);
   }
-  return Crypto.SHA1(obj.key + JSON.stringify(obj.value));
+  return fastHash(obj.key + getObjectStringValue(obj.value));
 };
 
 export const getRowHash = (obj: {
@@ -87,7 +106,7 @@ export const getRowHash = (obj: {
     [key: string]: number | string | boolean | Array<number | string | boolean>;
   };
 }): string => {
-  return (obj.key + JSON.stringify(obj.value));
+  return fastHash(obj.key + getObjectStringValue(obj.value));
 };
 
 export const getDiffHash = (commitData: CommitData): string => {
@@ -103,18 +122,40 @@ export const getDiffHash = (commitData: CommitData): string => {
   }
 
   if (!commitData.parent && !commitData.historicalParent) {
-    const str = `userId:${commitData.userId}/authorUserId:${commitData.authorUserId ?? commitData.userId}/timestamp:${commitData.timestamp}/message:${commitData.message}/idx:${commitData.idx}/mergeBase:${commitData?.mergeBase ?? 'none'}/diff:${diffString}`;
+    const str = `userId:${commitData.userId}/authorUserId:${
+      commitData.authorUserId ?? commitData.userId
+    }/timestamp:${commitData.timestamp}/message:${commitData.message}/idx:${
+      commitData.idx
+    }/mergeBase:${commitData?.mergeBase ?? "none"}/diff:${diffString}`;
     return Crypto.SHA256(str);
   }
   if (!commitData.parent) {
-    const str = `userId:${commitData.userId}/authorUserId:${commitData.authorUserId ?? commitData.userId}/timestamp:${commitData.timestamp}/message:${commitData.message}/historicalParent:${commitData.historicalParent}/idx:${commitData.idx}/mergeBase:${commitData?.mergeBase ?? 'none'}/diff:${diffString}`;
+    const str = `userId:${commitData.userId}/authorUserId:${
+      commitData.authorUserId ?? commitData.userId
+    }/timestamp:${commitData.timestamp}/message:${
+      commitData.message
+    }/historicalParent:${commitData.historicalParent}/idx:${
+      commitData.idx
+    }/mergeBase:${commitData?.mergeBase ?? "none"}/diff:${diffString}`;
     return Crypto.SHA256(str);
   }
   if (!commitData.historicalParent) {
-    const str = `userId:${commitData.userId}/authorUserId:${commitData.authorUserId ?? commitData.userId}/timestamp:${commitData.timestamp}/message:${commitData.message}/parent:${commitData.parent}/idx:${commitData.idx}/mergeBase:${commitData?.mergeBase ?? 'none'}/diff:${diffString}`;
+    const str = `userId:${commitData.userId}/authorUserId:${
+      commitData.authorUserId ?? commitData.userId
+    }/timestamp:${commitData.timestamp}/message:${commitData.message}/parent:${
+      commitData.parent
+    }/idx:${commitData.idx}/mergeBase:${
+      commitData?.mergeBase ?? "none"
+    }/diff:${diffString}`;
     return Crypto.SHA256(str);
   }
-  const str = `userId:${commitData.userId}/authorUserId:${commitData.authorUserId ?? commitData.userId}/timestamp:${commitData.timestamp}/message:${commitData.message}/parent:${commitData.parent}/historicalParent:${commitData.historicalParent}/idx:${commitData.idx}/mergeBase:${commitData.mergeBase ?? 'none'}/diff:${diffString}`;
+  const str = `userId:${commitData.userId}/authorUserId:${
+    commitData.authorUserId ?? commitData.userId
+  }/timestamp:${commitData.timestamp}/message:${commitData.message}/parent:${
+    commitData.parent
+  }/historicalParent:${commitData.historicalParent}/idx:${
+    commitData.idx
+  }/mergeBase:${commitData.mergeBase ?? "none"}/diff:${diffString}`;
   return Crypto.SHA256(str);
 };
 
@@ -202,10 +243,8 @@ export const applyDiff = <T extends DiffElement | string>(
   state: Array<T>
 ): Array<T> => {
   let assets = [...(state ?? [])];
-  const addIndices = Object.keys(diffset.add)
-    .map((v) => parseInt(v));
-  const removeIndices = Object.keys(diffset.remove)
-    .map((v) => parseInt(v));
+  const addIndices = Object.keys(diffset.add).map((v) => parseInt(v));
+  const removeIndices = Object.keys(diffset.remove).map((v) => parseInt(v));
 
   let offset = 0;
   for (let removeIndex of removeIndices) {
@@ -216,10 +255,10 @@ export const applyDiff = <T extends DiffElement | string>(
 
   for (let addIndex of addIndices) {
     const index = addIndex;
-    assets.splice(index, 0, diffset.add[addIndex])
+    assets.splice(index, 0, diffset.add[addIndex]);
   }
   return assets;
-}
+};
 
 export const getMergeSequence = (
   origin: Array<string>,

@@ -31,7 +31,7 @@ export interface CommitData {
     idx: number;
     message: string;
 }
-export declare const hashString: (str: string) => any;
+export declare const hashString: (str: string) => string;
 export declare const getKVHashes: (obj: {
     key: string;
     value: {
@@ -43,7 +43,9 @@ export declare const getKVHashes: (obj: {
 };
 export declare const getKVHash: (obj: {
     key: string;
-    value: unknown;
+    value: string | {
+        [key: string]: string | number | boolean | (string | number | boolean)[];
+    };
 }) => string;
 export declare const getRowHash: (obj: {
     key: string;

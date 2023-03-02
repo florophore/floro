@@ -106,7 +106,7 @@ export interface CommitHistory {
 }
 
 export interface CheckpointMap {
-  [sha: string]: CommitState
+  [sha: string]: CommitState;
 }
 
 const EMPTY_COMMIT_STATE: CommitState = {
@@ -370,10 +370,10 @@ export const getDivergenceOriginSha = async (
 export const getCommitState = async (
   datasource: DataSource,
   repoId: string,
-  sha: string|null,
+  sha: string | null,
   historyLength?: number,
   checkedHot?: boolean,
-  hotCheckpoint?: [string, CommitState],
+  hotCheckpoint?: [string, CommitState]
 ): Promise<CommitState | null> => {
   if (!sha) {
     return EMPTY_COMMIT_STATE;
@@ -402,10 +402,20 @@ export const getCommitState = async (
       return checkpointState;
     }
   }
-  const state = await getCommitState(datasource, repoId, commitData.parent, historyLength, checkedHot, hotCheckpoint);
+  const state = await getCommitState(
+    datasource,
+    repoId,
+    commitData.parent,
+    historyLength,
+    checkedHot,
+    hotCheckpoint
+  );
   const out = await applyStateDiffToCommitState(state, commitData.diff);
 
-  if (commitData.idx % CHECKPOINT_MODULO == 0 && commitData.idx < (historyLength - CHECKPOINT_MODULO)) {
+  if (
+    commitData.idx % CHECKPOINT_MODULO == 0 &&
+    commitData.idx < historyLength - CHECKPOINT_MODULO
+  ) {
     await datasource.saveCheckpoint(repoId, sha, out);
   }
   return out;
@@ -670,16 +680,10 @@ export const buildStateStore = async (
   state: CommitState
 ): Promise<{ [key: string]: object }> => {
   let out = {};
-  const manifests = await getPluginManifests(
-    datasource,
-    state.plugins
-  );
+  const manifests = await getPluginManifests(datasource, state.plugins);
   for (const pluginManifest of manifests) {
     const kv = state?.store?.[pluginManifest.name] ?? [];
-    const schemaMap = await getSchemaMapForManifest(
-      datasource,
-      pluginManifest
-    );
+    const schemaMap = await getSchemaMapForManifest(datasource, pluginManifest);
     const pluginState = getStateFromKVForPlugin(
       schemaMap,
       kv,
@@ -696,15 +700,9 @@ export const convertStateStoreToKV = async (
   stateStore: { [key: string]: object }
 ): Promise<RawStore> => {
   let out = {};
-  const manifests = await getPluginManifests(
-    datasource,
-    state.plugins
-  );
+  const manifests = await getPluginManifests(datasource, state.plugins);
   for (const pluginManifest of manifests) {
-    const schemaMap = await getSchemaMapForManifest(
-      datasource,
-      pluginManifest,
-    );
+    const schemaMap = await getSchemaMapForManifest(datasource, pluginManifest);
     const kv = await getKVStateForPlugin(
       datasource,
       schemaMap,
@@ -1038,25 +1036,14 @@ export const getMergedCommitState = async (
 
     let stateStore = await buildStateStore(datasource, mergeState);
 
-    const manifests = await getPluginManifests(
-      datasource,
-      mergeState.plugins
-    );
+    const manifests = await getPluginManifests(datasource, mergeState.plugins);
     const rootManifests = manifests.filter(
       (m) => Object.keys(m.imports).length === 0
     );
 
     for (const manifest of rootManifests) {
-      const schemaMap = await getSchemaMapForManifest(
-        datasource,
-        manifest,
-      );
-      stateStore = await cascadePluginState(
-        datasource,
-        schemaMap,
-        stateStore,
-        manifest.name
-      );
+      const schemaMap = await getSchemaMapForManifest(datasource, manifest);
+      stateStore = await cascadePluginState(datasource, schemaMap, stateStore);
     }
 
     mergeState.store = await convertStateStoreToKV(

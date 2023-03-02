@@ -405,7 +405,7 @@ describe("repoapi", () => {
   });
 
   describe("benchmark", () => {
-    test.only("commit benchmark", async () => {
+    test.skip("commit benchmark", async () => {
       const datasource = makeMemoizedDataSource();
       const PLUGIN_A_0_MANIFEST: Manifest = {
         name: "A",
@@ -443,7 +443,7 @@ describe("repoapi", () => {
         const state = {
           aSet: []
         }
-        for (let j = 0; j < 100_000; ++j) {
+        for (let j = 0; j < 50_000; ++j) {
           state.aSet.push({
             mainKey: "key" + j,
             someProp: 100
@@ -463,7 +463,7 @@ describe("repoapi", () => {
       }
 
       console.time("TEST");
-      await getRepoState(datasource, "abc");
+      const a = await getRepoState(datasource, "abc");
       console.timeEnd("TEST");
     });
   });
@@ -674,7 +674,6 @@ describe("repoapi", () => {
         ],
       };
       await updatePluginState(datasource, "abc", "A", state5);
-      console.log("WTF", commitB.sha);
       const out = await mergeCommit(datasource, "abc", commitB.sha);
       console.log("OUT", JSON.stringify(out, null, 2));
     });

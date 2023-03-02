@@ -9,21 +9,44 @@ const mdiff_1 = __importDefault(require("mdiff"));
 const getObjectStringValue = (obj) => {
     if (typeof obj == "string")
         return obj;
-    return Object.keys(obj).sort().reduce((s, key) => {
+    // remove reduce
+    const sortedKeys = Object.keys(obj).sort();
+    let s = "";
+    for (const key in sortedKeys) {
         if (Array.isArray(obj[key])) {
             const value = obj[key].join("-");
-            return `${s}/${key}:${value}`;
+            s += `/${key}:${value}`;
         }
-        return `${s}/${key}:${obj[key]}`;
-    }, "");
+        else {
+        }
+        s += `/${key}:${obj[key]}`;
+    }
+    return s;
+    //return Object.keys(obj)
+    //  .sort()
+    //  .reduce((s, key) => {
+    //    if (Array.isArray(obj[key])) {
+    //      const value = (obj[key] as Array<number | string | boolean>).join("-");
+    //      return `${s}/${key}:${value}`;
+    //    }
+    //    return `${s}/${key}:${obj[key]}`;
+    //  }, "");
+};
+const fastHash = (str) => {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+        hash = (hash << 5) - hash + str.charCodeAt(i);
+        hash |= 0;
+    }
+    return hash.toString(36).padEnd(6, "0");
 };
 const hashString = (str) => {
-    return cryptojs_1.Crypto.SHA1(str);
+    return fastHash(str);
 };
 exports.hashString = hashString;
 const getKVHashes = (obj) => {
-    const keyHash = cryptojs_1.Crypto.SHA1(obj.key);
-    const valueHash = cryptojs_1.Crypto.SHA1(getObjectStringValue(obj.value));
+    const keyHash = fastHash(obj.key);
+    const valueHash = fastHash(getObjectStringValue(obj.value));
     return {
         keyHash,
         valueHash,
@@ -32,13 +55,13 @@ const getKVHashes = (obj) => {
 exports.getKVHashes = getKVHashes;
 const getKVHash = (obj) => {
     if (typeof obj.value == "string") {
-        return cryptojs_1.Crypto.SHA1(obj.key + obj.value);
+        return fastHash(obj.key + obj.value);
     }
-    return cryptojs_1.Crypto.SHA1(obj.key + JSON.stringify(obj.value));
+    return fastHash(obj.key + getObjectStringValue(obj.value));
 };
 exports.getKVHash = getKVHash;
 const getRowHash = (obj) => {
-    return (obj.key + JSON.stringify(obj.value));
+    return fastHash(obj.key + getObjectStringValue(obj.value));
 };
 exports.getRowHash = getRowHash;
 const getDiffHash = (commitData) => {
@@ -53,18 +76,18 @@ const getDiffHash = (commitData) => {
         return null;
     }
     if (!commitData.parent && !commitData.historicalParent) {
-        const str = `userId:${commitData.userId}/authorUserId:${commitData.authorUserId ?? commitData.userId}/timestamp:${commitData.timestamp}/message:${commitData.message}/idx:${commitData.idx}/mergeBase:${commitData?.mergeBase ?? 'none'}/diff:${diffString}`;
+        const str = `userId:${commitData.userId}/authorUserId:${commitData.authorUserId ?? commitData.userId}/timestamp:${commitData.timestamp}/message:${commitData.message}/idx:${commitData.idx}/mergeBase:${commitData?.mergeBase ?? "none"}/diff:${diffString}`;
         return cryptojs_1.Crypto.SHA256(str);
     }
     if (!commitData.parent) {
-        const str = `userId:${commitData.userId}/authorUserId:${commitData.authorUserId ?? commitData.userId}/timestamp:${commitData.timestamp}/message:${commitData.message}/historicalParent:${commitData.historicalParent}/idx:${commitData.idx}/mergeBase:${commitData?.mergeBase ?? 'none'}/diff:${diffString}`;
+        const str = `userId:${commitData.userId}/authorUserId:${commitData.authorUserId ?? commitData.userId}/timestamp:${commitData.timestamp}/message:${commitData.message}/historicalParent:${commitData.historicalParent}/idx:${commitData.idx}/mergeBase:${commitData?.mergeBase ?? "none"}/diff:${diffString}`;
         return cryptojs_1.Crypto.SHA256(str);
     }
     if (!commitData.historicalParent) {
-        const str = `userId:${commitData.userId}/authorUserId:${commitData.authorUserId ?? commitData.userId}/timestamp:${commitData.timestamp}/message:${commitData.message}/parent:${commitData.parent}/idx:${commitData.idx}/mergeBase:${commitData?.mergeBase ?? 'none'}/diff:${diffString}`;
+        const str = `userId:${commitData.userId}/authorUserId:${commitData.authorUserId ?? commitData.userId}/timestamp:${commitData.timestamp}/message:${commitData.message}/parent:${commitData.parent}/idx:${commitData.idx}/mergeBase:${commitData?.mergeBase ?? "none"}/diff:${diffString}`;
         return cryptojs_1.Crypto.SHA256(str);
     }
-    const str = `userId:${commitData.userId}/authorUserId:${commitData.authorUserId ?? commitData.userId}/timestamp:${commitData.timestamp}/message:${commitData.message}/parent:${commitData.parent}/historicalParent:${commitData.historicalParent}/idx:${commitData.idx}/mergeBase:${commitData.mergeBase ?? 'none'}/diff:${diffString}`;
+    const str = `userId:${commitData.userId}/authorUserId:${commitData.authorUserId ?? commitData.userId}/timestamp:${commitData.timestamp}/message:${commitData.message}/parent:${commitData.parent}/historicalParent:${commitData.historicalParent}/idx:${commitData.idx}/mergeBase:${commitData.mergeBase ?? "none"}/diff:${diffString}`;
     return cryptojs_1.Crypto.SHA256(str);
 };
 exports.getDiffHash = getDiffHash;
@@ -143,10 +166,8 @@ const getTextDiff = (before, after) => {
 exports.getTextDiff = getTextDiff;
 const applyDiff = (diffset, state) => {
     let assets = [...(state ?? [])];
-    const addIndices = Object.keys(diffset.add)
-        .map((v) => parseInt(v));
-    const removeIndices = Object.keys(diffset.remove)
-        .map((v) => parseInt(v));
+    const addIndices = Object.keys(diffset.add).map((v) => parseInt(v));
+    const removeIndices = Object.keys(diffset.remove).map((v) => parseInt(v));
     let offset = 0;
     for (let removeIndex of removeIndices) {
         const index = removeIndex - offset;
