@@ -1906,7 +1906,7 @@ describe("plugins", () => {
                     ],
                 },
             };
-            const isTopSubset = await (0, plugins_1.isTopologicalSubsetValid)(beforeSchemaMap, beforeStateMap, afterSchemaMap, afterStateMap, BEFORE_PLUGIN_MANIFEST.name, async (pluginName, pluginVersion) => {
+            const isTopSubset = await (0, plugins_1.isTopologicalSubsetValid)(datasource, beforeSchemaMap, beforeStateMap, afterSchemaMap, afterStateMap, BEFORE_PLUGIN_MANIFEST.name, async (pluginName, pluginVersion) => {
                 if (pluginVersion == "0.0.0") {
                     return beforeSchemaMap[pluginName];
                 }
@@ -2008,7 +2008,7 @@ describe("plugins", () => {
                     ],
                 },
             };
-            const isTopSubset = await (0, plugins_1.isTopologicalSubsetValid)(beforeSchemaMap, beforeStateMap, afterSchemaMap, afterStateMap, BEFORE_PLUGIN_MANIFEST.name, async (pluginName, pluginVersion) => {
+            const isTopSubset = await (0, plugins_1.isTopologicalSubsetValid)(datasource, beforeSchemaMap, beforeStateMap, afterSchemaMap, afterStateMap, BEFORE_PLUGIN_MANIFEST.name, async (pluginName, pluginVersion) => {
                 if (pluginVersion == "0.0.0") {
                     return beforeSchemaMap[pluginName];
                 }
@@ -2078,7 +2078,7 @@ describe("plugins", () => {
                     return afterSchemaMap[pluginName];
                 },
             }, bAfterSchemaMap, bAfterStateMap, BEFORE_PLUGIN_MANIFEST.name)).toBe(true);
-            const bIsTopSubset = await (0, plugins_1.isTopologicalSubsetValid)(beforeSchemaMap, beforeStateMap, bAfterSchemaMap, bAfterStateMap, BEFORE_PLUGIN_MANIFEST.name, async (pluginName, pluginVersion) => {
+            const bIsTopSubset = await (0, plugins_1.isTopologicalSubsetValid)(datasource, beforeSchemaMap, beforeStateMap, bAfterSchemaMap, bAfterStateMap, BEFORE_PLUGIN_MANIFEST.name, async (pluginName, pluginVersion) => {
                 if (pluginVersion == "0.0.0") {
                     return beforeSchemaMap[pluginName];
                 }

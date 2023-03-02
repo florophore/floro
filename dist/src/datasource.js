@@ -203,6 +203,28 @@ const getRepoSettings = async (repoId) => {
         return null;
     }
 };
+const readRenderedState = async (repoId) => {
+    try {
+        const repoPath = path_1.default.join(filestructure_1.vReposPath, repoId);
+        const statePath = path_1.default.join(repoPath, `state.json`);
+        const state = await fs_1.default.promises.readFile(statePath);
+        return JSON.parse(state.toString());
+    }
+    catch (e) {
+        return null;
+    }
+};
+const saveRenderedState = async (repoId, state) => {
+    try {
+        const repoPath = path_1.default.join(filestructure_1.vReposPath, repoId);
+        const statePath = path_1.default.join(repoPath, `state.json`);
+        await fs_1.default.promises.writeFile(statePath, JSON.stringify(state), 'utf-8');
+        return state;
+    }
+    catch (e) {
+        return null;
+    }
+};
 const getCurrentState = async (repoId) => {
     try {
         const repoPath = path_1.default.join(filestructure_1.vReposPath, repoId);
@@ -362,7 +384,6 @@ const readCheckpoint = async (repoId, sha) => {
         return JSON.parse(checkpointString);
     }
     catch (e) {
-        console.log("e", e);
         return null;
     }
 };
@@ -406,7 +427,9 @@ const makeDataSource = (datasource = {}) => {
         saveCheckpoint,
         readHotCheckpoint,
         deleteHotCheckpoint,
-        saveHotCheckpoint
+        saveHotCheckpoint,
+        readRenderedState,
+        saveRenderedState
     };
     return {
         ...defaultDataSource,
@@ -585,6 +608,21 @@ const makeMemoizedDataSource = (dataSourceOverride = {}) => {
         }
         return result;
     };
+    const stateMemo = {};
+    const _saveRenderedState = async (repoId, state) => {
+        const result = await dataSource.saveRenderedState(repoId, state);
+        if (result) {
+            stateMemo[repoId] = result;
+        }
+        return result;
+    };
+    const _readRenderedState = async (repoId) => {
+        if (stateMemo[repoId]) {
+            return stateMemo[repoId];
+        }
+        const result = await dataSource.readRenderedState(repoId);
+        return result;
+    };
     const defaultDataSource = {
         repoExists: _repoExists,
         pluginManifestExists: _pluginManifestExists,
@@ -603,6 +641,8 @@ const makeMemoizedDataSource = (dataSourceOverride = {}) => {
         readHotCheckpoint: _readHotCheckpoint,
         saveHotCheckpoint: _saveHotCheckpoint,
         deleteHotCheckpoint: _deleteHotCheckpoint,
+        readRenderedState: _readRenderedState,
+        saveRenderedState: _saveRenderedState
     };
     return {
         ...dataSource,
@@ -611,5 +651,4 @@ const makeMemoizedDataSource = (dataSourceOverride = {}) => {
     };
 };
 exports.makeMemoizedDataSource = makeMemoizedDataSource;
-exports.default = (0, exports.makeDataSource)();
 //# sourceMappingURL=datasource.js.map

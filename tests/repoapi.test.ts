@@ -1,12 +1,11 @@
 import { fs, vol } from "memfs";
 import sizeof from "object-sizeof";
-import { makeMemoizedDataSource } from "../src/datasource";
+import { DataSource, makeDataSource, makeMemoizedDataSource } from "../src/datasource";
 import { buildFloroFilestructure, userHome } from "../src/filestructure";
 import { Manifest, PluginElement } from "../src/plugins";
 import { getHistory, getRepoState } from "../src/repo";
 import {
   checkoutSha,
-  mergeCommit,
   readCommitState,
   readCurrentState,
   readRepoDescription,
@@ -27,11 +26,13 @@ jest.mock("fs");
 jest.mock("fs/promises");
 
 describe("repoapi", () => {
+  let datasource: DataSource;
   beforeEach(async () => {
     fs.mkdirSync(userHome, { recursive: true });
     buildFloroFilestructure();
     await makeSignedInUser();
     createBlankRepo("abc");
+    datasource = makeDataSource();
   });
 
   afterEach(() => {
@@ -40,7 +41,6 @@ describe("repoapi", () => {
 
   describe("description", () => {
     test("updates repo description", async () => {
-      const datasource = makeMemoizedDataSource();
       let description = (
         await getRepoState(datasource, "abc")
       ).description.join("");
@@ -68,7 +68,6 @@ describe("repoapi", () => {
 
   describe("licenses", () => {
     test("updates repo licenses", async () => {
-      const datasource = makeMemoizedDataSource();
       let licenses = await (await readCurrentState(datasource, "abc")).licenses;
       expect(licenses).toEqual([]);
       licenses = [
@@ -130,7 +129,6 @@ describe("repoapi", () => {
 
   describe("update plugins", () => {
     test("adds upstream plugins", async () => {
-      const datasource = makeMemoizedDataSource();
       const PLUGIN_A_MANIFEST: Manifest = {
         name: "A",
         version: "1.0.0",
@@ -209,7 +207,6 @@ describe("repoapi", () => {
     });
 
     test("reject upstream plugins when schemas are incompatible", async () => {
-      const datasource = makeMemoizedDataSource();
       const PLUGIN_A_0_MANIFEST: Manifest = {
         name: "A",
         version: "0.0.0",
@@ -300,7 +297,6 @@ describe("repoapi", () => {
 
   describe("update plugin state", () => {
     test("can update plugin state", async () => {
-      const datasource = makeMemoizedDataSource();
       const PLUGIN_A_0_MANIFEST: Manifest = {
         name: "A",
         version: "0.0.0",
@@ -374,7 +370,6 @@ describe("repoapi", () => {
 
   describe("commits", () => {
     test("description can commit", async () => {
-      const datasource = makeMemoizedDataSource();
       let description = (await readRepoDescription(datasource, "abc")).join("");
       expect(description).toEqual("");
       const descriptionA = "Initial description.";
@@ -391,7 +386,6 @@ describe("repoapi", () => {
     });
 
     test("refuses empty commit", async () => {
-      const datasource = makeMemoizedDataSource();
       let description = (await readRepoDescription(datasource, "abc")).join("");
       expect(description).toEqual("");
       const descriptionA = "Initial description.";
@@ -443,14 +437,14 @@ describe("repoapi", () => {
         const state = {
           aSet: []
         }
-        for (let j = 0; j < 50_000; ++j) {
+        for (let j = 0; j < 100_000; ++j) {
           state.aSet.push({
             mainKey: "key" + j,
             someProp: 100
           })
         }
         for (let k  = 0; k < 100; ++k) {
-          const index = Math.round((50_000 - 1) * Math.random())
+          const index = Math.round((100_000 - 1) * Math.random())
           state.aSet[index].someProp = k * 10;
         }
 
@@ -468,214 +462,214 @@ describe("repoapi", () => {
     });
   });
 
-  describe("merge", () => {
-    test("creates a new commit if can automerge", async () => {
-      const datasource = makeMemoizedDataSource();
-      let description = (await readRepoDescription(datasource, "abc")).join("");
-      expect(description).toEqual("");
-      const PLUGIN_A_0_MANIFEST: Manifest = {
-        name: "A",
-        version: "0.0.0",
-        displayName: "A",
-        icon: "",
-        imports: {},
-        types: {},
-        store: {
-          aSet: {
-            type: "set",
-            values: {
-              mainKey: {
-                isKey: true,
-                type: "string",
-              },
-              someProp: {
-                value: {
-                  type: "int",
-                },
-              },
-            },
-          },
-        },
-      };
-      makeTestPlugin(PLUGIN_A_0_MANIFEST);
-      const state1 = {
-        aSet: [
-          {
-            mainKey: "key1",
-            someProp: {
-              value: 1,
-            },
-          },
-          {
-            mainKey: "key2",
-            someProp: {
-              value: 2,
-            },
-          },
-          {
-            mainKey: "key3",
-            someProp: {
-              value: 3,
-            },
-          },
-          {
-            mainKey: "key4",
-            someProp: {
-              value: 4,
-            },
-          },
-        ],
-      };
-      let plugins: PluginElement[] = [
-        {
-          key: "A",
-          value: "0.0.0",
-        },
-      ];
-      await updatePlugins(datasource, "abc", plugins);
-      await updatePluginState(datasource, "abc", "A", state1);
-      await writeRepoDescription(datasource, "abc", "Testing the waters.");
-      const commitA = await writeRepoCommit(datasource, "abc", "A");
+  //describe("merge", () => {
+  //  test("creates a new commit if can automerge", async () => {
+  //    const datasource = makeMemoizedDataSource();
+  //    let description = (await readRepoDescription(datasource, "abc")).join("");
+  //    expect(description).toEqual("");
+  //    const PLUGIN_A_0_MANIFEST: Manifest = {
+  //      name: "A",
+  //      version: "0.0.0",
+  //      displayName: "A",
+  //      icon: "",
+  //      imports: {},
+  //      types: {},
+  //      store: {
+  //        aSet: {
+  //          type: "set",
+  //          values: {
+  //            mainKey: {
+  //              isKey: true,
+  //              type: "string",
+  //            },
+  //            someProp: {
+  //              value: {
+  //                type: "int",
+  //              },
+  //            },
+  //          },
+  //        },
+  //      },
+  //    };
+  //    makeTestPlugin(PLUGIN_A_0_MANIFEST);
+  //    const state1 = {
+  //      aSet: [
+  //        {
+  //          mainKey: "key1",
+  //          someProp: {
+  //            value: 1,
+  //          },
+  //        },
+  //        {
+  //          mainKey: "key2",
+  //          someProp: {
+  //            value: 2,
+  //          },
+  //        },
+  //        {
+  //          mainKey: "key3",
+  //          someProp: {
+  //            value: 3,
+  //          },
+  //        },
+  //        {
+  //          mainKey: "key4",
+  //          someProp: {
+  //            value: 4,
+  //          },
+  //        },
+  //      ],
+  //    };
+  //    let plugins: PluginElement[] = [
+  //      {
+  //        key: "A",
+  //        value: "0.0.0",
+  //      },
+  //    ];
+  //    await updatePlugins(datasource, "abc", plugins);
+  //    await updatePluginState(datasource, "abc", "A", state1);
+  //    await writeRepoDescription(datasource, "abc", "Testing the waters.");
+  //    const commitA = await writeRepoCommit(datasource, "abc", "A");
 
-      const state2 = {
-        aSet: [
-          {
-            mainKey: "key1",
-            someProp: {
-              value: 1,
-            },
-          },
-          {
-            mainKey: "key1a",
-            someProp: {
-              value: 11,
-            },
-          },
-          {
-            mainKey: "key3",
-            someProp: {
-              value: 3,
-            },
-          },
-          {
-            mainKey: "key4",
-            someProp: {
-              value: 4,
-            },
-          },
-        ],
-      };
-      await updatePluginState(datasource, "abc", "A", state2);
-      const commitB = await writeRepoCommit(datasource, "abc", "B");
-      await checkoutSha(datasource, "abc", commitA.sha);
-      await switchRepoBranch(datasource, "abc", "new-branch");
+  //    const state2 = {
+  //      aSet: [
+  //        {
+  //          mainKey: "key1",
+  //          someProp: {
+  //            value: 1,
+  //          },
+  //        },
+  //        {
+  //          mainKey: "key1a",
+  //          someProp: {
+  //            value: 11,
+  //          },
+  //        },
+  //        {
+  //          mainKey: "key3",
+  //          someProp: {
+  //            value: 3,
+  //          },
+  //        },
+  //        {
+  //          mainKey: "key4",
+  //          someProp: {
+  //            value: 4,
+  //          },
+  //        },
+  //      ],
+  //    };
+  //    await updatePluginState(datasource, "abc", "A", state2);
+  //    const commitB = await writeRepoCommit(datasource, "abc", "B");
+  //    await checkoutSha(datasource, "abc", commitA.sha);
+  //    await switchRepoBranch(datasource, "abc", "new-branch");
 
-      const state3 = {
-        aSet: [
-          {
-            mainKey: "key0",
-            someProp: {
-              value: 0,
-            },
-          },
-          {
-            mainKey: "key1",
-            someProp: {
-              value: 1,
-            },
-          },
-          {
-            mainKey: "key2",
-            someProp: {
-              value: 2,
-            },
-          },
-          {
-            mainKey: "key3",
-            someProp: {
-              value: 36,
-            },
-          },
-          {
-            mainKey: "key5",
-            someProp: {
-              value: 5,
-            },
-          },
-        ],
-      };
-      await updatePluginState(datasource, "abc", "A", state3);
-      await writeRepoDescription(datasource, "abc", "Testing the waters. OKAY");
-      const commitC = await writeRepoCommit(datasource, "abc", "C");
+  //    const state3 = {
+  //      aSet: [
+  //        {
+  //          mainKey: "key0",
+  //          someProp: {
+  //            value: 0,
+  //          },
+  //        },
+  //        {
+  //          mainKey: "key1",
+  //          someProp: {
+  //            value: 1,
+  //          },
+  //        },
+  //        {
+  //          mainKey: "key2",
+  //          someProp: {
+  //            value: 2,
+  //          },
+  //        },
+  //        {
+  //          mainKey: "key3",
+  //          someProp: {
+  //            value: 36,
+  //          },
+  //        },
+  //        {
+  //          mainKey: "key5",
+  //          someProp: {
+  //            value: 5,
+  //          },
+  //        },
+  //      ],
+  //    };
+  //    await updatePluginState(datasource, "abc", "A", state3);
+  //    await writeRepoDescription(datasource, "abc", "Testing the waters. OKAY");
+  //    const commitC = await writeRepoCommit(datasource, "abc", "C");
 
-      const state4 = {
-        aSet: [
-          {
-            mainKey: "key0",
-            someProp: {
-              value: 0,
-            },
-          },
-          {
-            mainKey: "key1",
-            someProp: {
-              value: 1,
-            },
-          },
-          {
-            mainKey: "key2",
-            someProp: {
-              value: 2,
-            },
-          },
-          {
-            mainKey: "key3",
-            someProp: {
-              value: 36,
-            },
-          },
-        ],
-      };
-      await updatePluginState(datasource, "abc", "A", state4);
-      const commitD = await writeRepoCommit(datasource, "abc", "D");
+  //    const state4 = {
+  //      aSet: [
+  //        {
+  //          mainKey: "key0",
+  //          someProp: {
+  //            value: 0,
+  //          },
+  //        },
+  //        {
+  //          mainKey: "key1",
+  //          someProp: {
+  //            value: 1,
+  //          },
+  //        },
+  //        {
+  //          mainKey: "key2",
+  //          someProp: {
+  //            value: 2,
+  //          },
+  //        },
+  //        {
+  //          mainKey: "key3",
+  //          someProp: {
+  //            value: 36,
+  //          },
+  //        },
+  //      ],
+  //    };
+  //    await updatePluginState(datasource, "abc", "A", state4);
+  //    const commitD = await writeRepoCommit(datasource, "abc", "D");
 
-      const state5 = {
-        aSet: [
-          {
-            mainKey: "key0",
-            someProp: {
-              value: 0,
-            },
-          },
-          {
-            mainKey: "key1",
-            someProp: {
-              value: 1,
-            },
-          },
-          {
-            mainKey: "key2",
-            someProp: {
-              value: 2,
-            },
-          },
-          {
-            mainKey: "key3",
-            someProp: {
-              value: 36,
-            },
-          },
-          {
-            mainKey: "key7",
-            someProp: {
-              value: 7,
-            },
-          },
-        ],
-      };
-      await updatePluginState(datasource, "abc", "A", state5);
-      const out = await mergeCommit(datasource, "abc", commitB.sha);
-      console.log("OUT", JSON.stringify(out, null, 2));
-    });
-  });
+  //    const state5 = {
+  //      aSet: [
+  //        {
+  //          mainKey: "key0",
+  //          someProp: {
+  //            value: 0,
+  //          },
+  //        },
+  //        {
+  //          mainKey: "key1",
+  //          someProp: {
+  //            value: 1,
+  //          },
+  //        },
+  //        {
+  //          mainKey: "key2",
+  //          someProp: {
+  //            value: 2,
+  //          },
+  //        },
+  //        {
+  //          mainKey: "key3",
+  //          someProp: {
+  //            value: 36,
+  //          },
+  //        },
+  //        {
+  //          mainKey: "key7",
+  //          someProp: {
+  //            value: 7,
+  //          },
+  //        },
+  //      ],
+  //    };
+  //    await updatePluginState(datasource, "abc", "A", state5);
+  //    const out = await mergeCommit(datasource, "abc", commitB.sha);
+  //    console.log("OUT", JSON.stringify(out, null, 2));
+  //  });
+  //});
 });

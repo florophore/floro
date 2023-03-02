@@ -239,7 +239,7 @@ export declare const isTopologicalSubset: (datasource: DataSource, oldSchemaMap:
 }, newStateMap: {
     [key: string]: object;
 }, pluginName: string) => Promise<boolean>;
-export declare const isTopologicalSubsetValid: (oldSchemaMap: {
+export declare const isTopologicalSubsetValid: (datasource: DataSource, oldSchemaMap: {
     [key: string]: Manifest;
 }, oldStateMap: {
     [key: string]: object;

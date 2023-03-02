@@ -9,6 +9,7 @@ import {
 import path from "path";
 import fs from "fs";
 import { Manifest } from "../../src/plugins";
+import { EMPTY_RENDERED_COMMIT_STATE } from "../../src/repo";
 
 const USER_SESSION = JSON.parse(`
 {
@@ -92,6 +93,7 @@ const MAIN_BRANCH = `
     "name": "main"
   }
 `;
+const EMPTY_STATE = JSON.stringify(EMPTY_RENDERED_COMMIT_STATE, null, 2);
 
 const DIST_INDEX_HTML = (pluginName: string) => `
 <!DOCTYPE html>
@@ -178,9 +180,11 @@ export const createBlankRepo = (repoId: string) => {
     fs.mkdirSync(commitsPath);
     fs.mkdirSync(stashesPath);
     const repoSettingsPath = path.join(repoPath, "settings.json");
+    const repoStatePath = path.join(repoPath, "state.json");
     const currentPath = path.join(repoPath, "current.json");
     const mainBranchPath = path.join(branchesPath, "main.json");
     fs.writeFileSync(repoSettingsPath, REPO_SETTINGS, "utf-8");
+    fs.writeFileSync(repoStatePath, EMPTY_STATE, "utf-8");
     fs.writeFileSync(currentPath, REPO_CURRENT, "utf-8");
     fs.writeFileSync(mainBranchPath, MAIN_BRANCH, "utf-8");
   }

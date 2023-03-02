@@ -1,7 +1,7 @@
 import axios from "axios";
 import { DiffElement } from "./versioncontrol";
 import semver from "semver";
-import datasource, { DataSource } from "./datasource";
+import { DataSource } from "./datasource";
 
 axios.defaults.validateStatus = function () {
   return true;
@@ -2747,6 +2747,7 @@ export const isTopologicalSubset = async (
 };
 
 export const isTopologicalSubsetValid = async (
+  datasource: DataSource,
   oldSchemaMap: { [key: string]: Manifest },
   oldStateMap: { [key: string]: object },
   newSchemaMap: { [key: string]: Manifest },

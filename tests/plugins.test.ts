@@ -2108,6 +2108,7 @@ describe("plugins", () => {
         },
       };
       const isTopSubset = await isTopologicalSubsetValid(
+        datasource,
         beforeSchemaMap,
         beforeStateMap,
         afterSchemaMap,
@@ -2221,6 +2222,7 @@ describe("plugins", () => {
         },
       };
       const isTopSubset = await isTopologicalSubsetValid(
+        datasource,
         beforeSchemaMap,
         beforeStateMap,
         afterSchemaMap,
@@ -2306,6 +2308,7 @@ describe("plugins", () => {
         )
       ).toBe(true);
       const bIsTopSubset = await isTopologicalSubsetValid(
+        datasource,
         beforeSchemaMap,
         beforeStateMap,
         bAfterSchemaMap,

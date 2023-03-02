@@ -7,6 +7,7 @@ exports.createBlankRepo = exports.getPluginCreationDirectoryRoot = exports.makeT
 const filestructure_1 = require("../../src/filestructure");
 const path_1 = __importDefault(require("path"));
 const fs_1 = __importDefault(require("fs"));
+const repo_1 = require("../../src/repo");
 const USER_SESSION = JSON.parse(`
 {
     "id": "HhKRVzGInm/9BhJ4saHuvCjcShdTlF9eKLHaZBLc/Po=",
@@ -86,6 +87,7 @@ const MAIN_BRANCH = `
     "name": "main"
   }
 `;
+const EMPTY_STATE = JSON.stringify(repo_1.EMPTY_RENDERED_COMMIT_STATE, null, 2);
 const DIST_INDEX_HTML = (pluginName) => `
 <!DOCTYPE html>
 <html lang="en">
@@ -163,9 +165,11 @@ const createBlankRepo = (repoId) => {
         fs_1.default.mkdirSync(commitsPath);
         fs_1.default.mkdirSync(stashesPath);
         const repoSettingsPath = path_1.default.join(repoPath, "settings.json");
+        const repoStatePath = path_1.default.join(repoPath, "state.json");
         const currentPath = path_1.default.join(repoPath, "current.json");
         const mainBranchPath = path_1.default.join(branchesPath, "main.json");
         fs_1.default.writeFileSync(repoSettingsPath, REPO_SETTINGS, "utf-8");
+        fs_1.default.writeFileSync(repoStatePath, EMPTY_STATE, "utf-8");
         fs_1.default.writeFileSync(currentPath, REPO_CURRENT, "utf-8");
         fs_1.default.writeFileSync(mainBranchPath, MAIN_BRANCH, "utf-8");
     }

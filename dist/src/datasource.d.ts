@@ -1,5 +1,5 @@
 import { Manifest } from "./plugins";
-import { Branch, CommitState, RepoSetting, State } from "./repo";
+import { Branch, CommitState, RenderedCommitState, RepoSetting, State } from "./repo";
 import { CommitData } from "./versioncontrol";
 export interface DataSource {
     getPluginManifest?: (pluginName: string, pluginVersion: string) => Promise<Manifest>;
@@ -20,6 +20,8 @@ export interface DataSource {
     readHotCheckpoint?(repoId: string): Promise<[string, CommitState]>;
     saveHotCheckpoint?(repoId: string, sha: string, commitState: CommitState): Promise<[string, CommitState]>;
     deleteHotCheckpoint?(repoId: string): Promise<boolean>;
+    readRenderedState?(repoId: string): Promise<RenderedCommitState>;
+    saveRenderedState?(repoId: string, commitState: RenderedCommitState): Promise<RenderedCommitState>;
 }
 /**
  * We need to export readDevPluginManifest for the daemon server
@@ -49,6 +51,8 @@ export declare const makeDataSource: (datasource?: DataSource) => {
     readHotCheckpoint?: (repoId: string) => Promise<[string, CommitState]>;
     saveHotCheckpoint?: (repoId: string, sha: string, commitState: CommitState) => Promise<[string, CommitState]>;
     deleteHotCheckpoint?: (repoId: string) => Promise<boolean>;
+    readRenderedState?: (repoId: string) => Promise<RenderedCommitState>;
+    saveRenderedState?: (repoId: string, commitState: RenderedCommitState) => Promise<RenderedCommitState>;
 };
 export declare const makeMemoizedDataSource: (dataSourceOverride?: DataSource) => {
     getPluginManifest?: (pluginName: string, pluginVersion: string) => Promise<Manifest>;
@@ -69,25 +73,6 @@ export declare const makeMemoizedDataSource: (dataSourceOverride?: DataSource) =
     readHotCheckpoint?: (repoId: string) => Promise<[string, CommitState]>;
     saveHotCheckpoint?: (repoId: string, sha: string, commitState: CommitState) => Promise<[string, CommitState]>;
     deleteHotCheckpoint?: (repoId: string) => Promise<boolean>;
+    readRenderedState?: (repoId: string) => Promise<RenderedCommitState>;
+    saveRenderedState?: (repoId: string, commitState: RenderedCommitState) => Promise<RenderedCommitState>;
 };
-declare const _default: {
-    getPluginManifest?: (pluginName: string, pluginVersion: string) => Promise<Manifest>;
-    pluginManifestExists?: (pluginName: string, pluginVersion: string) => Promise<boolean>;
-    getRepos?: () => Promise<string[]>;
-    repoExists?: (repoId?: string) => Promise<boolean>;
-    getRepoSettings?: (repoId: string) => Promise<RepoSetting>;
-    getCurrentState?: (repoId: string) => Promise<State>;
-    saveCurrentState?: (repoId: string, state: State) => Promise<State>;
-    getBranch?: (repoId: string, branchName: string) => Promise<Branch>;
-    getBranches?: (repoId: string) => Promise<Branch[]>;
-    deleteBranch?: (repoId: string, branchName: string) => Promise<boolean>;
-    saveBranch?: (repoId: string, branchName: string, branchData: Branch) => Promise<Branch>;
-    saveCommit?: (repoId: string, sha: string, commitData: CommitData) => Promise<CommitData>;
-    readCommit?: (repoId: string, sha: string) => Promise<CommitData>;
-    readCheckpoint?: (repoId: string, sha: string) => Promise<CommitState>;
-    saveCheckpoint?: (repoId: string, sha: string, commitState: CommitState) => Promise<CommitState>;
-    readHotCheckpoint?: (repoId: string) => Promise<[string, CommitState]>;
-    saveHotCheckpoint?: (repoId: string, sha: string, commitState: CommitState) => Promise<[string, CommitState]>;
-    deleteHotCheckpoint?: (repoId: string) => Promise<boolean>;
-};
-export default _default;

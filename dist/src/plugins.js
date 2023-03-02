@@ -7,7 +7,6 @@ exports.buildPointerArgsMap = exports.buildPointerReturnTypeMap = exports.typest
 exports.drawGetPluginStore = exports.drawGetReferencedObject = exports.drawRefReturnTypes = exports.drawSchemaRoot = exports.drawMakeQueryRef = void 0;
 const axios_1 = __importDefault(require("axios"));
 const semver_1 = __importDefault(require("semver"));
-const datasource_1 = __importDefault(require("./datasource"));
 axios_1.default.defaults.validateStatus = function () {
     return true;
 };
@@ -1952,19 +1951,19 @@ const isTopologicalSubset = async (datasource, oldSchemaMap, oldStateMap, newSch
     return true;
 };
 exports.isTopologicalSubset = isTopologicalSubset;
-const isTopologicalSubsetValid = async (oldSchemaMap, oldStateMap, newSchemaMap, newStateMap, pluginName, pluginFetch) => {
-    if (!(await (0, exports.isTopologicalSubset)(datasource_1.default, oldSchemaMap, oldStateMap, newSchemaMap, newStateMap, pluginName))) {
+const isTopologicalSubsetValid = async (datasource, oldSchemaMap, oldStateMap, newSchemaMap, newStateMap, pluginName, pluginFetch) => {
+    if (!(await (0, exports.isTopologicalSubset)(datasource, oldSchemaMap, oldStateMap, newSchemaMap, newStateMap, pluginName))) {
         return false;
     }
     // we need to apply old schema against new data to ensure valid/safe
     // otherwise we would examine props outside of the subspace that may
     // be invalid in the new version but dont exist in the old version
-    const oldRootSchemaMap = (await (0, exports.getRootSchemaMap)(datasource_1.default, oldSchemaMap)) ?? {};
+    const oldRootSchemaMap = (await (0, exports.getRootSchemaMap)(datasource, oldSchemaMap)) ?? {};
     // ignore $(store)
-    const [, ...oldKVs] = (await (0, exports.getKVStateForPlugin)(datasource_1.default, oldSchemaMap, pluginName, oldStateMap)).map(({ key }) => key);
+    const [, ...oldKVs] = (await (0, exports.getKVStateForPlugin)(datasource, oldSchemaMap, pluginName, oldStateMap)).map(({ key }) => key);
     const oldKVsSet = new Set(oldKVs);
     // ignore $(store)
-    const [, ...newKVs] = (await (0, exports.getKVStateForPlugin)(datasource_1.default, newSchemaMap, pluginName, newStateMap)).filter(({ key }) => oldKVsSet.has(key));
+    const [, ...newKVs] = (await (0, exports.getKVStateForPlugin)(datasource, newSchemaMap, pluginName, newStateMap)).filter(({ key }) => oldKVsSet.has(key));
     // we can check against newKV since isTopologicalSubset check ensures the key
     // intersection already exists. Here we just have to ensure the new values are
     // compatible against the old schema
