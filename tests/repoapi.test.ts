@@ -439,14 +439,14 @@ describe("repoapi", () => {
         const state = {
           aSet: []
         }
-        for (let j = 0; j < 100_000; ++j) {
+        for (let j = 0; j < 400_000; ++j) {
           state.aSet.push({
             mainKey: "key" + j,
             someProp: 100
           })
         }
         for (let k  = 0; k < 100; ++k) {
-          const index = Math.round((100_000 - 1) * Math.random())
+          const index = Math.round((400_000 - 1) * Math.random())
           state.aSet[index].someProp = k * 10;
         }
 
@@ -629,7 +629,7 @@ describe("repoapi", () => {
         ],
       };
       await updatePluginState(datasource, "abc", "A", state4);
-      const commitD = await writeRepoCommit(datasource, "abc", "D");
+      await writeRepoCommit(datasource, "abc", "D");
 
       const state5 = {
         aSet: [

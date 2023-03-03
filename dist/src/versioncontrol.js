@@ -155,13 +155,13 @@ const applyDiff = (diffset, state) => {
     return assets;
 };
 exports.applyDiff = applyDiff;
-const getMergeSequence = (origin, from, into, whose = "yours") => {
+const getMergeSequence = (origin, from, into, direction = "yours") => {
     if (from.length == 0 && into.length == 0) {
         return [];
     }
     const lcs = getGreatestCommonLCS(origin, from, into);
     if (lcs.length == 0) {
-        return getMergeSubSequence(from, into, whose);
+        return getMergeSubSequence(from, into, direction);
     }
     const originOffsets = getLCSBoundaryOffsets(origin, lcs);
     const originSequences = getLCSOffsetMergeSeqments(origin, originOffsets);
@@ -178,7 +178,7 @@ const getMergeSequence = (origin, from, into, whose = "yours") => {
             mergeSequences.push(fromReconciledSequences[mergeIndex]);
         }
         else {
-            mergeSequences.push(getMergeSubSequence(fromReconciledSequences[mergeIndex], intoReconciledSequences[mergeIndex], whose));
+            mergeSequences.push(getMergeSubSequence(fromReconciledSequences[mergeIndex], intoReconciledSequences[mergeIndex], direction));
         }
         if (mergeIndex != lcs.length) {
             mergeSequences.push([lcs[mergeIndex]]);
@@ -220,13 +220,14 @@ const canAutoMerge = (origin, from, into) => {
     return true;
 };
 exports.canAutoMerge = canAutoMerge;
-const getMergeSubSequence = (from, into, whose = "yours") => {
+// yours prioritizes into (you) from (them)
+const getMergeSubSequence = (from, into, direction = "yours") => {
     if (from.length == 0 && into.length == 0) {
         return [];
     }
     const lcs = (0, exports.getLCS)(from, into);
     if (lcs.length == 0) {
-        if (whose == "yours") {
+        if (direction == "theirs") {
             return [...from, ...into];
         }
         else {
@@ -240,7 +241,7 @@ const getMergeSubSequence = (from, into, whose = "yours") => {
     let mergeSequences = [];
     let mergeIndex = 0;
     while (mergeIndex <= lcs.length) {
-        if (whose == "yours") {
+        if (direction == "theirs") {
             mergeSequences.push(fromSequences[mergeIndex]);
             mergeSequences.push(intoSequences[mergeIndex]);
         }

@@ -247,7 +247,7 @@ export declare const isTopologicalSubsetValid: (datasource: DataSource, oldSchem
     [key: string]: Manifest;
 }, newStateMap: {
     [key: string]: object;
-}, pluginName: string, pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>) => Promise<boolean>;
+}, pluginName: string) => Promise<boolean>;
 export interface SchemaValidationResponse {
     status: "ok" | "error";
     message?: string;

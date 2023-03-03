@@ -70,9 +70,9 @@ export interface RepoState {
     isMerge: boolean;
     merge: null | {
         fromSha: string;
-        fromBranch: string;
         intoSha: string;
-        intoBranch: string;
+        originSha: string;
+        direction: "yours" | "theirs";
     };
 }
 export interface Branch {
@@ -103,7 +103,7 @@ export declare const canCommit: (datasource: DataSource, repoId: string, user: U
 export declare const buildCommitData: (parentSha: string, historicalParent: string, idx: number, diff: StateDiff, userId: string, timestamp: string, message: string) => CommitData;
 export declare const getHistory: (datasource: DataSource, repoId: string, sha: string | null) => Promise<Array<CommitHistory> | null>;
 export declare const getBaseDivergenceSha: (history: Array<CommitHistory>, origin: CommitData) => CommitHistory;
-export declare const getDivergenceOriginSha: (datasource: DataSource, repoId: string, sha1: string, sha2: string) => Promise<string>;
+export declare const getDivergenceOriginSha: (datasource: DataSource, repoId: string, fromSha: string, intoSha: string) => Promise<string>;
 export declare const getCommitState: (datasource: DataSource, repoId: string, sha: string | null, historyLength?: number, checkedHot?: boolean, hotCheckpoint?: [string, ApplicationKVState]) => Promise<ApplicationKVState | null>;
 export declare const applyStateDiffToCommitState: (applicationKVState: ApplicationKVState, stateDiff: StateDiff) => ApplicationKVState;
 export declare const getCurrentBranch: (datasource: DataSource, repoId: string) => Promise<Branch | null>;
@@ -135,9 +135,9 @@ export declare const tokenizeCommitState: (appKVState: ApplicationKVState) => [T
 export declare const detokenizeStore: (tokenizedState: TokenizedState, tokenStore: {
     [key: string]: unknown;
 }) => ApplicationKVState;
-export declare const mergeTokenStores: (tokenStore1: {
+export declare const mergeTokenStores: (fromStore: {
     [key: string]: unknown;
-}, tokenStore2: {
+}, intoStore: {
     [key: string]: unknown;
 }) => {
     [x: string]: unknown;
@@ -149,8 +149,8 @@ export declare const uniqueKV: (kvList: Array<{
     key: string;
     value: string;
 }>;
-export declare const getStateDiffFromCommitStates: (appKVState1: ApplicationKVState, appKVState2: ApplicationKVState) => StateDiff;
-export declare const getCommitStateDiffList: (appKVState1: ApplicationKVState, appKVState2: ApplicationKVState) => Array<{
+export declare const getStateDiffFromCommitStates: (beforeKVState: ApplicationKVState, afterKVState: ApplicationKVState) => StateDiff;
+export declare const getCommitStateDiffList: (beforeKVState: ApplicationKVState, afterKVState: ApplicationKVState) => Array<{
     diff: Diff | TextDiff;
     namespace: string;
     pluginName?: string;
@@ -160,11 +160,11 @@ export declare const renderDiffList: (diffList: Array<{
     namespace: string;
     pluginName?: string;
 }>) => StateDiff;
-export declare const getMergeCommitStates: (datasource: DataSource, repoId: string, sha1: string, sha2: string) => Promise<{
-    commit1: ApplicationKVState;
-    commit2: ApplicationKVState;
+export declare const getMergeCommitStates: (datasource: DataSource, repoId: string, fromSha: string, intoSha: string) => Promise<{
+    fromCommitState: ApplicationKVState;
+    intoCommitState: ApplicationKVState;
     originCommit: ApplicationKVState;
 }>;
-export declare const canAutoMergeCommitStates: (datasource: DataSource, commitState1: ApplicationKVState, commitState2: ApplicationKVState, originCommitState: ApplicationKVState) => Promise<boolean>;
-export declare const getMergedCommitState: (datasource: DataSource, commitState1: ApplicationKVState, commitState2: ApplicationKVState, originCommit: ApplicationKVState, whose?: "yours" | "theirs") => Promise<ApplicationKVState>;
+export declare const canAutoMergeCommitStates: (datasource: DataSource, fromCommitState: ApplicationKVState, intoCommitState: ApplicationKVState, originCommitState: ApplicationKVState) => Promise<boolean>;
+export declare const getMergedCommitState: (datasource: DataSource, fromState: ApplicationKVState, intoState: ApplicationKVState, originCommit: ApplicationKVState, direction?: "yours" | "theirs") => Promise<ApplicationKVState>;
 export declare const canAutoMergeOnTopCurrentState: (datasource: DataSource, repoId: string, mergeSha: string) => Promise<boolean>;

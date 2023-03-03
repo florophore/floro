@@ -2752,8 +2752,7 @@ export const isTopologicalSubsetValid = async (
   oldStateMap: { [key: string]: object },
   newSchemaMap: { [key: string]: Manifest },
   newStateMap: { [key: string]: object },
-  pluginName: string,
-  pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>
+  pluginName: string
 ): Promise<boolean> => {
   if (
     !(await isTopologicalSubset(

@@ -2108,18 +2108,20 @@ describe("plugins", () => {
         },
       };
       const isTopSubset = await isTopologicalSubsetValid(
-        datasource,
+        {
+          ...datasource,
+          getPluginManifest: async (pluginName, pluginVersion) => {
+            if (pluginVersion == "0.0.0") {
+              return beforeSchemaMap[pluginName];
+            }
+            return afterSchemaMap[pluginName];
+          },
+        },
         beforeSchemaMap,
         beforeStateMap,
         afterSchemaMap,
         afterStateMap,
-        BEFORE_PLUGIN_MANIFEST.name,
-        async (pluginName, pluginVersion) => {
-          if (pluginVersion == "0.0.0") {
-            return beforeSchemaMap[pluginName];
-          }
-          return afterSchemaMap[pluginName];
-        }
+        BEFORE_PLUGIN_MANIFEST.name
       );
       expect(isTopSubset).toEqual(true);
     });
@@ -2222,18 +2224,20 @@ describe("plugins", () => {
         },
       };
       const isTopSubset = await isTopologicalSubsetValid(
-        datasource,
+        {
+          ...datasource,
+          getPluginManifest: async (pluginName, pluginVersion) => {
+            if (pluginVersion == "0.0.0") {
+              return beforeSchemaMap[pluginName];
+            }
+            return afterSchemaMap[pluginName];
+          },
+        },
         beforeSchemaMap,
         beforeStateMap,
         afterSchemaMap,
         afterStateMap,
-        BEFORE_PLUGIN_MANIFEST.name,
-        async (pluginName, pluginVersion) => {
-          if (pluginVersion == "0.0.0") {
-            return beforeSchemaMap[pluginName];
-          }
-          return afterSchemaMap[pluginName];
-        }
+        BEFORE_PLUGIN_MANIFEST.name
       );
       expect(isTopSubset).toEqual(false);
       const B_AFTER_PLUGIN_MANIFEST = {
@@ -2308,18 +2312,20 @@ describe("plugins", () => {
         )
       ).toBe(true);
       const bIsTopSubset = await isTopologicalSubsetValid(
-        datasource,
+        {
+          ...datasource,
+          getPluginManifest: async (pluginName, pluginVersion) => {
+            if (pluginVersion == "0.0.0") {
+              return beforeSchemaMap[pluginName];
+            }
+            return afterSchemaMap[pluginName];
+          },
+        },
         beforeSchemaMap,
         beforeStateMap,
         bAfterSchemaMap,
         bAfterStateMap,
-        BEFORE_PLUGIN_MANIFEST.name,
-        async (pluginName, pluginVersion) => {
-          if (pluginVersion == "0.0.0") {
-            return beforeSchemaMap[pluginName];
-          }
-          return afterSchemaMap[pluginName];
-        }
+        BEFORE_PLUGIN_MANIFEST.name
       );
       expect(bIsTopSubset).toEqual(false);
     });

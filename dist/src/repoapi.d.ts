@@ -1,4 +1,4 @@
-import { Branch, RenderedApplicationState } from "./repo";
+import { Branch, RenderedApplicationState, RepoState } from "./repo";
 import { CommitData } from "./versioncontrol";
 import { PluginElement } from "./plugins";
 import { DataSource } from "./datasource";
@@ -14,7 +14,7 @@ export declare const readRepoLicenses: (datasource: DataSource, repoId?: string)
 export declare const readRepoDescription: (datasource: DataSource, repoId?: string) => Promise<string[]>;
 export declare const getCurrentRepoBranch: (datasource: DataSource, repoId?: string) => Promise<Branch>;
 export declare const getRepoBranches: (datasource: DataSource, repoId?: string) => Promise<Branch[]>;
-export declare const switchRepoBranch: (datasource: DataSource, repoId?: string, branchName?: string) => Promise<import("./repo").RepoState>;
+export declare const switchRepoBranch: (datasource: DataSource, repoId?: string, branchName?: string) => Promise<RepoState>;
 export declare const readSettings: (datasource: DataSource, repoId?: string) => Promise<import("./repo").RepoSetting>;
 export declare const readLastCommit: (datasource: DataSource, repoId?: string) => Promise<CommitData>;
 export declare const readRepoCommit: (datasource: DataSource, repoId?: string, sha?: string) => Promise<CommitData>;
@@ -25,8 +25,8 @@ export declare const readCurrentState: (datasource: DataSource, repoId?: string)
 export declare const readCommitState: (datasource: DataSource, repoId?: string, sha?: string) => Promise<RenderedApplicationState>;
 export declare const readBranchState: (datasource: DataSource, repoId?: string, branchName?: string) => Promise<import("./repo").ApplicationKVState>;
 export declare const writeRepoCommit: (datasource: DataSource, repoId?: string, message?: string) => Promise<CommitData>;
-export declare const checkoutBranch: (datasource: DataSource, repoId?: string, branchName?: string) => Promise<import("./repo").RepoState>;
-export declare const checkoutSha: (datasource: DataSource, repoId: string, sha: string | null) => Promise<import("./repo").RepoState>;
+export declare const checkoutBranch: (datasource: DataSource, repoId?: string, branchName?: string) => Promise<RepoState>;
+export declare const checkoutSha: (datasource: DataSource, repoId: string, sha: string | null) => Promise<RepoState>;
 export declare const updatePlugins: (datasource: DataSource, repoId: string, plugins: Array<PluginElement>) => Promise<RenderedApplicationState>;
 export declare const updatePluginState: (datasource: DataSource, repoId: string, pluginName: string, updatedState: object) => Promise<RenderedApplicationState>;
-export declare const mergeCommit: (datasource: DataSource, repoId: string, mergeSha: string) => Promise<RenderedApplicationState>;
+export declare const mergeCommit: (datasource: DataSource, repoId: string, fromSha: string) => Promise<RenderedApplicationState>;

@@ -249,17 +249,17 @@ const getBaseDivergenceSha = (history, origin) => {
     return null;
 };
 exports.getBaseDivergenceSha = getBaseDivergenceSha;
-const getDivergenceOriginSha = async (datasource, repoId, sha1, sha2) => {
-    const history1 = await (0, exports.getHistory)(datasource, repoId, sha1);
-    if (!history1) {
+const getDivergenceOriginSha = async (datasource, repoId, fromSha, intoSha) => {
+    const fromHistory = await (0, exports.getHistory)(datasource, repoId, fromSha);
+    if (!fromHistory) {
         throw "missing history";
     }
-    const history2 = await (0, exports.getHistory)(datasource, repoId, sha2);
-    if (!history2) {
+    const intoHistory = await (0, exports.getHistory)(datasource, repoId, intoSha);
+    if (!fromHistory) {
         throw "missing history";
     }
-    const longerHistory = history1.length >= history2.length ? history1 : history2;
-    const shorterHistory = history1.length < history2.length ? history1 : history2;
+    const longerHistory = fromHistory.length >= intoHistory.length ? fromHistory : intoHistory;
+    const shorterHistory = fromHistory.length < intoHistory.length ? fromHistory : intoHistory;
     const visited = new Set();
     for (let historyObj of shorterHistory) {
         visited.add(historyObj.sha);
@@ -599,10 +599,10 @@ const detokenizeStore = (tokenizedState, tokenStore) => {
     };
 };
 exports.detokenizeStore = detokenizeStore;
-const mergeTokenStores = (tokenStore1, tokenStore2) => {
+const mergeTokenStores = (fromStore, intoStore) => {
     return {
-        ...tokenStore1,
-        ...tokenStore2,
+        ...fromStore,
+        ...intoStore,
     };
 };
 exports.mergeTokenStores = mergeTokenStores;
@@ -618,7 +618,7 @@ const uniqueKV = (kvList) => {
     return out;
 };
 exports.uniqueKV = uniqueKV;
-const getStateDiffFromCommitStates = (appKVState1, appKVState2) => {
+const getStateDiffFromCommitStates = (beforeKVState, afterKVState) => {
     const stateDiff = {
         plugins: {
             add: {},
@@ -639,38 +639,38 @@ const getStateDiffFromCommitStates = (appKVState1, appKVState2) => {
         }
     };
     const pluginsToTraverse = Array.from([
-        ...Object.keys(appKVState1.store),
-        ...Object.keys(appKVState2.store),
+        ...Object.keys(beforeKVState.store),
+        ...Object.keys(afterKVState.store),
     ]);
-    for (const prop in appKVState2) {
+    for (const prop in afterKVState) {
         if (prop == "store") {
             for (const pluginName of pluginsToTraverse) {
-                const diff = (0, versioncontrol_1.getDiff)(appKVState1?.store?.[pluginName] ?? [], appKVState2?.store?.[pluginName] ?? []);
+                const diff = (0, versioncontrol_1.getDiff)(beforeKVState?.store?.[pluginName] ?? [], afterKVState?.store?.[pluginName] ?? []);
                 stateDiff.store[pluginName] = diff;
             }
             continue;
         }
         if (prop == "description") {
-            const diff = (0, versioncontrol_1.getTextDiff)((appKVState1?.[prop] ?? []).join(""), (appKVState2?.[prop] ?? [])?.join(""));
+            const diff = (0, versioncontrol_1.getTextDiff)((beforeKVState?.[prop] ?? []).join(""), (afterKVState?.[prop] ?? [])?.join(""));
             stateDiff.description = diff;
             continue;
         }
-        const diff = (0, versioncontrol_1.getDiff)(appKVState1?.[prop] ?? [], appKVState2?.[prop] ?? []);
+        const diff = (0, versioncontrol_1.getDiff)(beforeKVState?.[prop] ?? [], afterKVState?.[prop] ?? []);
         stateDiff[prop] = diff;
     }
     return stateDiff;
 };
 exports.getStateDiffFromCommitStates = getStateDiffFromCommitStates;
-const getCommitStateDiffList = (appKVState1, appKVState2) => {
+const getCommitStateDiffList = (beforeKVState, afterKVState) => {
     const diffList = [];
     const pluginsToTraverse = Array.from([
-        ...Object.keys(appKVState1.store),
-        ...Object.keys(appKVState2.store),
+        ...Object.keys(beforeKVState.store),
+        ...Object.keys(afterKVState.store),
     ]);
-    for (const prop in appKVState2) {
+    for (const prop in afterKVState) {
         if (prop == "store") {
             for (const pluginName of pluginsToTraverse) {
-                const diff = (0, versioncontrol_1.getDiff)(appKVState1?.store?.[pluginName] ?? [], appKVState2?.store?.[pluginName] ?? []);
+                const diff = (0, versioncontrol_1.getDiff)(beforeKVState?.store?.[pluginName] ?? [], afterKVState?.store?.[pluginName] ?? []);
                 diffList.push({
                     diff,
                     namespace: "store",
@@ -680,14 +680,14 @@ const getCommitStateDiffList = (appKVState1, appKVState2) => {
             continue;
         }
         if (prop == "description") {
-            const diff = (0, versioncontrol_1.getTextDiff)((appKVState1?.[prop] ?? []).join(""), (appKVState2?.[prop] ?? [])?.join(""));
+            const diff = (0, versioncontrol_1.getTextDiff)((beforeKVState?.[prop] ?? []).join(""), (afterKVState?.[prop] ?? [])?.join(""));
             diffList.push({
                 diff,
                 namespace: prop,
             });
             continue;
         }
-        const diff = (0, versioncontrol_1.getDiff)(appKVState1?.[prop] ?? [], appKVState2?.[prop] ?? []);
+        const diff = (0, versioncontrol_1.getDiff)(beforeKVState?.[prop] ?? [], afterKVState?.[prop] ?? []);
         diffList.push({
             diff,
             namespace: prop,
@@ -720,17 +720,17 @@ const renderDiffList = (diffList) => {
     }, { diff: exports.EMPTY_COMMIT_DIFF }).diff;
 };
 exports.renderDiffList = renderDiffList;
-const getMergeCommitStates = async (datasource, repoId, sha1, sha2) => {
+const getMergeCommitStates = async (datasource, repoId, fromSha, intoSha) => {
     try {
-        const originSha = await (0, exports.getDivergenceOriginSha)(datasource, repoId, sha1, sha2);
-        const commit1 = await (0, exports.getCommitState)(datasource, repoId, sha1);
-        const commit2 = await (0, exports.getCommitState)(datasource, repoId, sha2);
+        const originSha = await (0, exports.getDivergenceOriginSha)(datasource, repoId, fromSha, intoSha);
+        const fromCommitState = await (0, exports.getCommitState)(datasource, repoId, fromSha);
+        const intoCommitState = await (0, exports.getCommitState)(datasource, repoId, intoSha);
         const originCommit = !!originSha
             ? await (0, exports.getCommitState)(datasource, repoId, originSha)
             : exports.EMPTY_COMMIT_STATE;
         return {
-            commit1,
-            commit2,
+            fromCommitState,
+            intoCommitState,
             originCommit,
         };
     }
@@ -739,10 +739,10 @@ const getMergeCommitStates = async (datasource, repoId, sha1, sha2) => {
     }
 };
 exports.getMergeCommitStates = getMergeCommitStates;
-const canAutoMergeCommitStates = async (datasource, commitState1, commitState2, originCommitState) => {
+const canAutoMergeCommitStates = async (datasource, fromCommitState, intoCommitState, originCommitState) => {
     try {
-        const yourMerge = await (0, exports.getMergedCommitState)(datasource, commitState1, commitState2, originCommitState, "yours");
-        const theirMerge = await (0, exports.getMergedCommitState)(datasource, commitState1, commitState2, originCommitState, "theirs");
+        const yourMerge = await (0, exports.getMergedCommitState)(datasource, fromCommitState, intoCommitState, originCommitState, "yours");
+        const theirMerge = await (0, exports.getMergedCommitState)(datasource, fromCommitState, intoCommitState, originCommitState, "theirs");
         return JSON.stringify(yourMerge) == JSON.stringify(theirMerge);
     }
     catch (e) {
@@ -750,28 +750,28 @@ const canAutoMergeCommitStates = async (datasource, commitState1, commitState2, 
     }
 };
 exports.canAutoMergeCommitStates = canAutoMergeCommitStates;
-const getMergedCommitState = async (datasource, commitState1, commitState2, originCommit, whose = "yours") => {
+const getMergedCommitState = async (datasource, fromState, intoState, originCommit, direction = "yours") => {
     try {
-        const [tokenizedCommit1, tokenizedStore1] = (0, exports.tokenizeCommitState)(commitState1);
-        const [tokenizedCommit2, tokenizedStore2] = (0, exports.tokenizeCommitState)(commitState2);
+        const [tokenizedCommitFrom, tokenizedStoreFrom] = (0, exports.tokenizeCommitState)(fromState);
+        const [tokenizedCommitInto, tokenizedStoreInto] = (0, exports.tokenizeCommitState)(intoState);
         const [tokenizedOrigin] = (0, exports.tokenizeCommitState)(originCommit);
-        const tokenizedDescription = (0, versioncontrol_1.getMergeSequence)(tokenizedOrigin.description, tokenizedCommit1.description, tokenizedCommit2.description, whose);
-        const tokenizedLicenses = (0, versioncontrol_1.getMergeSequence)(tokenizedOrigin.licenses, tokenizedCommit1.licenses, tokenizedCommit2.licenses, whose);
-        const tokenizedPlugins = (0, versioncontrol_1.getMergeSequence)(tokenizedOrigin.plugins, tokenizedCommit1.plugins, tokenizedCommit2.plugins, whose);
-        const tokenizedBinaries = (0, versioncontrol_1.getMergeSequence)(tokenizedOrigin.binaries, tokenizedCommit1.binaries, tokenizedCommit2.binaries, whose);
+        const tokenizedDescription = (0, versioncontrol_1.getMergeSequence)(tokenizedOrigin.description, tokenizedCommitFrom.description, tokenizedCommitInto.description, direction);
+        const tokenizedLicenses = (0, versioncontrol_1.getMergeSequence)(tokenizedOrigin.licenses, tokenizedCommitFrom.licenses, tokenizedCommitInto.licenses, direction);
+        const tokenizedPlugins = (0, versioncontrol_1.getMergeSequence)(tokenizedOrigin.plugins, tokenizedCommitFrom.plugins, tokenizedCommitInto.plugins, direction);
+        const tokenizedBinaries = (0, versioncontrol_1.getMergeSequence)(tokenizedOrigin.binaries, tokenizedCommitFrom.binaries, tokenizedCommitInto.binaries, direction);
         const pluginsToTraverse = Array.from([
-            ...Object.keys(tokenizedCommit1.store),
-            ...Object.keys(tokenizedCommit2.store),
+            ...Object.keys(tokenizedCommitFrom.store),
+            ...Object.keys(tokenizedCommitInto.store),
         ]);
         const tokenizedStore = {};
         for (const pluginName of pluginsToTraverse) {
-            const pluginKVs1 = tokenizedCommit1?.store?.[pluginName] ?? [];
-            const pluginKVs2 = tokenizedCommit2?.store?.[pluginName] ?? [];
+            const pluginKVsFrom = tokenizedCommitFrom?.store?.[pluginName] ?? [];
+            const pluginKVsInto = tokenizedCommitInto?.store?.[pluginName] ?? [];
             const orignKVs = tokenizedOrigin?.store?.[pluginName] ?? [];
-            const pluginStoreSequence = (0, versioncontrol_1.getMergeSequence)(orignKVs, pluginKVs1, pluginKVs2, whose);
+            const pluginStoreSequence = (0, versioncontrol_1.getMergeSequence)(orignKVs, pluginKVsFrom, pluginKVsInto, direction);
             tokenizedStore[pluginName] = pluginStoreSequence;
         }
-        const tokenStore = (0, exports.mergeTokenStores)(tokenizedStore1, tokenizedStore2);
+        const tokenStore = (0, exports.mergeTokenStores)(tokenizedStoreFrom, tokenizedStoreInto);
         const tokenizedState = {
             description: tokenizedDescription,
             licenses: tokenizedLicenses,

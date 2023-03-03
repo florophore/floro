@@ -79,7 +79,7 @@ describe("versioncontrol", () => {
             const A = "".split("");
             const B = "DA".split("");
             const C = "BC".split("");
-            const merge = (0, versioncontrol_1.getMergeSequence)(A, B, C).join("");
+            const merge = (0, versioncontrol_1.getMergeSequence)(A, B, C, "theirs").join("");
             expect(merge).toEqual("DABC");
             const canMerge = (0, versioncontrol_1.canAutoMerge)(A, B, C);
             expect(canMerge).toBe(false);
@@ -106,11 +106,11 @@ describe("versioncontrol", () => {
             const A = "ABCDEF".split("");
             const B = "RXALDEFSKZ".split("");
             const C = "ABCDFSJKL".split("");
-            const merge = (0, versioncontrol_1.getMergeSequence)(A, B, C).join("");
+            const merge = (0, versioncontrol_1.getMergeSequence)(A, B, C, "theirs").join("");
             expect(merge).toEqual("RXALDFSJKZL");
             const canMerge = (0, versioncontrol_1.canAutoMerge)(A, B, C);
             expect(canMerge).toBe(false);
-            expect((0, versioncontrol_1.getMergeSequence)(A, B, C, "theirs").join("")).toEqual("RXALDFSJKLZ");
+            expect((0, versioncontrol_1.getMergeSequence)(A, B, C, "yours").join("")).toEqual("RXALDFSJKLZ");
         });
         test("creates merge without conflict if subsequences with deletions can be reconciled", () => {
             const A = "DENF".split("");
@@ -125,11 +125,11 @@ describe("versioncontrol", () => {
             const A = "DENF".split("");
             const B = "DTENPF".split("");
             const C = "DXF".split("");
-            const merge = (0, versioncontrol_1.getMergeSequence)(A, B, C).join("");
+            const merge = (0, versioncontrol_1.getMergeSequence)(A, B, C, "theirs").join("");
             expect(merge).toEqual("DTPXF");
             const canMerge = (0, versioncontrol_1.canAutoMerge)(A, B, C);
             expect(canMerge).toBe(false);
-            expect((0, versioncontrol_1.getMergeSequence)(A, B, C, "theirs").join("")).toEqual("DXTPF");
+            expect((0, versioncontrol_1.getMergeSequence)(A, B, C, "yours").join("")).toEqual("DXTPF");
         });
     });
 });

@@ -237,14 +237,14 @@ export const getMergeSequence = (
   origin: Array<string>,
   from: Array<string>,
   into: Array<string>,
-  whose: "theirs" | "yours" = "yours"
+  direction: "theirs" | "yours" = "yours"
 ): Array<string> => {
   if (from.length == 0 && into.length == 0) {
     return [];
   }
   const lcs = getGreatestCommonLCS(origin, from, into);
   if (lcs.length == 0) {
-    return getMergeSubSequence(from, into, whose);
+    return getMergeSubSequence(from, into, direction);
   }
   const originOffsets = getLCSBoundaryOffsets(origin, lcs);
   const originSequences = getLCSOffsetMergeSeqments(origin, originOffsets);
@@ -276,7 +276,7 @@ export const getMergeSequence = (
         getMergeSubSequence(
           fromReconciledSequences[mergeIndex],
           intoReconciledSequences[mergeIndex],
-          whose
+          direction
         )
       );
     }
@@ -337,17 +337,18 @@ export const canAutoMerge = (
   return true;
 };
 
+// yours prioritizes into (you) from (them)
 const getMergeSubSequence = (
   from: Array<string>,
   into: Array<string>,
-  whose: "theirs" | "yours" = "yours"
+  direction: "theirs" | "yours" = "yours"
 ): Array<string> => {
   if (from.length == 0 && into.length == 0) {
     return [];
   }
   const lcs = getLCS(from, into);
   if (lcs.length == 0) {
-    if (whose == "yours") {
+    if (direction == "theirs") {
       return [...from, ...into];
     } else {
       return [...into, ...from];
@@ -363,7 +364,7 @@ const getMergeSubSequence = (
   let mergeSequences = [];
   let mergeIndex = 0;
   while (mergeIndex <= lcs.length) {
-    if (whose == "yours") {
+    if (direction == "theirs") {
       mergeSequences.push(fromSequences[mergeIndex]);
       mergeSequences.push(intoSequences[mergeIndex]);
     } else {

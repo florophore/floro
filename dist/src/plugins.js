@@ -1951,7 +1951,7 @@ const isTopologicalSubset = async (datasource, oldSchemaMap, oldStateMap, newSch
     return true;
 };
 exports.isTopologicalSubset = isTopologicalSubset;
-const isTopologicalSubsetValid = async (datasource, oldSchemaMap, oldStateMap, newSchemaMap, newStateMap, pluginName, pluginFetch) => {
+const isTopologicalSubsetValid = async (datasource, oldSchemaMap, oldStateMap, newSchemaMap, newStateMap, pluginName) => {
     if (!(await (0, exports.isTopologicalSubset)(datasource, oldSchemaMap, oldStateMap, newSchemaMap, newStateMap, pluginName))) {
         return false;
     }

@@ -1906,12 +1906,15 @@ describe("plugins", () => {
                     ],
                 },
             };
-            const isTopSubset = await (0, plugins_1.isTopologicalSubsetValid)(datasource, beforeSchemaMap, beforeStateMap, afterSchemaMap, afterStateMap, BEFORE_PLUGIN_MANIFEST.name, async (pluginName, pluginVersion) => {
-                if (pluginVersion == "0.0.0") {
-                    return beforeSchemaMap[pluginName];
-                }
-                return afterSchemaMap[pluginName];
-            });
+            const isTopSubset = await (0, plugins_1.isTopologicalSubsetValid)({
+                ...datasource,
+                getPluginManifest: async (pluginName, pluginVersion) => {
+                    if (pluginVersion == "0.0.0") {
+                        return beforeSchemaMap[pluginName];
+                    }
+                    return afterSchemaMap[pluginName];
+                },
+            }, beforeSchemaMap, beforeStateMap, afterSchemaMap, afterStateMap, BEFORE_PLUGIN_MANIFEST.name);
             expect(isTopSubset).toEqual(true);
         });
         test("returns false when is NOT a valid subset", async () => {
@@ -2008,12 +2011,15 @@ describe("plugins", () => {
                     ],
                 },
             };
-            const isTopSubset = await (0, plugins_1.isTopologicalSubsetValid)(datasource, beforeSchemaMap, beforeStateMap, afterSchemaMap, afterStateMap, BEFORE_PLUGIN_MANIFEST.name, async (pluginName, pluginVersion) => {
-                if (pluginVersion == "0.0.0") {
-                    return beforeSchemaMap[pluginName];
-                }
-                return afterSchemaMap[pluginName];
-            });
+            const isTopSubset = await (0, plugins_1.isTopologicalSubsetValid)({
+                ...datasource,
+                getPluginManifest: async (pluginName, pluginVersion) => {
+                    if (pluginVersion == "0.0.0") {
+                        return beforeSchemaMap[pluginName];
+                    }
+                    return afterSchemaMap[pluginName];
+                },
+            }, beforeSchemaMap, beforeStateMap, afterSchemaMap, afterStateMap, BEFORE_PLUGIN_MANIFEST.name);
             expect(isTopSubset).toEqual(false);
             const B_AFTER_PLUGIN_MANIFEST = {
                 version: "0.0.1",
@@ -2078,12 +2084,15 @@ describe("plugins", () => {
                     return afterSchemaMap[pluginName];
                 },
             }, bAfterSchemaMap, bAfterStateMap, BEFORE_PLUGIN_MANIFEST.name)).toBe(true);
-            const bIsTopSubset = await (0, plugins_1.isTopologicalSubsetValid)(datasource, beforeSchemaMap, beforeStateMap, bAfterSchemaMap, bAfterStateMap, BEFORE_PLUGIN_MANIFEST.name, async (pluginName, pluginVersion) => {
-                if (pluginVersion == "0.0.0") {
-                    return beforeSchemaMap[pluginName];
-                }
-                return afterSchemaMap[pluginName];
-            });
+            const bIsTopSubset = await (0, plugins_1.isTopologicalSubsetValid)({
+                ...datasource,
+                getPluginManifest: async (pluginName, pluginVersion) => {
+                    if (pluginVersion == "0.0.0") {
+                        return beforeSchemaMap[pluginName];
+                    }
+                    return afterSchemaMap[pluginName];
+                },
+            }, beforeSchemaMap, beforeStateMap, bAfterSchemaMap, bAfterStateMap, BEFORE_PLUGIN_MANIFEST.name);
             expect(bIsTopSubset).toEqual(false);
         });
     });

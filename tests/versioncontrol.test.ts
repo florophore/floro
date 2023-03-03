@@ -91,7 +91,7 @@ describe("versioncontrol", () => {
       const A = "".split("");
       const B = "DA".split("");
       const C = "BC".split("");
-      const merge = getMergeSequence(A, B, C).join("");
+      const merge = getMergeSequence(A, B, C, "theirs").join("");
       expect(merge).toEqual("DABC");
       const canMerge = canAutoMerge(A, B, C);
       expect(canMerge).toBe(false);
@@ -121,11 +121,11 @@ describe("versioncontrol", () => {
       const A = "ABCDEF".split("");
       const B = "RXALDEFSKZ".split("");
       const C = "ABCDFSJKL".split("");
-      const merge = getMergeSequence(A, B, C).join("");
+      const merge = getMergeSequence(A, B, C, "theirs").join("");
       expect(merge).toEqual("RXALDFSJKZL");
       const canMerge = canAutoMerge(A, B, C);
       expect(canMerge).toBe(false);
-      expect(getMergeSequence(A, B, C, "theirs").join("")).toEqual(
+      expect(getMergeSequence(A, B, C, "yours").join("")).toEqual(
         "RXALDFSJKLZ"
       );
     });
@@ -144,11 +144,11 @@ describe("versioncontrol", () => {
       const A = "DENF".split("");
       const B = "DTENPF".split("");
       const C = "DXF".split("");
-      const merge = getMergeSequence(A, B, C).join("");
+      const merge = getMergeSequence(A, B, C, "theirs").join("");
       expect(merge).toEqual("DTPXF");
       const canMerge = canAutoMerge(A, B, C);
       expect(canMerge).toBe(false);
-      expect(getMergeSequence(A, B, C, "theirs").join("")).toEqual("DXTPF");
+      expect(getMergeSequence(A, B, C, "yours").join("")).toEqual("DXTPF");
     });
   });
 });
