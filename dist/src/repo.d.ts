@@ -105,7 +105,7 @@ export declare const getHistory: (datasource: DataSource, repoId: string, sha: s
 export declare const getBaseDivergenceSha: (history: Array<CommitHistory>, origin: CommitData) => CommitHistory;
 export declare const getDivergenceOriginSha: (datasource: DataSource, repoId: string, sha1: string, sha2: string) => Promise<string>;
 export declare const getCommitState: (datasource: DataSource, repoId: string, sha: string | null, historyLength?: number, checkedHot?: boolean, hotCheckpoint?: [string, ApplicationKVState]) => Promise<ApplicationKVState | null>;
-export declare const applyStateDiffToCommitState: (applicationKVState: ApplicationKVState, stateDiff: StateDiff) => Promise<ApplicationKVState>;
+export declare const applyStateDiffToCommitState: (applicationKVState: ApplicationKVState, stateDiff: StateDiff) => ApplicationKVState;
 export declare const getCurrentBranch: (datasource: DataSource, repoId: string) => Promise<Branch | null>;
 export declare const getUnstagedCommitState: (datasource: DataSource, repoId: string) => Promise<ApplicationKVState>;
 export declare const getApplicationState: (datasource: DataSource, repoId: string) => Promise<RenderedApplicationState>;
@@ -167,3 +167,4 @@ export declare const getMergeCommitStates: (datasource: DataSource, repoId: stri
 }>;
 export declare const canAutoMergeCommitStates: (datasource: DataSource, commitState1: ApplicationKVState, commitState2: ApplicationKVState, originCommitState: ApplicationKVState) => Promise<boolean>;
 export declare const getMergedCommitState: (datasource: DataSource, commitState1: ApplicationKVState, commitState2: ApplicationKVState, originCommit: ApplicationKVState, whose?: "yours" | "theirs") => Promise<ApplicationKVState>;
+export declare const canAutoMergeOnTopCurrentState: (datasource: DataSource, repoId: string, mergeSha: string) => Promise<boolean>;

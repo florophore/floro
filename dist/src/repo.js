@@ -26,7 +26,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getMergedCommitState = exports.canAutoMergeCommitStates = exports.getMergeCommitStates = exports.renderDiffList = exports.getCommitStateDiffList = exports.getStateDiffFromCommitStates = exports.uniqueKV = exports.mergeTokenStores = exports.detokenizeStore = exports.tokenizeCommitState = exports.convertCommitStateToRenderedState = exports.convertRenderedStateStoreToKV = exports.convertStateStoreToKV = exports.buildStateStore = exports.getPluginsToRunUpdatesOn = exports.updateCurrentBranch = exports.updateCurrentWithNewBranch = exports.updateCurrentWithSHA = exports.updateCurrentCommitSHA = exports.convertRenderedCommitStateToKv = exports.getApplicationState = exports.getUnstagedCommitState = exports.getCurrentBranch = exports.applyStateDiffToCommitState = exports.getCommitState = exports.getDivergenceOriginSha = exports.getBaseDivergenceSha = exports.getHistory = exports.buildCommitData = exports.canCommit = exports.diffIsEmpty = exports.getCurrentCommitSha = exports.cloneRepo = exports.getRemovedDeps = exports.getAddedDeps = exports.getRepos = exports.EMPTY_COMMIT_DIFF = exports.EMPTY_RENDERED_APPLICATION_STATE = exports.EMPTY_COMMIT_STATE = void 0;
+exports.canAutoMergeOnTopCurrentState = exports.getMergedCommitState = exports.canAutoMergeCommitStates = exports.getMergeCommitStates = exports.renderDiffList = exports.getCommitStateDiffList = exports.getStateDiffFromCommitStates = exports.uniqueKV = exports.mergeTokenStores = exports.detokenizeStore = exports.tokenizeCommitState = exports.convertCommitStateToRenderedState = exports.convertRenderedStateStoreToKV = exports.convertStateStoreToKV = exports.buildStateStore = exports.getPluginsToRunUpdatesOn = exports.updateCurrentBranch = exports.updateCurrentWithNewBranch = exports.updateCurrentWithSHA = exports.updateCurrentCommitSHA = exports.convertRenderedCommitStateToKv = exports.getApplicationState = exports.getUnstagedCommitState = exports.getCurrentBranch = exports.applyStateDiffToCommitState = exports.getCommitState = exports.getDivergenceOriginSha = exports.getBaseDivergenceSha = exports.getHistory = exports.buildCommitData = exports.canCommit = exports.diffIsEmpty = exports.getCurrentCommitSha = exports.cloneRepo = exports.getRemovedDeps = exports.getAddedDeps = exports.getRepos = exports.EMPTY_COMMIT_DIFF = exports.EMPTY_RENDERED_APPLICATION_STATE = exports.EMPTY_COMMIT_STATE = void 0;
 const axios_1 = __importDefault(require("axios"));
 const fs_1 = __importStar(require("fs"));
 const path_1 = __importDefault(require("path"));
@@ -149,12 +149,12 @@ exports.cloneRepo = cloneRepo;
 const getCurrentCommitSha = async (datasource, repoId) => {
     try {
         const current = await datasource.readCurrentRepoState(repoId);
-        if (current.commit) {
-            return current.commit;
-        }
         if (current.branch) {
             const branch = await datasource.readBranch(repoId, current.branch);
             return branch?.lastCommit ?? null;
+        }
+        if (current.commit) {
+            return current.commit;
         }
         return null;
     }
@@ -237,6 +237,9 @@ const getHistory = async (datasource, repoId, sha) => {
 };
 exports.getHistory = getHistory;
 const getBaseDivergenceSha = (history, origin) => {
+    if (!origin) {
+        return null;
+    }
     const baseIdx = origin.idx + 1;
     for (const commit of history) {
         if (commit.idx == baseIdx) {
@@ -296,7 +299,7 @@ const getCommitState = async (datasource, repoId, sha, historyLength, checkedHot
         }
     }
     const state = await (0, exports.getCommitState)(datasource, repoId, commitData.parent, historyLength, checkedHot, hotCheckpoint);
-    const out = await (0, exports.applyStateDiffToCommitState)(state, commitData.diff);
+    const out = (0, exports.applyStateDiffToCommitState)(state, commitData.diff);
     if (commitData.idx % CHECKPOINT_MODULO == 0 &&
         commitData.idx < historyLength - CHECKPOINT_MODULO) {
         await datasource.saveCheckpoint(repoId, sha, out);
@@ -304,7 +307,7 @@ const getCommitState = async (datasource, repoId, sha, historyLength, checkedHot
     return out;
 };
 exports.getCommitState = getCommitState;
-const applyStateDiffToCommitState = async (applicationKVState, stateDiff) => {
+const applyStateDiffToCommitState = (applicationKVState, stateDiff) => {
     return Object.keys(stateDiff).reduce((acc, namespace) => {
         if (namespace == "store") {
             const store = Object.keys(stateDiff?.store ?? {}).reduce((storeAcc, pluginName) => {
@@ -371,75 +374,6 @@ const convertRenderedCommitStateToKv = async (datasource, renderedAppState) => {
     return out;
 };
 exports.convertRenderedCommitStateToKv = convertRenderedCommitStateToKv;
-//export const getProposedStateFromDiffListOnCurrent = async (
-//  datasource: DataSource,
-//  repoId: string,
-//  diffList: Array<{
-//    diff: Diff | TextDiff;
-//    namespace: string;
-//    pluginName?: string;
-//  }>
-//): Promise<State | null> => {
-//  const current = await datasource.getCurrentState(repoId);
-//  const commitState = await getCommitState(datasource, repoId, current.commit);
-//  try {
-//    const updated = diffList.reduce((acc, { namespace, diff, pluginName }) => {
-//      if (namespace != "store") {
-//        return {
-//          ...acc,
-//          diff: {
-//            ...acc.diff,
-//            [namespace]: diff,
-//          },
-//        };
-//      }
-//      return {
-//        ...acc,
-//        diff: {
-//          ...acc.diff,
-//          store: {
-//            ...(acc.diff?.store ?? {}),
-//            [pluginName]: diff,
-//          },
-//        },
-//      };
-//    }, current);
-//    const nextPlugins = applyDiff(updated.diff.plugins, commitState.plugins);
-//    const pluginNameSet = new Set(nextPlugins.map((p) => p.key));
-//    for (let pluginName in updated.diff.store) {
-//      if (!pluginNameSet.has(pluginName)) {
-//        delete updated.diff.store[pluginName];
-//      }
-//    }
-//    return updated as State;
-//  } catch (e) {
-//    return null;
-//  }
-//};
-//export const saveDiffListToCurrent = async (
-//  datasource: DataSource,
-//  repoId: string,
-//  diffList: Array<{
-//    diff: Diff | TextDiff;
-//    namespace: string;
-//    pluginName?: string;
-//  }>
-//): Promise<State | null> => {
-//  try {
-//    const proposedChanges = await getProposedStateFromDiffListOnCurrent(
-//      datasource,
-//      repoId,
-//      diffList
-//    );
-//    if (!proposedChanges) {
-//      return null;
-//    }
-//    await datasource.saveCurrentState(repoId, proposedChanges);
-//    return proposedChanges;
-//  } catch (e) {
-//    return null;
-//  }
-//};
 /**
  * use when committing against branch or sha
  */
@@ -864,40 +798,18 @@ const getMergedCommitState = async (datasource, commitState1, commitState2, orig
     }
 };
 exports.getMergedCommitState = getMergedCommitState;
-//export const canAutoMergeOnTopCurrentState = async (
-//  datasource: DataSource,
-//  repoId: string,
-//  mergeSha: string
-//) => {
-//  try {
-//    const current = await datasource.getCurrentState(repoId);
-//    const repoState = await getRepoState(datasource, repoId);
-//    const mergeState = await getCommitState(datasource, repoId, mergeSha);
-//    const { originCommit } = await getMergeCommitStates(
-//      datasource,
-//      repoId,
-//      current.commit,
-//      mergeSha
-//    );
-//    return await canAutoMergeCommitStates(
-//      datasource,
-//      repoState,
-//      mergeState,
-//      originCommit
-//    );
-//  } catch (e) {
-//    return null;
-//  }
-//};
-//
-//export const renderCommitState = async (
-//  datasource: DataSource,
-//  state: CommitState
-//): Promise<RenderedCommitState> => {
-//  const store = await buildStateStore(datasource, state);
-//  return {
-//    ...state,
-//    store,
-//  };
-//};
+const canAutoMergeOnTopCurrentState = async (datasource, repoId, mergeSha) => {
+    try {
+        const currentRenderedState = await datasource.readRenderedState(repoId);
+        const currentAppKVstate = await (0, exports.convertRenderedCommitStateToKv)(datasource, currentRenderedState);
+        const repoState = await datasource.readCurrentRepoState(repoId);
+        const mergeState = await (0, exports.getCommitState)(datasource, repoId, mergeSha);
+        const { originCommit } = await (0, exports.getMergeCommitStates)(datasource, repoId, repoState.commit, mergeSha);
+        return await (0, exports.canAutoMergeCommitStates)(datasource, currentAppKVstate, mergeState, originCommit);
+    }
+    catch (e) {
+        return null;
+    }
+};
+exports.canAutoMergeOnTopCurrentState = canAutoMergeOnTopCurrentState;
 //# sourceMappingURL=repo.js.map

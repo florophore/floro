@@ -6,32 +6,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.canAutoMerge = exports.getMergeSequence = exports.applyDiff = exports.getTextDiff = exports.splitTextForDiff = exports.getDiff = exports.getLCS = exports.getDiffHash = exports.getRowHash = exports.getKVHash = exports.getKVHashes = exports.hashString = void 0;
 const cryptojs_1 = require("cryptojs");
 const mdiff_1 = __importDefault(require("mdiff"));
-const getObjectStringValue = (obj) => {
-    if (typeof obj == "string")
-        return obj;
-    // remove reduce
-    const sortedKeys = Object.keys(obj).sort();
-    let s = "";
-    for (const key in sortedKeys) {
-        if (Array.isArray(obj[key])) {
-            const value = obj[key].join("-");
-            s += `/${key}:${value}`;
-        }
-        else {
-        }
-        s += `/${key}:${obj[key]}`;
-    }
-    return s;
-    //return Object.keys(obj)
-    //  .sort()
-    //  .reduce((s, key) => {
-    //    if (Array.isArray(obj[key])) {
-    //      const value = (obj[key] as Array<number | string | boolean>).join("-");
-    //      return `${s}/${key}:${value}`;
-    //    }
-    //    return `${s}/${key}:${obj[key]}`;
-    //  }, "");
-};
 const fastHash = (str) => {
     let hash = 0;
     for (let i = 0; i < str.length; i++) {
@@ -46,7 +20,7 @@ const hashString = (str) => {
 exports.hashString = hashString;
 const getKVHashes = (obj) => {
     const keyHash = fastHash(obj.key);
-    const valueHash = fastHash(getObjectStringValue(obj.value));
+    const valueHash = fastHash(JSON.stringify(obj.value));
     return {
         keyHash,
         valueHash,
@@ -57,11 +31,11 @@ const getKVHash = (obj) => {
     if (typeof obj.value == "string") {
         return fastHash(obj.key + obj.value);
     }
-    return fastHash(obj.key + getObjectStringValue(obj.value));
+    return fastHash(obj.key + JSON.stringify(obj.value));
 };
 exports.getKVHash = getKVHash;
 const getRowHash = (obj) => {
-    return fastHash(obj.key + getObjectStringValue(obj.value));
+    return fastHash(obj.key + JSON.stringify(obj.value));
 };
 exports.getRowHash = getRowHash;
 const getDiffHash = (commitData) => {

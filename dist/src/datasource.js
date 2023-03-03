@@ -317,6 +317,9 @@ const saveCommit = async (repoId, sha, commitData) => {
 };
 const readCommit = async (repoId, sha) => {
     try {
+        if (!sha) {
+            return null;
+        }
         const commitDir = getCommitDirPath(repoId, sha);
         const commitPath = path_1.default.join(commitDir, `${sha.substring(2)}.json`);
         const commitDataString = await fs_1.default.promises.readFile(commitPath);

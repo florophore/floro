@@ -38,33 +38,6 @@ export interface CommitData {
   message: string;
 }
 
-const getObjectStringValue = (obj: {
-  [key: string]: number | string | boolean | Array<number | string | boolean>;
-}): string => {
-  if (typeof obj == "string") return obj;
-  // remove reduce
-  const sortedKeys = Object.keys(obj).sort()
-  let s = "";
-  for (const key in sortedKeys) {
-      if (Array.isArray(obj[key])) {
-        const value = (obj[key] as Array<number | string | boolean>).join("-");
-        s += `/${key}:${value}`;
-      } else {
-
-      }
-      s += `/${key}:${obj[key]}`;
-  }
-  return s;
-  //return Object.keys(obj)
-  //  .sort()
-  //  .reduce((s, key) => {
-  //    if (Array.isArray(obj[key])) {
-  //      const value = (obj[key] as Array<number | string | boolean>).join("-");
-  //      return `${s}/${key}:${value}`;
-  //    }
-  //    return `${s}/${key}:${obj[key]}`;
-  //  }, "");
-};
 
 const fastHash = (str: string) => {
   let hash = 0;
@@ -86,7 +59,7 @@ export const getKVHashes = (obj: {
   };
 }): { keyHash: string; valueHash: string } => {
   const keyHash = fastHash(obj.key);
-  const valueHash = fastHash(getObjectStringValue(obj.value));
+  const valueHash = fastHash(JSON.stringify(obj.value));
   return {
     keyHash,
     valueHash,
@@ -97,7 +70,7 @@ export const getKVHash = (obj: { key: string; value: {[key: string]: number | st
   if (typeof obj.value == "string") {
     return fastHash(obj.key + obj.value);
   }
-  return fastHash(obj.key + getObjectStringValue(obj.value));
+  return fastHash(obj.key + JSON.stringify(obj.value));
 };
 
 export const getRowHash = (obj: {
@@ -106,7 +79,7 @@ export const getRowHash = (obj: {
     [key: string]: number | string | boolean | Array<number | string | boolean>;
   };
 }): string => {
-  return fastHash(obj.key + getObjectStringValue(obj.value));
+  return fastHash(obj.key + JSON.stringify(obj.value));
 };
 
 export const getDiffHash = (commitData: CommitData): string => {
