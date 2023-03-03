@@ -43,7 +43,7 @@ export interface RawStore {
   [name: string]: Array<{ key: string; value: string }>;
 }
 
-export interface CommitState {
+export interface ApplicationKVState {
   description: Array<string>;
   licenses: Array<{ key: string; value: string }>;
   plugins: Array<{ key: string; value: string }>;
@@ -51,7 +51,7 @@ export interface CommitState {
   binaries: Array<{ key: string; value: string }>;
 }
 
-export interface RenderedCommitState {
+export interface RenderedApplicationState {
   description: Array<string>;
   licenses: Array<{ key: string; value: string }>;
   plugins: Array<{ key: string; value: string }>;
@@ -79,7 +79,7 @@ export interface StateDiff {
   description: TextDiff;
 }
 
-export interface State {
+export interface RepoState {
   branch: string | null;
   commit: string | null;
   isMerge: boolean;
@@ -106,10 +106,10 @@ export interface CommitHistory {
 }
 
 export interface CheckpointMap {
-  [sha: string]: CommitState;
+  [sha: string]: ApplicationKVState;
 }
 
-export const EMPTY_COMMIT_STATE: CommitState = {
+export const EMPTY_COMMIT_STATE: ApplicationKVState = {
   description: [],
   licenses: [],
   plugins: [],
@@ -117,7 +117,7 @@ export const EMPTY_COMMIT_STATE: CommitState = {
   binaries: [],
 };
 
-export const EMPTY_RENDERED_COMMIT_STATE: RenderedCommitState = {
+export const EMPTY_RENDERED_APPLICATION_STATE: RenderedApplicationState = {
   description: [],
   licenses: [],
   plugins: [],
@@ -236,12 +236,12 @@ export const getCurrentCommitSha = async (
   repoId: string
 ): Promise<string | null> => {
   try {
-    const current = await datasource.getCurrentState(repoId);
+    const current = await datasource.readCurrentRepoState(repoId);
     if (current.commit) {
       return current.commit;
     }
     if (current.branch) {
-      const branch = await datasource.getBranch(repoId, current.branch);
+      const branch = await datasource.readBranch(repoId, current.branch);
       return branch?.lastCommit ?? null;
     }
     return null;
@@ -283,7 +283,7 @@ export const canCommit = async (
   if (commit) {
     // ensure safe
   }
-  const currentState = await datasource.getCurrentState(repoId);
+  const currentState = await datasource.readCurrentRepoState(repoId);
   if (!currentState) {
     return false;
   }
@@ -391,8 +391,8 @@ export const getCommitState = async (
   sha: string | null,
   historyLength?: number,
   checkedHot?: boolean,
-  hotCheckpoint?: [string, CommitState]
-): Promise<CommitState | null> => {
+  hotCheckpoint?: [string, ApplicationKVState]
+): Promise<ApplicationKVState | null> => {
   if (!sha) {
     return EMPTY_COMMIT_STATE;
   }
@@ -439,10 +439,10 @@ export const getCommitState = async (
 };
 
 export const applyStateDiffToCommitState = async (
-  commitState: CommitState,
+  applicationKVState: ApplicationKVState,
   stateDiff: StateDiff
 ) => {
-  return Object.keys(stateDiff).reduce((acc, namespace): CommitState => {
+  return Object.keys(stateDiff).reduce((acc, namespace): ApplicationKVState => {
     if (namespace == "store") {
       const store: RawStore = Object.keys(stateDiff?.store ?? {}).reduce(
         (storeAcc, pluginName) => {
@@ -454,7 +454,7 @@ export const applyStateDiffToCommitState = async (
             ),
           };
         },
-        commitState?.store ?? ({} as RawStore)
+        applicationKVState?.store ?? ({} as RawStore)
       );
       return {
         ...acc,
@@ -463,18 +463,18 @@ export const applyStateDiffToCommitState = async (
     }
     return {
       ...acc,
-      [namespace]: applyDiff(stateDiff[namespace], commitState[namespace]),
+      [namespace]: applyDiff(stateDiff[namespace], applicationKVState[namespace]),
     };
-  }, commitState);
+  }, applicationKVState);
 };
 
 export const getCurrentBranch = async (
   datasource: DataSource,
   repoId: string
 ): Promise<Branch | null> => {
-  const current = await datasource.getCurrentState(repoId);
+  const current = await datasource.readCurrentRepoState(repoId);
   if (current.branch) {
-    const branch = await datasource.getBranch(repoId, current.branch);
+    const branch = await datasource.readBranch(repoId, current.branch);
     return branch;
   }
   return null;
@@ -483,8 +483,8 @@ export const getCurrentBranch = async (
 export const getUnstagedCommitState = async (
   datasource: DataSource,
   repoId: string
-): Promise<CommitState> => {
-  const current = await datasource.getCurrentState(repoId);
+): Promise<ApplicationKVState> => {
+  const current = await datasource.readCurrentRepoState(repoId);
   const hotCheckpoint = await datasource.readHotCheckpoint(repoId);
   if (hotCheckpoint && current.commit) {
     if (hotCheckpoint[0] == current.commit) {
@@ -498,33 +498,33 @@ export const getUnstagedCommitState = async (
   return commitState;
 };
 
-export const getRepoState = async (
+export const getApplicationState = async (
   datasource: DataSource,
   repoId: string
-): Promise<RenderedCommitState> => {
+): Promise<RenderedApplicationState> => {
   return await datasource.readRenderedState(repoId);
 };
 
 export const convertRenderedCommitStateToKv = async (
   datasource: DataSource,
-  renderedCommitState: RenderedCommitState
-): Promise<CommitState> => {
-  const out: CommitState = {
+  renderedAppState: RenderedApplicationState
+): Promise<ApplicationKVState> => {
+  const out: ApplicationKVState = {
     description: [],
     licenses: [],
     plugins: [],
     store: undefined,
     binaries: [],
   };
-  for (const prop in renderedCommitState) {
+  for (const prop in renderedAppState) {
     if (prop == "store") {
       out[prop] = await convertRenderedStateStoreToKV(
         datasource,
-        renderedCommitState
+        renderedAppState
       );
       continue;
     }
-    out[prop] = renderedCommitState[prop]
+    out[prop] = renderedAppState[prop]
   }
   return out;
 };
@@ -608,19 +608,19 @@ export const updateCurrentCommitSHA = async (
   repoId: string,
   sha: string,
   isResolvingMerge: boolean
-): Promise<State | null> => {
+): Promise<RepoState | null> => {
   try {
-    const current = await datasource.getCurrentState(repoId);
+    const current = await datasource.readCurrentRepoState(repoId);
     if (current.isMerge && !isResolvingMerge) {
       return null;
     }
-    const updated: State = {
+    const updated: RepoState = {
       ...current,
       commit: sha,
       isMerge: false,
       merge: null,
     };
-    const nextState = await datasource.saveCurrentState(repoId, updated);
+    const nextState = await datasource.saveCurrentRepoState(repoId, updated);
     const unrenderedState = await getCommitState(datasource, repoId, sha);
     const renderedState = await convertCommitStateToRenderedState(datasource, unrenderedState);
     await datasource.saveRenderedState(repoId, renderedState);
@@ -638,20 +638,20 @@ export const updateCurrentWithSHA = async (
   repoId: string,
   sha: string,
   isResolvingMerge: boolean
-): Promise<State | null> => {
+): Promise<RepoState | null> => {
   try {
-    const current = await datasource.getCurrentState(repoId);
+    const current = await datasource.readCurrentRepoState(repoId);
     if (current.isMerge && !isResolvingMerge) {
       return null;
     }
-    const updated: State = {
+    const updated: RepoState = {
       ...current,
       commit: sha,
       branch: null,
       isMerge: false,
       merge: null,
     };
-    const nextState = await datasource.saveCurrentState(repoId, updated);
+    const nextState = await datasource.saveCurrentRepoState(repoId, updated);
     const unrenderedState = await getCommitState(datasource, repoId, sha);
     const renderedState = await convertCommitStateToRenderedState(datasource, unrenderedState);
     await datasource.saveRenderedState(repoId, renderedState);
@@ -665,19 +665,19 @@ export const updateCurrentWithNewBranch = async (
   datasource: DataSource,
   repoId: string,
   branchName: string
-): Promise<State | null> => {
+): Promise<RepoState | null> => {
   try {
-    const current = await datasource.getCurrentState(repoId);
+    const current = await datasource.readCurrentRepoState(repoId);
     if (current.isMerge) {
       return null;
     }
-    const branch = await datasource.getBranch(repoId, branchName);
+    const branch = await datasource.readBranch(repoId, branchName);
     const updated = {
       ...current,
       commit: branch.lastCommit,
       branch: branchName,
     };
-    await datasource.saveCurrentState(repoId, updated);
+    await datasource.saveCurrentRepoState(repoId, updated);
     const unrenderedState = await getCommitState(datasource, repoId, branch.lastCommit);
     const renderedState = await convertCommitStateToRenderedState(datasource, unrenderedState);
     await datasource.saveRenderedState(repoId, renderedState);
@@ -691,19 +691,19 @@ export const updateCurrentBranch = async (
   datasource: DataSource,
   repoId: string,
   branchName: string
-): Promise<State | null> => {
+): Promise<RepoState | null> => {
   try {
-    const current = await datasource.getCurrentState(repoId);
+    const current = await datasource.readCurrentRepoState(repoId);
     if (current.isMerge) {
       return null;
     }
-    const branch = await datasource.getBranch(repoId, branchName);
+    const branch = await datasource.readBranch(repoId, branchName);
     const updated = {
       ...current,
       commit: branch.lastCommit,
       branch: branchName,
     };
-    return await datasource.saveCurrentState(repoId, updated);
+    return await datasource.saveCurrentRepoState(repoId, updated);
   } catch (e) {
     return null;
   }
@@ -727,12 +727,12 @@ export const getPluginsToRunUpdatesOn = (
 
 export const buildStateStore = async (
   datasource: DataSource,
-  state: CommitState
+  appKvState: ApplicationKVState
 ): Promise<{ [key: string]: object }> => {
   let out = {};
-  const manifests = await getPluginManifests(datasource, state.plugins);
+  const manifests = await getPluginManifests(datasource, appKvState.plugins);
   for (const pluginManifest of manifests) {
-    const kv = state?.store?.[pluginManifest.name] ?? [];
+    const kv = appKvState?.store?.[pluginManifest.name] ?? [];
     const schemaMap = await getSchemaMapForManifest(datasource, pluginManifest);
     const pluginState = getStateFromKVForPlugin(
       schemaMap,
@@ -746,11 +746,11 @@ export const buildStateStore = async (
 
 export const convertStateStoreToKV = async (
   datasource: DataSource,
-  state: CommitState,
+  appKVState: ApplicationKVState,
   stateStore: { [key: string]: object }
 ): Promise<RawStore> => {
   let out = {};
-  const manifests = await getPluginManifests(datasource, state.plugins);
+  const manifests = await getPluginManifests(datasource, appKVState.plugins);
   for (const pluginManifest of manifests) {
     const schemaMap = await getSchemaMapForManifest(datasource, pluginManifest);
     const kv = await getKVStateForPlugin(
@@ -766,17 +766,17 @@ export const convertStateStoreToKV = async (
 
 export const convertRenderedStateStoreToKV = async (
   datasource: DataSource,
-  renderedCommitState: RenderedCommitState
+  renderedAppState: RenderedApplicationState
 ): Promise<RawStore> => {
   let out = {};
-  const manifests = await getPluginManifests(datasource, renderedCommitState.plugins);
+  const manifests = await getPluginManifests(datasource, renderedAppState.plugins);
   for (const pluginManifest of manifests) {
     const schemaMap = await getSchemaMapForManifest(datasource, pluginManifest);
     const kv = await getKVStateForPlugin(
       datasource,
       schemaMap,
       pluginManifest.name,
-      renderedCommitState.store
+      renderedAppState.store
     );
     out[pluginManifest.name] = kv;
   }
@@ -785,45 +785,45 @@ export const convertRenderedStateStoreToKV = async (
 
 export const convertCommitStateToRenderedState = async (
   datasource: DataSource,
-  commitState: CommitState
-): Promise<RenderedCommitState> => {
-  const store = await buildStateStore(datasource, commitState);
+  appKVState: ApplicationKVState
+): Promise<RenderedApplicationState> => {
+  const store = await buildStateStore(datasource, appKVState);
   return {
-    ...commitState,
+    ...appKVState,
     store
   }
 }
 
 export const tokenizeCommitState = (
-  commitState: CommitState
+  appKVState: ApplicationKVState
 ): [TokenizedState, { [key: string]: unknown }] => {
   const tokenStore: { [key: string]: unknown } = {};
-  const description = commitState.description.reduce((acc, value) => {
+  const description = appKVState.description.reduce((acc, value) => {
     const hash = hashString(value);
     tokenStore[hash] = value;
     return [...acc, hash];
   }, []);
 
-  const licenses = commitState.licenses.reduce((acc, value) => {
+  const licenses = appKVState.licenses.reduce((acc, value) => {
     const hash = getKVHash(value);
     tokenStore[hash] = value;
     return [...acc, hash];
   }, []);
 
-  const plugins = commitState.plugins.reduce((acc, value) => {
+  const plugins = appKVState.plugins.reduce((acc, value) => {
     const hash = getKVHash(value);
     tokenStore[hash] = value;
     return [...acc, hash];
   }, []);
 
-  const binaries = commitState.binaries.reduce((acc, value) => {
+  const binaries = appKVState.binaries.reduce((acc, value) => {
     const hash = getKVHash(value);
     tokenStore[hash] = value;
     return [...acc, hash];
   }, []);
 
-  const store = Object.keys(commitState.store).reduce((acc, key) => {
-    const pluginStore = commitState.store[key].reduce((storeAcc, value) => {
+  const store = Object.keys(appKVState.store).reduce((acc, key) => {
+    const pluginStore = appKVState.store[key].reduce((storeAcc, value) => {
       const hash = getKVHash(value);
       tokenStore[hash] = value;
       return [...storeAcc, hash];
@@ -848,7 +848,7 @@ export const tokenizeCommitState = (
 export const detokenizeStore = (
   tokenizedState: TokenizedState,
   tokenStore: { [key: string]: unknown }
-): CommitState => {
+): ApplicationKVState => {
   const description = tokenizedState.description.map((token) => {
     return tokenStore[token];
   }) as Array<string>;
@@ -907,8 +907,8 @@ export const uniqueKV = (
 };
 
 export const getStateDiffFromCommitStates = (
-  commit1: CommitState,
-  commit2: CommitState
+  appKVState1: ApplicationKVState,
+  appKVState2: ApplicationKVState
 ): StateDiff => {
   const stateDiff: StateDiff = {
     plugins: {
@@ -930,15 +930,15 @@ export const getStateDiffFromCommitStates = (
     }
   }
   const pluginsToTraverse = Array.from([
-    ...Object.keys(commit1.store),
-    ...Object.keys(commit2.store),
+    ...Object.keys(appKVState1.store),
+    ...Object.keys(appKVState2.store),
   ]);
-  for (const prop in commit2) {
+  for (const prop in appKVState2) {
     if (prop == "store") {
       for (const pluginName of pluginsToTraverse) {
         const diff = getDiff(
-          commit1?.store?.[pluginName] ?? [],
-          commit2?.store?.[pluginName] ?? []
+          appKVState1?.store?.[pluginName] ?? [],
+          appKVState2?.store?.[pluginName] ?? []
         );
         stateDiff.store[pluginName] = diff;
       }
@@ -946,22 +946,22 @@ export const getStateDiffFromCommitStates = (
     }
     if (prop == "description") {
       const diff = getTextDiff(
-        (commit1?.[prop] ?? []).join(""),
-        (commit2?.[prop] ?? [])?.join("")
+        (appKVState1?.[prop] ?? []).join(""),
+        (appKVState2?.[prop] ?? [])?.join("")
       );
       stateDiff.description = diff;
       continue;
     }
 
-    const diff = getDiff(commit1?.[prop] ?? [], commit2?.[prop] ?? []);
+    const diff = getDiff(appKVState1?.[prop] ?? [], appKVState2?.[prop] ?? []);
     stateDiff[prop] = diff;
   }
   return stateDiff;
 };
 
 export const getCommitStateDiffList = (
-  commit1: CommitState,
-  commit2: CommitState
+  appKVState1: ApplicationKVState,
+  appKVState2: ApplicationKVState
 ): Array<{
   diff: Diff | TextDiff;
   namespace: string;
@@ -969,15 +969,15 @@ export const getCommitStateDiffList = (
 }> => {
   const diffList = [];
   const pluginsToTraverse = Array.from([
-    ...Object.keys(commit1.store),
-    ...Object.keys(commit2.store),
+    ...Object.keys(appKVState1.store),
+    ...Object.keys(appKVState2.store),
   ]);
-  for (const prop in commit2) {
+  for (const prop in appKVState2) {
     if (prop == "store") {
       for (const pluginName of pluginsToTraverse) {
         const diff = getDiff(
-          commit1?.store?.[pluginName] ?? [],
-          commit2?.store?.[pluginName] ?? []
+          appKVState1?.store?.[pluginName] ?? [],
+          appKVState2?.store?.[pluginName] ?? []
         );
         diffList.push({
           diff,
@@ -989,8 +989,8 @@ export const getCommitStateDiffList = (
     }
     if (prop == "description") {
       const diff = getTextDiff(
-        (commit1?.[prop] ?? []).join(""),
-        (commit2?.[prop] ?? [])?.join("")
+        (appKVState1?.[prop] ?? []).join(""),
+        (appKVState2?.[prop] ?? [])?.join("")
       );
       diffList.push({
         diff,
@@ -999,7 +999,7 @@ export const getCommitStateDiffList = (
       continue;
     }
 
-    const diff = getDiff(commit1?.[prop] ?? [], commit2?.[prop] ?? []);
+    const diff = getDiff(appKVState1?.[prop] ?? [], appKVState2?.[prop] ?? []);
     diffList.push({
       diff,
       namespace: prop,
@@ -1071,23 +1071,23 @@ export const getMergeCommitStates = async (
 
 export const canAutoMergeCommitStates = async (
   datasource: DataSource,
-  commit1: CommitState,
-  commit2: CommitState,
-  originCommit: CommitState
+  commitState1: ApplicationKVState,
+  commitState2: ApplicationKVState,
+  originCommitState: ApplicationKVState
 ): Promise<boolean> => {
   try {
     const yourMerge = await getMergedCommitState(
       datasource,
-      commit1,
-      commit2,
-      originCommit,
+      commitState1,
+      commitState2,
+      originCommitState,
       "yours"
     );
     const theirMerge = await getMergedCommitState(
       datasource,
-      commit1,
-      commit2,
-      originCommit,
+      commitState1,
+      commitState2,
+      originCommitState,
       "theirs"
     );
     return JSON.stringify(yourMerge) == JSON.stringify(theirMerge);
@@ -1098,14 +1098,14 @@ export const canAutoMergeCommitStates = async (
 
 export const getMergedCommitState = async (
   datasource: DataSource,
-  commit1: CommitState,
-  commit2: CommitState,
-  originCommit: CommitState,
+  commitState1: ApplicationKVState,
+  commitState2: ApplicationKVState,
+  originCommit: ApplicationKVState,
   whose: "yours" | "theirs" = "yours"
-): Promise<CommitState> => {
+): Promise<ApplicationKVState> => {
   try {
-    const [tokenizedCommit1, tokenizedStore1] = tokenizeCommitState(commit1);
-    const [tokenizedCommit2, tokenizedStore2] = tokenizeCommitState(commit2);
+    const [tokenizedCommit1, tokenizedStore1] = tokenizeCommitState(commitState1);
+    const [tokenizedCommit2, tokenizedStore2] = tokenizeCommitState(commitState2);
     const [tokenizedOrigin] = tokenizeCommitState(originCommit);
 
     const tokenizedDescription = getMergeSequence(

@@ -3,7 +3,7 @@ import sizeof from "object-sizeof";
 import { DataSource, makeDataSource, makeMemoizedDataSource } from "../src/datasource";
 import { buildFloroFilestructure, userHome } from "../src/filestructure";
 import { Manifest, PluginElement } from "../src/plugins";
-import { getHistory, getRepoState } from "../src/repo";
+import { getHistory, getApplicationState } from "../src/repo";
 import {
   checkoutSha,
   readCommitState,
@@ -42,7 +42,7 @@ describe("repoapi", () => {
   describe("description", () => {
     test("updates repo description", async () => {
       let description = (
-        await getRepoState(datasource, "abc")
+        await getApplicationState(datasource, "abc")
       ).description.join("");
       expect(description).toEqual("");
       description = "Initial description.";
@@ -457,7 +457,7 @@ describe("repoapi", () => {
       }
 
       console.time("TEST");
-      const a = await getRepoState(datasource, "abc");
+      const a = await getApplicationState(datasource, "abc");
       console.timeEnd("TEST");
     });
   });

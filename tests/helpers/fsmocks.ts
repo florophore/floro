@@ -9,7 +9,7 @@ import {
 import path from "path";
 import fs from "fs";
 import { Manifest } from "../../src/plugins";
-import { EMPTY_RENDERED_COMMIT_STATE } from "../../src/repo";
+import { EMPTY_RENDERED_APPLICATION_STATE } from "../../src/repo";
 
 const USER_SESSION = JSON.parse(`
 {
@@ -93,7 +93,8 @@ const MAIN_BRANCH = `
     "name": "main"
   }
 `;
-const EMPTY_STATE = JSON.stringify(EMPTY_RENDERED_COMMIT_STATE, null, 2);
+
+const EMPTY_STATE = JSON.stringify(EMPTY_RENDERED_APPLICATION_STATE, null, 2);
 
 const DIST_INDEX_HTML = (pluginName: string) => `
 <!DOCTYPE html>

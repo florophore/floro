@@ -87,7 +87,7 @@ const MAIN_BRANCH = `
     "name": "main"
   }
 `;
-const EMPTY_STATE = JSON.stringify(repo_1.EMPTY_RENDERED_COMMIT_STATE, null, 2);
+const EMPTY_STATE = JSON.stringify(repo_1.EMPTY_RENDERED_APPLICATION_STATE, null, 2);
 const DIST_INDEX_HTML = (pluginName) => `
 <!DOCTYPE html>
 <html lang="en">

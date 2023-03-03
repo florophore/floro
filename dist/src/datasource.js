@@ -26,7 +26,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.makeMemoizedDataSource = exports.makeDataSource = exports.getRepos = exports.getPluginManifest = exports.downloadPlugin = exports.readDevPluginManifest = void 0;
+exports.makeMemoizedDataSource = exports.makeDataSource = exports.readRepos = exports.getPluginManifest = exports.downloadPlugin = exports.readDevPluginManifest = void 0;
 const path_1 = __importDefault(require("path"));
 const fs_1 = __importStar(require("fs"));
 const filestructure_1 = require("./filestructure");
@@ -179,20 +179,20 @@ const pluginManifestExists = async (pluginName, pluginVersion) => {
     return await (0, filestructure_1.existsAsync)(pluginManifestPath);
 };
 /* REPOS */
-const getRepos = async () => {
+const readRepos = async () => {
     const repoDir = await fs_1.default.promises.readdir(filestructure_1.vReposPath);
     return repoDir?.filter((repoName) => {
         return /^[0-9a-fA-F]{8}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{12}$/.test(repoName);
     });
 };
-exports.getRepos = getRepos;
+exports.readRepos = readRepos;
 const repoExists = async (repoId) => {
     if (!repoId) {
         return false;
     }
     return await (0, filestructure_1.existsAsync)(path_1.default.join(filestructure_1.vReposPath, repoId));
 };
-const getRepoSettings = async (repoId) => {
+const readRepoSettings = async (repoId) => {
     try {
         const repoPath = path_1.default.join(filestructure_1.vReposPath, repoId);
         const settingsPath = path_1.default.join(repoPath, `settings.json`);
@@ -218,14 +218,14 @@ const saveRenderedState = async (repoId, state) => {
     try {
         const repoPath = path_1.default.join(filestructure_1.vReposPath, repoId);
         const statePath = path_1.default.join(repoPath, `state.json`);
-        await fs_1.default.promises.writeFile(statePath, JSON.stringify(state), 'utf-8');
+        await fs_1.default.promises.writeFile(statePath, JSON.stringify(state), "utf-8");
         return state;
     }
     catch (e) {
         return null;
     }
 };
-const getCurrentState = async (repoId) => {
+const readCurrentRepoState = async (repoId) => {
     try {
         const repoPath = path_1.default.join(filestructure_1.vReposPath, repoId);
         const currentPath = path_1.default.join(repoPath, `current.json`);
@@ -236,7 +236,18 @@ const getCurrentState = async (repoId) => {
         return null;
     }
 };
-const getBranch = async (repoId, branchName) => {
+const saveCurrentRepoState = async (repoId, state) => {
+    try {
+        const repoPath = path_1.default.join(filestructure_1.vReposPath, repoId);
+        const currentPath = path_1.default.join(repoPath, `current.json`);
+        await fs_1.default.promises.writeFile(currentPath, Buffer.from(JSON.stringify(state, null, 2)), "utf-8");
+        return state;
+    }
+    catch (e) {
+        return null;
+    }
+};
+const readBranch = async (repoId, branchName) => {
     try {
         const repoPath = path_1.default.join(filestructure_1.vReposPath, repoId);
         const branchPath = path_1.default.join(repoPath, "branches", `${branchName}.json`);
@@ -251,7 +262,7 @@ const getBranch = async (repoId, branchName) => {
         return null;
     }
 };
-const getBranches = async (repoId) => {
+const readBranches = async (repoId) => {
     const branchesPath = path_1.default.join(filestructure_1.vReposPath, repoId, "branches");
     const branchesDir = await fs_1.default.promises.readdir(branchesPath);
     const branches = await Promise.all(branchesDir
@@ -260,7 +271,7 @@ const getBranches = async (repoId) => {
     })
         ?.map((branchFileName) => {
         const branchName = branchFileName.substring(0, branchFileName.length - 5);
-        return getBranch(repoId, branchName);
+        return readBranch(repoId, branchName);
     }));
     return branches.filter((branch) => branch != null);
 };
@@ -281,17 +292,6 @@ const saveBranch = async (repoId, branchName, branchData) => {
         const branchPath = path_1.default.join(repoPath, "branches", `${branchName}.json`);
         await fs_1.default.promises.writeFile(branchPath, Buffer.from(JSON.stringify(branchData, null, 2)));
         return branchData;
-    }
-    catch (e) {
-        return null;
-    }
-};
-const saveCurrentState = async (repoId, state) => {
-    try {
-        const repoPath = path_1.default.join(filestructure_1.vReposPath, repoId);
-        const currentPath = path_1.default.join(repoPath, `current.json`);
-        await fs_1.default.promises.writeFile(currentPath, Buffer.from(JSON.stringify(state, null, 2)), "utf-8");
-        return state;
     }
     catch (e) {
         return null;
@@ -333,7 +333,7 @@ const readHotCheckpoint = async (repoId) => {
         if (!hotPointExists) {
             return null;
         }
-        const hotpointString = await fs_1.default.promises.readFile(hotPath, 'utf8');
+        const hotpointString = await fs_1.default.promises.readFile(hotPath, "utf8");
         const hotpoint = JSON.parse(hotpointString);
         return hotpoint;
     }
@@ -344,7 +344,7 @@ const readHotCheckpoint = async (repoId) => {
 const saveHotCheckpoint = async (repoId, sha, commitState) => {
     try {
         const hotPath = path_1.default.join(filestructure_1.vReposPath, repoId, "hotcheckpoint.json");
-        await fs_1.default.promises.writeFile(hotPath, JSON.stringify([sha, commitState]), 'utf8');
+        await fs_1.default.promises.writeFile(hotPath, JSON.stringify([sha, commitState]), "utf8");
         return [sha, commitState];
     }
     catch (e) {
@@ -401,7 +401,7 @@ const saveCheckpoint = async (repoId, sha, commitState) => {
         }
         const checkpointPath = path_1.default.join(checkpointDirPath, sha + ".json");
         const checkpointString = JSON.stringify(commitState);
-        await fs_1.default.promises.writeFile(checkpointPath, checkpointString, 'utf-8');
+        await fs_1.default.promises.writeFile(checkpointPath, checkpointString, "utf-8");
         return commitState;
     }
     catch (e) {
@@ -410,15 +410,15 @@ const saveCheckpoint = async (repoId, sha, commitState) => {
 };
 const makeDataSource = (datasource = {}) => {
     const defaultDataSource = {
-        getRepos: exports.getRepos,
+        readRepos: exports.readRepos,
         repoExists,
         getPluginManifest: exports.getPluginManifest,
         pluginManifestExists,
-        getRepoSettings,
-        getCurrentState,
-        saveCurrentState,
-        getBranch,
-        getBranches,
+        readRepoSettings,
+        readCurrentRepoState,
+        saveCurrentRepoState,
+        readBranch,
+        readBranches,
         deleteBranch,
         saveBranch,
         saveCommit,
@@ -429,7 +429,7 @@ const makeDataSource = (datasource = {}) => {
         deleteHotCheckpoint,
         saveHotCheckpoint,
         readRenderedState,
-        saveRenderedState
+        saveRenderedState,
     };
     return {
         ...defaultDataSource,
@@ -453,7 +453,8 @@ const makeMemoizedDataSource = (dataSourceOverride = {}) => {
     const memoizedPluginManifestExistence = new Set();
     const _pluginManifestExists = async (pluginName, pluginVersion) => {
         const pluginString = pluginName + "-" + pluginVersion;
-        if (memoizedPluginManifestExistence.has(pluginName) && !pluginVersion.startsWith("dev")) {
+        if (memoizedPluginManifestExistence.has(pluginName) &&
+            !pluginVersion.startsWith("dev")) {
             return true;
         }
         const result = await dataSource.pluginManifestExists(pluginName, pluginVersion);
@@ -475,29 +476,29 @@ const makeMemoizedDataSource = (dataSourceOverride = {}) => {
         return result;
     };
     const memoizedSettings = {};
-    const _getRepoSettings = async (repoId) => {
+    const _readRepoSettings = async (repoId) => {
         if (memoizedSettings[repoId]) {
             return memoizedSettings[repoId];
         }
-        const result = await dataSource.getRepoSettings(repoId);
+        const result = await dataSource.readRepoSettings(repoId);
         if (result) {
             memoizedSettings[repoId] = result;
         }
         return result;
     };
     const memoizedCurrentState = {};
-    const _getCurrentState = async (repoId) => {
+    const _readCurrentRepoState = async (repoId) => {
         if (memoizedCurrentState[repoId]) {
             return memoizedCurrentState[repoId];
         }
-        const result = await dataSource.getCurrentState(repoId);
+        const result = await dataSource.readCurrentRepoState(repoId);
         if (result) {
             memoizedCurrentState[repoId] = result;
         }
         return result;
     };
-    const _saveCurrentState = async (repoId, state) => {
-        const result = await dataSource.saveCurrentState(repoId, state);
+    const _saveCurrentRepoState = async (repoId, state) => {
+        const result = await dataSource.saveCurrentRepoState(repoId, state);
         if (result) {
             memoizedCurrentState[repoId] = result;
         }
@@ -505,22 +506,22 @@ const makeMemoizedDataSource = (dataSourceOverride = {}) => {
     };
     const branchMemo = {};
     const branchesMemo = {};
-    const _getBranch = async (repoId, branchName) => {
+    const _readBranch = async (repoId, branchName) => {
         const branchMemoString = repoId + "-" + branchName;
         if (branchMemo[branchMemoString]) {
             return branchMemo[branchMemoString];
         }
-        const result = await dataSource.getBranch(repoId, branchName);
+        const result = await dataSource.readBranch(repoId, branchName);
         if (result) {
             branchMemo[branchMemoString] = result;
         }
         return result;
     };
-    const _getBranches = async (repoId) => {
+    const _readBranches = async (repoId) => {
         if (branchesMemo[repoId]) {
             return branchesMemo[repoId];
         }
-        const result = await dataSource.getBranches(repoId);
+        const result = await dataSource.readBranches(repoId);
         if (result) {
             branchesMemo[repoId] = result;
         }
@@ -627,11 +628,11 @@ const makeMemoizedDataSource = (dataSourceOverride = {}) => {
         repoExists: _repoExists,
         pluginManifestExists: _pluginManifestExists,
         getPluginManifest: _getPluginManifest,
-        getRepoSettings: _getRepoSettings,
-        getCurrentState: _getCurrentState,
-        saveCurrentState: _saveCurrentState,
-        getBranch: _getBranch,
-        getBranches: _getBranches,
+        readRepoSettings: _readRepoSettings,
+        readCurrentRepoState: _readCurrentRepoState,
+        saveCurrentRepoState: _saveCurrentRepoState,
+        readBranch: _readBranch,
+        readBranches: _readBranches,
         saveBranch: _saveBranch,
         deleteBranch: _deleteBranch,
         saveCommit: _saveCommit,
@@ -642,7 +643,7 @@ const makeMemoizedDataSource = (dataSourceOverride = {}) => {
         saveHotCheckpoint: _saveHotCheckpoint,
         deleteHotCheckpoint: _deleteHotCheckpoint,
         readRenderedState: _readRenderedState,
-        saveRenderedState: _saveRenderedState
+        saveRenderedState: _saveRenderedState,
     };
     return {
         ...dataSource,

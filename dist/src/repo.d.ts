@@ -11,7 +11,7 @@ export interface RawStore {
         value: string;
     }>;
 }
-export interface CommitState {
+export interface ApplicationKVState {
     description: Array<string>;
     licenses: Array<{
         key: string;
@@ -27,7 +27,7 @@ export interface CommitState {
         value: string;
     }>;
 }
-export interface RenderedCommitState {
+export interface RenderedApplicationState {
     description: Array<string>;
     licenses: Array<{
         key: string;
@@ -64,7 +64,7 @@ export interface StateDiff {
     licenses: Diff;
     description: TextDiff;
 }
-export interface State {
+export interface RepoState {
     branch: string | null;
     commit: string | null;
     isMerge: boolean;
@@ -88,10 +88,10 @@ export interface CommitHistory {
     message: string;
 }
 export interface CheckpointMap {
-    [sha: string]: CommitState;
+    [sha: string]: ApplicationKVState;
 }
-export declare const EMPTY_COMMIT_STATE: CommitState;
-export declare const EMPTY_RENDERED_COMMIT_STATE: RenderedCommitState;
+export declare const EMPTY_COMMIT_STATE: ApplicationKVState;
+export declare const EMPTY_RENDERED_APPLICATION_STATE: RenderedApplicationState;
 export declare const EMPTY_COMMIT_DIFF: StateDiff;
 export declare const getRepos: () => Promise<string[]>;
 export declare const getAddedDeps: (oldPlugins: Array<PluginElement>, newPlugins: Array<PluginElement>) => Array<PluginElement>;
@@ -104,37 +104,37 @@ export declare const buildCommitData: (parentSha: string, historicalParent: stri
 export declare const getHistory: (datasource: DataSource, repoId: string, sha: string | null) => Promise<Array<CommitHistory> | null>;
 export declare const getBaseDivergenceSha: (history: Array<CommitHistory>, origin: CommitData) => CommitHistory;
 export declare const getDivergenceOriginSha: (datasource: DataSource, repoId: string, sha1: string, sha2: string) => Promise<string>;
-export declare const getCommitState: (datasource: DataSource, repoId: string, sha: string | null, historyLength?: number, checkedHot?: boolean, hotCheckpoint?: [string, CommitState]) => Promise<CommitState | null>;
-export declare const applyStateDiffToCommitState: (commitState: CommitState, stateDiff: StateDiff) => Promise<CommitState>;
+export declare const getCommitState: (datasource: DataSource, repoId: string, sha: string | null, historyLength?: number, checkedHot?: boolean, hotCheckpoint?: [string, ApplicationKVState]) => Promise<ApplicationKVState | null>;
+export declare const applyStateDiffToCommitState: (applicationKVState: ApplicationKVState, stateDiff: StateDiff) => Promise<ApplicationKVState>;
 export declare const getCurrentBranch: (datasource: DataSource, repoId: string) => Promise<Branch | null>;
-export declare const getUnstagedCommitState: (datasource: DataSource, repoId: string) => Promise<CommitState>;
-export declare const getRepoState: (datasource: DataSource, repoId: string) => Promise<RenderedCommitState>;
-export declare const convertRenderedCommitStateToKv: (datasource: DataSource, renderedCommitState: RenderedCommitState) => Promise<CommitState>;
+export declare const getUnstagedCommitState: (datasource: DataSource, repoId: string) => Promise<ApplicationKVState>;
+export declare const getApplicationState: (datasource: DataSource, repoId: string) => Promise<RenderedApplicationState>;
+export declare const convertRenderedCommitStateToKv: (datasource: DataSource, renderedAppState: RenderedApplicationState) => Promise<ApplicationKVState>;
 /**
  * use when committing against branch or sha
  */
-export declare const updateCurrentCommitSHA: (datasource: DataSource, repoId: string, sha: string, isResolvingMerge: boolean) => Promise<State | null>;
+export declare const updateCurrentCommitSHA: (datasource: DataSource, repoId: string, sha: string, isResolvingMerge: boolean) => Promise<RepoState | null>;
 /**
  * use when HEAD is detached
  */
-export declare const updateCurrentWithSHA: (datasource: DataSource, repoId: string, sha: string, isResolvingMerge: boolean) => Promise<State | null>;
-export declare const updateCurrentWithNewBranch: (datasource: DataSource, repoId: string, branchName: string) => Promise<State | null>;
-export declare const updateCurrentBranch: (datasource: DataSource, repoId: string, branchName: string) => Promise<State | null>;
+export declare const updateCurrentWithSHA: (datasource: DataSource, repoId: string, sha: string, isResolvingMerge: boolean) => Promise<RepoState | null>;
+export declare const updateCurrentWithNewBranch: (datasource: DataSource, repoId: string, branchName: string) => Promise<RepoState | null>;
+export declare const updateCurrentBranch: (datasource: DataSource, repoId: string, branchName: string) => Promise<RepoState | null>;
 export declare const getPluginsToRunUpdatesOn: (pastPlugins: Array<PluginElement>, nextPlugins: Array<PluginElement>) => PluginElement[];
-export declare const buildStateStore: (datasource: DataSource, state: CommitState) => Promise<{
+export declare const buildStateStore: (datasource: DataSource, appKvState: ApplicationKVState) => Promise<{
     [key: string]: object;
 }>;
-export declare const convertStateStoreToKV: (datasource: DataSource, state: CommitState, stateStore: {
+export declare const convertStateStoreToKV: (datasource: DataSource, appKVState: ApplicationKVState, stateStore: {
     [key: string]: object;
 }) => Promise<RawStore>;
-export declare const convertRenderedStateStoreToKV: (datasource: DataSource, renderedCommitState: RenderedCommitState) => Promise<RawStore>;
-export declare const convertCommitStateToRenderedState: (datasource: DataSource, commitState: CommitState) => Promise<RenderedCommitState>;
-export declare const tokenizeCommitState: (commitState: CommitState) => [TokenizedState, {
+export declare const convertRenderedStateStoreToKV: (datasource: DataSource, renderedAppState: RenderedApplicationState) => Promise<RawStore>;
+export declare const convertCommitStateToRenderedState: (datasource: DataSource, appKVState: ApplicationKVState) => Promise<RenderedApplicationState>;
+export declare const tokenizeCommitState: (appKVState: ApplicationKVState) => [TokenizedState, {
     [key: string]: unknown;
 }];
 export declare const detokenizeStore: (tokenizedState: TokenizedState, tokenStore: {
     [key: string]: unknown;
-}) => CommitState;
+}) => ApplicationKVState;
 export declare const mergeTokenStores: (tokenStore1: {
     [key: string]: unknown;
 }, tokenStore2: {
@@ -149,8 +149,8 @@ export declare const uniqueKV: (kvList: Array<{
     key: string;
     value: string;
 }>;
-export declare const getStateDiffFromCommitStates: (commit1: CommitState, commit2: CommitState) => StateDiff;
-export declare const getCommitStateDiffList: (commit1: CommitState, commit2: CommitState) => Array<{
+export declare const getStateDiffFromCommitStates: (appKVState1: ApplicationKVState, appKVState2: ApplicationKVState) => StateDiff;
+export declare const getCommitStateDiffList: (appKVState1: ApplicationKVState, appKVState2: ApplicationKVState) => Array<{
     diff: Diff | TextDiff;
     namespace: string;
     pluginName?: string;
@@ -161,9 +161,9 @@ export declare const renderDiffList: (diffList: Array<{
     pluginName?: string;
 }>) => StateDiff;
 export declare const getMergeCommitStates: (datasource: DataSource, repoId: string, sha1: string, sha2: string) => Promise<{
-    commit1: CommitState;
-    commit2: CommitState;
-    originCommit: CommitState;
+    commit1: ApplicationKVState;
+    commit2: ApplicationKVState;
+    originCommit: ApplicationKVState;
 }>;
-export declare const canAutoMergeCommitStates: (datasource: DataSource, commit1: CommitState, commit2: CommitState, originCommit: CommitState) => Promise<boolean>;
-export declare const getMergedCommitState: (datasource: DataSource, commit1: CommitState, commit2: CommitState, originCommit: CommitState, whose?: "yours" | "theirs") => Promise<CommitState>;
+export declare const canAutoMergeCommitStates: (datasource: DataSource, commitState1: ApplicationKVState, commitState2: ApplicationKVState, originCommitState: ApplicationKVState) => Promise<boolean>;
+export declare const getMergedCommitState: (datasource: DataSource, commitState1: ApplicationKVState, commitState2: ApplicationKVState, originCommit: ApplicationKVState, whose?: "yours" | "theirs") => Promise<ApplicationKVState>;

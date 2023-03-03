@@ -1,13 +1,27 @@
 import path from "path";
 import fs, { createWriteStream } from "fs";
-import { existsAsync, getPluginsJsonAsync, getRemoteHostAsync, getUserSessionAsync, vDEVPath, vPluginsPath, vReposPath, vTMPPath } from "./filestructure";
+import {
+  existsAsync,
+  getPluginsJsonAsync,
+  getRemoteHostAsync,
+  getUserSessionAsync,
+  vDEVPath,
+  vPluginsPath,
+  vReposPath,
+  vTMPPath,
+} from "./filestructure";
 import { Manifest } from "./plugins";
-import { Branch, CheckpointMap, CommitState, EMPTY_RENDERED_COMMIT_STATE, RenderedCommitState, RepoSetting, State } from "./repo";
+import {
+  ApplicationKVState,
+  Branch,
+  RenderedApplicationState,
+  RepoSetting,
+  RepoState,
+} from "./repo";
 import { CommitData } from "./versioncontrol";
 import axios from "axios";
 import { broadcastAllDevices } from "./multiplexer";
 import tar from "tar";
-import { EMPTY_COMMIT_STATE } from './repo';
 
 axios.defaults.validateStatus = function () {
   return true;
@@ -24,14 +38,17 @@ export interface DataSource {
     pluginVersion: string
   ) => Promise<boolean>;
   /* REPOS */
-  getRepos?(): Promise<Array<string>>;
+  readRepos?(): Promise<Array<string>>;
   repoExists?(repoId?: string): Promise<boolean>;
-  getRepoSettings?: (repoId: string) => Promise<RepoSetting>;
-  getCurrentState?: (repoId: string) => Promise<State>;
-  saveCurrentState?: (repoId: string, state: State) => Promise<State>;
+  readRepoSettings?: (repoId: string) => Promise<RepoSetting>;
+  readCurrentRepoState?: (repoId: string) => Promise<RepoState>;
+  saveCurrentRepoState?: (
+    repoId: string,
+    state: RepoState
+  ) => Promise<RepoState>;
 
-  getBranch?: (repoId: string, branchName: string) => Promise<Branch>;
-  getBranches?: (repoId: string) => Promise<Array<Branch>>;
+  readBranch?: (repoId: string, branchName: string) => Promise<Branch>;
+  readBranches?: (repoId: string) => Promise<Array<Branch>>;
   deleteBranch?: (repoId: string, branchName: string) => Promise<boolean>;
   saveBranch?: (
     repoId: string,
@@ -45,40 +62,30 @@ export interface DataSource {
     commitData: CommitData
   ) => Promise<CommitData>;
   readCommit?: (repoId: string, sha: string) => Promise<CommitData>;
-  readCheckpoint?(
-    repoId: string,
-    sha: string
-  ): Promise<CommitState>;
+  readCheckpoint?(repoId: string, sha: string): Promise<ApplicationKVState>;
 
   saveCheckpoint?(
     repoId: string,
     sha: string,
-    commitState: CommitState
-  ): Promise<CommitState>;
+    commitState: ApplicationKVState
+  ): Promise<ApplicationKVState>;
 
-  readHotCheckpoint?(
-    repoId: string
-  ): Promise<[string, CommitState]>;
+  readHotCheckpoint?(repoId: string): Promise<[string, ApplicationKVState]>;
 
   saveHotCheckpoint?(
     repoId: string,
     sha: string,
-    commitState: CommitState
-  ): Promise<[string, CommitState]>;
+    commitState: ApplicationKVState
+  ): Promise<[string, ApplicationKVState]>;
 
-  deleteHotCheckpoint?(
-    repoId: string
-  ): Promise<boolean>;
+  deleteHotCheckpoint?(repoId: string): Promise<boolean>;
 
-  readRenderedState?(
-    repoId: string
-  ): Promise<RenderedCommitState>;
+  readRenderedState?(repoId: string): Promise<RenderedApplicationState>;
 
   saveRenderedState?(
     repoId: string,
-    commitState: RenderedCommitState
-  ): Promise<RenderedCommitState>;
-
+    commitState: RenderedApplicationState
+  ): Promise<RenderedApplicationState>;
 }
 
 /* PLUGINS */
@@ -164,7 +171,7 @@ const pullPluginTar = async (
   });
   const exists = await existsAsync(pluginPath);
   if (!exists && didWrite) {
-    await fs.promises.mkdir(pluginPath, { recursive: true});
+    await fs.promises.mkdir(pluginPath, { recursive: true });
     if (process.env.NODE_ENV != "test") {
       await fs.promises.chmod(pluginPath, 0o755);
     }
@@ -237,7 +244,7 @@ export const downloadPlugin = async (
       }
       const stillExistsLocallly = await existsAsync(pluginManifestPath);
       if (!stillExistsLocallly) {
-          return null;
+        return null;
       }
     }
     return await pullPluginTar(
@@ -291,7 +298,7 @@ const pluginManifestExists = async (
 
 /* REPOS */
 
-export const getRepos = async (): Promise<string[]> => {
+export const readRepos = async (): Promise<string[]> => {
   const repoDir = await fs.promises.readdir(vReposPath);
   return repoDir?.filter((repoName) => {
     return /^[0-9a-fA-F]{8}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{12}$/.test(
@@ -307,7 +314,7 @@ const repoExists = async (repoId?: string): Promise<boolean> => {
   return await existsAsync(path.join(vReposPath, repoId));
 };
 
-const getRepoSettings = async (repoId: string): Promise<RepoSetting> => {
+const readRepoSettings = async (repoId: string): Promise<RepoSetting> => {
   try {
     const repoPath = path.join(vReposPath, repoId);
     const settingsPath = path.join(repoPath, `settings.json`);
@@ -318,7 +325,9 @@ const getRepoSettings = async (repoId: string): Promise<RepoSetting> => {
   }
 };
 
-const readRenderedState = async (repoId: string): Promise<RenderedCommitState> => {
+const readRenderedState = async (
+  repoId: string
+): Promise<RenderedApplicationState> => {
   try {
     const repoPath = path.join(vReposPath, repoId);
     const statePath = path.join(repoPath, `state.json`);
@@ -329,18 +338,21 @@ const readRenderedState = async (repoId: string): Promise<RenderedCommitState> =
   }
 };
 
-const saveRenderedState = async (repoId: string, state: RenderedCommitState): Promise<RenderedCommitState> => {
+const saveRenderedState = async (
+  repoId: string,
+  state: RenderedApplicationState
+): Promise<RenderedApplicationState> => {
   try {
     const repoPath = path.join(vReposPath, repoId);
     const statePath = path.join(repoPath, `state.json`);
-    await fs.promises.writeFile(statePath, JSON.stringify(state), 'utf-8');
+    await fs.promises.writeFile(statePath, JSON.stringify(state), "utf-8");
     return state;
   } catch (e) {
     return null;
   }
 };
 
-const getCurrentState = async (repoId: string): Promise<State> => {
+const readCurrentRepoState = async (repoId: string): Promise<RepoState> => {
   try {
     const repoPath = path.join(vReposPath, repoId);
     const currentPath = path.join(repoPath, `current.json`);
@@ -351,7 +363,25 @@ const getCurrentState = async (repoId: string): Promise<State> => {
   }
 };
 
-const getBranch = async (
+const saveCurrentRepoState = async (
+  repoId: string,
+  state: RepoState
+): Promise<RepoState> => {
+  try {
+    const repoPath = path.join(vReposPath, repoId);
+    const currentPath = path.join(repoPath, `current.json`);
+    await fs.promises.writeFile(
+      currentPath,
+      Buffer.from(JSON.stringify(state, null, 2)),
+      "utf-8"
+    );
+    return state;
+  } catch (e) {
+    return null;
+  }
+};
+
+const readBranch = async (
   repoId: string,
   branchName: string
 ): Promise<Branch> => {
@@ -369,7 +399,7 @@ const getBranch = async (
   }
 };
 
-const getBranches = async (repoId: string): Promise<Array<Branch>> => {
+const readBranches = async (repoId: string): Promise<Array<Branch>> => {
   const branchesPath = path.join(vReposPath, repoId, "branches");
   const branchesDir = await fs.promises.readdir(branchesPath);
   const branches = await Promise.all(
@@ -382,7 +412,7 @@ const getBranches = async (repoId: string): Promise<Array<Branch>> => {
           0,
           branchFileName.length - 5
         );
-        return getBranch(repoId, branchName);
+        return readBranch(repoId, branchName);
       })
   );
   return branches.filter((branch) => branch != null);
@@ -414,24 +444,6 @@ const saveBranch = async (
       Buffer.from(JSON.stringify(branchData, null, 2))
     );
     return branchData;
-  } catch (e) {
-    return null;
-  }
-};
-
-const saveCurrentState = async (
-  repoId: string,
-  state: State
-): Promise<State> => {
-  try {
-    const repoPath = path.join(vReposPath, repoId);
-    const currentPath = path.join(repoPath, `current.json`);
-    await fs.promises.writeFile(
-      currentPath,
-      Buffer.from(JSON.stringify(state, null, 2)),
-      "utf-8"
-    );
-    return state;
   } catch (e) {
     return null;
   }
@@ -474,31 +486,40 @@ const readCommit = async (repoId: string, sha: string): Promise<CommitData> => {
   }
 };
 
-const readHotCheckpoint = async (repoId: string): Promise<[string, CommitState]> => {
+const readHotCheckpoint = async (
+  repoId: string
+): Promise<[string, ApplicationKVState]> => {
   try {
     const hotPath = path.join(vReposPath, repoId, "hotcheckpoint.json");
     const hotPointExists = await existsAsync(hotPath);
     if (!hotPointExists) {
       return null;
     }
-    const hotpointString = await fs.promises.readFile(hotPath, 'utf8');
+    const hotpointString = await fs.promises.readFile(hotPath, "utf8");
     const hotpoint = JSON.parse(hotpointString);
-    return hotpoint as [string, CommitState];
-  } catch(e) {
+    return hotpoint as [string, ApplicationKVState];
+  } catch (e) {
     return null;
   }
+};
 
-}
-
-const saveHotCheckpoint = async (repoId: string, sha: string, commitState: CommitState): Promise<[string, CommitState]> => {
+const saveHotCheckpoint = async (
+  repoId: string,
+  sha: string,
+  commitState: ApplicationKVState
+): Promise<[string, ApplicationKVState]> => {
   try {
     const hotPath = path.join(vReposPath, repoId, "hotcheckpoint.json");
-    await fs.promises.writeFile(hotPath, JSON.stringify([sha, commitState]), 'utf8');
+    await fs.promises.writeFile(
+      hotPath,
+      JSON.stringify([sha, commitState]),
+      "utf8"
+    );
     return [sha, commitState];
-  } catch(e) {
+  } catch (e) {
     return null;
   }
-}
+};
 
 const deleteHotCheckpoint = async (repoId: string): Promise<boolean> => {
   try {
@@ -509,10 +530,10 @@ const deleteHotCheckpoint = async (repoId: string): Promise<boolean> => {
     }
     await fs.promises.rm(hotPath);
     return true;
-  } catch(e) {
+  } catch (e) {
     return false;
   }
-}
+};
 
 /**
  *
@@ -520,13 +541,18 @@ const deleteHotCheckpoint = async (repoId: string): Promise<boolean> => {
  */
 
 const getCheckpointDirPath = (repoId: string, commitSha: string): string => {
-  return path.join(vReposPath, repoId, "checkpoints", commitSha.substring(0, 2));
+  return path.join(
+    vReposPath,
+    repoId,
+    "checkpoints",
+    commitSha.substring(0, 2)
+  );
 };
 
 const readCheckpoint = async (
   repoId: string,
   sha: string
-): Promise<CommitState> => {
+): Promise<ApplicationKVState> => {
   try {
     const checkpointDirPath = getCheckpointDirPath(repoId, sha);
     const checkpointPath = path.join(checkpointDirPath, sha + ".json");
@@ -541,7 +567,11 @@ const readCheckpoint = async (
   }
 };
 
-const saveCheckpoint = async(repoId: string, sha: string, commitState: CommitState): Promise<CommitState> => {
+const saveCheckpoint = async (
+  repoId: string,
+  sha: string,
+  commitState: ApplicationKVState
+): Promise<ApplicationKVState> => {
   try {
     const baseCheckpoint = path.join(vReposPath, repoId, "checkpoints");
     const baseCheckpointDirExists = await existsAsync(baseCheckpoint);
@@ -555,24 +585,24 @@ const saveCheckpoint = async(repoId: string, sha: string, commitState: CommitSta
     }
     const checkpointPath = path.join(checkpointDirPath, sha + ".json");
     const checkpointString = JSON.stringify(commitState);
-    await fs.promises.writeFile(checkpointPath, checkpointString, 'utf-8');
+    await fs.promises.writeFile(checkpointPath, checkpointString, "utf-8");
     return commitState;
-  } catch(e) {
+  } catch (e) {
     return null;
   }
-}
+};
 
 export const makeDataSource = (datasource: DataSource = {}) => {
   const defaultDataSource: DataSource = {
-    getRepos,
+    readRepos,
     repoExists,
     getPluginManifest,
     pluginManifestExists,
-    getRepoSettings,
-    getCurrentState,
-    saveCurrentState,
-    getBranch,
-    getBranches,
+    readRepoSettings,
+    readCurrentRepoState,
+    saveCurrentRepoState,
+    readBranch,
+    readBranches,
     deleteBranch,
     saveBranch,
     saveCommit,
@@ -583,7 +613,7 @@ export const makeDataSource = (datasource: DataSource = {}) => {
     deleteHotCheckpoint,
     saveHotCheckpoint,
     readRenderedState,
-    saveRenderedState
+    saveRenderedState,
   };
   return {
     ...defaultDataSource,
@@ -597,28 +627,36 @@ export const makeMemoizedDataSource = (dataSourceOverride: DataSource = {}) => {
   const memoizedRepoExistence = new Set();
   const _repoExists = async (repoId: string) => {
     if (memoizedRepoExistence.has(repoId)) {
-        return true;
+      return true;
     }
     const result = await dataSource.repoExists(repoId);
     if (result) {
-        memoizedRepoExistence.add(repoId);
+      memoizedRepoExistence.add(repoId);
     }
     return result;
-  }
-
+  };
 
   const memoizedPluginManifestExistence = new Set();
-  const _pluginManifestExists = async (pluginName: string, pluginVersion: string) => {
+  const _pluginManifestExists = async (
+    pluginName: string,
+    pluginVersion: string
+  ) => {
     const pluginString = pluginName + "-" + pluginVersion;
-    if (memoizedPluginManifestExistence.has(pluginName) && !pluginVersion.startsWith("dev")) {
-        return true;
+    if (
+      memoizedPluginManifestExistence.has(pluginName) &&
+      !pluginVersion.startsWith("dev")
+    ) {
+      return true;
     }
-    const result = await dataSource.pluginManifestExists(pluginName, pluginVersion);
+    const result = await dataSource.pluginManifestExists(
+      pluginName,
+      pluginVersion
+    );
     if (result) {
-        memoizedRepoExistence.add(pluginString);
+      memoizedRepoExistence.add(pluginString);
     }
     return result;
-  }
+  };
 
   const manifestMemo: { [key: string]: Manifest } = {};
   const _getPluginManifest = async (
@@ -640,11 +678,11 @@ export const makeMemoizedDataSource = (dataSourceOverride: DataSource = {}) => {
   };
 
   const memoizedSettings = {};
-  const _getRepoSettings = async (repoId: string): Promise<RepoSetting> => {
+  const _readRepoSettings = async (repoId: string): Promise<RepoSetting> => {
     if (memoizedSettings[repoId]) {
       return memoizedSettings[repoId];
     }
-    const result = await dataSource.getRepoSettings(repoId);
+    const result = await dataSource.readRepoSettings(repoId);
     if (result) {
       memoizedSettings[repoId] = result;
     }
@@ -652,22 +690,22 @@ export const makeMemoizedDataSource = (dataSourceOverride: DataSource = {}) => {
   };
 
   const memoizedCurrentState = {};
-  const _getCurrentState = async (repoId: string): Promise<State> => {
+  const _readCurrentRepoState = async (repoId: string): Promise<RepoState> => {
     if (memoizedCurrentState[repoId]) {
       return memoizedCurrentState[repoId];
     }
-    const result = await dataSource.getCurrentState(repoId);
+    const result = await dataSource.readCurrentRepoState(repoId);
     if (result) {
       memoizedCurrentState[repoId] = result;
     }
     return result;
   };
 
-  const _saveCurrentState = async (
+  const _saveCurrentRepoState = async (
     repoId: string,
-    state: State
-  ): Promise<State> => {
-    const result = await dataSource.saveCurrentState(repoId, state);
+    state: RepoState
+  ): Promise<RepoState> => {
+    const result = await dataSource.saveCurrentRepoState(repoId, state);
     if (result) {
       memoizedCurrentState[repoId] = result;
     }
@@ -676,7 +714,7 @@ export const makeMemoizedDataSource = (dataSourceOverride: DataSource = {}) => {
 
   const branchMemo = {};
   const branchesMemo = {};
-  const _getBranch = async (
+  const _readBranch = async (
     repoId: string,
     branchName: string
   ): Promise<Branch> => {
@@ -684,18 +722,18 @@ export const makeMemoizedDataSource = (dataSourceOverride: DataSource = {}) => {
     if (branchMemo[branchMemoString]) {
       return branchMemo[branchMemoString];
     }
-    const result = await dataSource.getBranch(repoId, branchName);
+    const result = await dataSource.readBranch(repoId, branchName);
     if (result) {
       branchMemo[branchMemoString] = result;
     }
     return result;
   };
 
-  const _getBranches = async (repoId: string): Promise<Array<Branch>> => {
+  const _readBranches = async (repoId: string): Promise<Array<Branch>> => {
     if (branchesMemo[repoId]) {
       return branchesMemo[repoId];
     }
-    const result = await dataSource.getBranches(repoId);
+    const result = await dataSource.readBranches(repoId);
     if (result) {
       branchesMemo[repoId] = result;
     }
@@ -758,7 +796,10 @@ export const makeMemoizedDataSource = (dataSourceOverride: DataSource = {}) => {
   };
 
   const checkpointMemo = {};
-  const _readCheckpoint = async (repoId: string, sha: string): Promise<CommitState> => {
+  const _readCheckpoint = async (
+    repoId: string,
+    sha: string
+  ): Promise<ApplicationKVState> => {
     const checkpointString = repoId + "-" + sha;
     if (checkpointMemo[checkpointString]) {
       return checkpointMemo[checkpointString];
@@ -768,19 +809,25 @@ export const makeMemoizedDataSource = (dataSourceOverride: DataSource = {}) => {
       checkpointMemo[checkpointString] = result;
     }
     return result;
-  }
+  };
 
-  const _saveCheckpoint = async (repoId: string, sha: string, commitState: CommitState): Promise<CommitState> => {
+  const _saveCheckpoint = async (
+    repoId: string,
+    sha: string,
+    commitState: ApplicationKVState
+  ): Promise<ApplicationKVState> => {
     const checkpointString = repoId + "-" + sha;
     const result = await dataSource.saveCheckpoint(repoId, sha, commitState);
     if (result) {
       checkpointMemo[checkpointString] = result;
     }
     return result;
-  }
+  };
 
   const hotCheckpointMemo = {};
-  const _readHotCheckpoint = async (repoId: string): Promise<[string, CommitState]> => {
+  const _readHotCheckpoint = async (
+    repoId: string
+  ): Promise<[string, ApplicationKVState]> => {
     if (hotCheckpointMemo[repoId]) {
       return hotCheckpointMemo[repoId];
     }
@@ -789,15 +836,19 @@ export const makeMemoizedDataSource = (dataSourceOverride: DataSource = {}) => {
       hotCheckpointMemo[repoId] = result;
     }
     return result;
-  }
+  };
 
-  const _saveHotCheckpoint = async (repoId: string, sha: string, checkpoint: CommitState): Promise<[string, CommitState]> => {
+  const _saveHotCheckpoint = async (
+    repoId: string,
+    sha: string,
+    checkpoint: ApplicationKVState
+  ): Promise<[string, ApplicationKVState]> => {
     const result = await dataSource.saveHotCheckpoint(repoId, sha, checkpoint);
     if (result) {
       hotCheckpointMemo[repoId] = result;
     }
     return result;
-  }
+  };
 
   const _deleteHotCheckpoint = async (repoId: string): Promise<boolean> => {
     const result = await dataSource.deleteHotCheckpoint(repoId);
@@ -805,34 +856,39 @@ export const makeMemoizedDataSource = (dataSourceOverride: DataSource = {}) => {
       delete hotCheckpointMemo[repoId];
     }
     return result;
-  }
+  };
 
   const stateMemo = {};
-  const _saveRenderedState = async (repoId: string, state: RenderedCommitState): Promise<RenderedCommitState> => {
+  const _saveRenderedState = async (
+    repoId: string,
+    state: RenderedApplicationState
+  ): Promise<RenderedApplicationState> => {
     const result = await dataSource.saveRenderedState(repoId, state);
     if (result) {
       stateMemo[repoId] = result;
     }
     return result;
-  }
+  };
 
-  const _readRenderedState = async (repoId: string): Promise<RenderedCommitState> => {
+  const _readRenderedState = async (
+    repoId: string
+  ): Promise<RenderedApplicationState> => {
     if (stateMemo[repoId]) {
       return stateMemo[repoId];
     }
     const result = await dataSource.readRenderedState(repoId);
     return result;
-  }
+  };
 
   const defaultDataSource: DataSource = {
     repoExists: _repoExists,
     pluginManifestExists: _pluginManifestExists,
     getPluginManifest: _getPluginManifest,
-    getRepoSettings: _getRepoSettings,
-    getCurrentState: _getCurrentState,
-    saveCurrentState: _saveCurrentState,
-    getBranch: _getBranch,
-    getBranches: _getBranches,
+    readRepoSettings: _readRepoSettings,
+    readCurrentRepoState: _readCurrentRepoState,
+    saveCurrentRepoState: _saveCurrentRepoState,
+    readBranch: _readBranch,
+    readBranches: _readBranches,
     saveBranch: _saveBranch,
     deleteBranch: _deleteBranch,
     saveCommit: _saveCommit,
@@ -843,7 +899,7 @@ export const makeMemoizedDataSource = (dataSourceOverride: DataSource = {}) => {
     saveHotCheckpoint: _saveHotCheckpoint,
     deleteHotCheckpoint: _deleteHotCheckpoint,
     readRenderedState: _readRenderedState,
-    saveRenderedState: _saveRenderedState
+    saveRenderedState: _saveRenderedState,
   };
   return {
     ...dataSource,

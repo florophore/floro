@@ -22,7 +22,7 @@ describe("repoapi", () => {
     });
     describe("description", () => {
         test("updates repo description", async () => {
-            let description = (await (0, repo_1.getRepoState)(datasource, "abc")).description.join("");
+            let description = (await (0, repo_1.getApplicationState)(datasource, "abc")).description.join("");
             expect(description).toEqual("");
             description = "Initial description.";
             description = (await (0, repoapi_1.writeRepoDescription)(datasource, "abc", description)).description.join("");
@@ -414,7 +414,7 @@ describe("repoapi", () => {
                 console.timeEnd("COMMIT" + i);
             }
             console.time("TEST");
-            const a = await (0, repo_1.getRepoState)(datasource, "abc");
+            const a = await (0, repo_1.getApplicationState)(datasource, "abc");
             console.timeEnd("TEST");
         });
     });

@@ -2,7 +2,6 @@ import path from "path";
 import { existsAsync, vReposPath, getUserAsync } from "./filestructure";
 import {
   getCurrentBranch,
-  getRepoState,
   getUnstagedCommitState,
   updateCurrentCommitSHA,
   getCurrentCommitSha,
@@ -26,6 +25,10 @@ import {
   getBaseDivergenceSha,
   convertRenderedCommitStateToKv,
   getStateDiffFromCommitStates,
+  getApplicationState,
+  ApplicationKVState,
+  RenderedApplicationState,
+  convertCommitStateToRenderedState,
 } from "./repo";
 import {
   CommitData,
@@ -179,7 +182,7 @@ export const getRepoBranches = async (
     return null;
   }
   try {
-    const branches = await datasource.getBranches(repoId);
+    const branches = await datasource.readBranches(repoId);
     return branches;
   } catch (e) {
     return null;
@@ -199,7 +202,7 @@ export const switchRepoBranch = async (
     return null;
   }
   try {
-    const currentBranches = await datasource.getBranches(repoId);
+    const currentBranches = await datasource.readBranches(repoId);
     if (
       currentBranches
         .map((v) => v.name.toLowerCase())
@@ -279,7 +282,7 @@ export const readSettings = async (datasource: DataSource, repoId?: string) => {
     return null;
   }
   try {
-    const settings = await datasource.getRepoSettings(repoId);
+    const settings = await datasource.readRepoSettings(repoId);
     if (!settings) {
       return null;
     }
@@ -383,7 +386,7 @@ export const readBranchHistory = async (
     return null;
   }
   try {
-    const branch = await datasource.getBranch(repoId, branchName);
+    const branch = await datasource.readBranch(repoId, branchName);
     if (!branch) {
       return null;
     }
@@ -439,7 +442,7 @@ export const readCurrentState = async (
     return null;
   }
   try {
-    const state = await getRepoState(datasource, repoId);
+    const state = await getApplicationState(datasource, repoId);
     return state;
   } catch (e) {
     return null;
@@ -450,7 +453,7 @@ export const readCommitState = async (
   datasource: DataSource,
   repoId?: string,
   sha?: string
-) => {
+): Promise<RenderedApplicationState> => {
   if (!repoId) {
     return null;
   }
@@ -462,12 +465,11 @@ export const readCommitState = async (
     return null;
   }
   try {
-    debugger;
     const state = await getCommitState(datasource, repoId, sha);
     if (!state) {
       return null;
     }
-    return state;
+    return convertCommitStateToRenderedState(datasource, state);
   } catch (e) {
     return null;
   }
@@ -489,7 +491,7 @@ export const readBranchState = async (
     return null;
   }
   try {
-    const branch = await datasource.getBranch(repoId, branchName);
+    const branch = await datasource.readBranch(repoId, branchName);
     if (!branch) {
       return null;
     }
@@ -535,8 +537,7 @@ export const writeRepoCommit = async (
       return null;
     }
 
-    //const repoCommitState = await getRepoState(datasource, repoId);
-    const currentState = await datasource.getCurrentState(repoId);
+    const currentState = await datasource.readCurrentRepoState(repoId);
     const currentSha = await getCurrentCommitSha(datasource, repoId);
     const parent = currentSha
       ? await datasource.readCommit(repoId, currentSha)
@@ -561,7 +562,7 @@ export const writeRepoCommit = async (
       return null;
     }
     if (currentState.branch) {
-      const branchState = await datasource.getBranch(
+      const branchState = await datasource.readBranch(
         repoId,
         currentState.branch
       );
@@ -602,7 +603,7 @@ export const checkoutBranch = async (
     return null;
   }
   try {
-    const currentBranches = await datasource.getBranches(repoId);
+    const currentBranches = await datasource.readBranches(repoId);
     const user = await getUserAsync();
     if (!user) {
       return null;
@@ -615,7 +616,7 @@ export const checkoutBranch = async (
       return null;
     }
 
-    const branchData = await datasource.getBranch(repoId, branchName);
+    const branchData = await datasource.readBranch(repoId, branchName);
     if (!branchData) {
       return null;
     }
@@ -812,7 +813,7 @@ export const updatePlugins = async (
       if (a.key == b.key) return 0;
       return a.key > b.key ? 1 : -1;
     });
-    const store = currentRenderedState.store;
+    let store = currentRenderedState.store;
     for (let { key } of lexicallyOrderedPlugins) {
       if (!store[key]) {
         store[key] = {}
@@ -820,9 +821,10 @@ export const updatePlugins = async (
     }
     for (const rootManifest of rootDependencies) {
       const schemaMap = await getSchemaMapForManifest(datasource, rootManifest);
-      currentRenderedState.store = await cascadePluginState(datasource, schemaMap, store);
+      store = await cascadePluginState(datasource, schemaMap, store);
     }
-    currentRenderedState.plugins = lexicallyOrderedPlugins;
+    currentRenderedState.store = store;
+    currentRenderedState.plugins = sortedUpdatedPlugins;
     await datasource.saveRenderedState(repoId, currentRenderedState);
     return currentRenderedState;
   } catch (e) {
@@ -850,7 +852,7 @@ export const updatePluginState = async (
     return null;
   }
   try {
-    const current = await getRepoState(datasource, repoId);
+    const current = await getApplicationState(datasource, repoId);
     if (current == null) {
       return null;
     }
@@ -864,7 +866,6 @@ export const updatePluginState = async (
 
     const manifest = manifests.find((p) => p.name == pluginName);
     const schemaMap = await getSchemaMapForManifest(datasource, manifest);
-    //let stateStore = await buildStateStore(datasource, current);
     const renderedState = await datasource.readRenderedState(repoId);
     const stateStore = renderedState.store;
     stateStore[pluginName] = updatedState;
@@ -925,7 +926,7 @@ export const updatePluginState = async (
 //          commit2,
 //          originCommit
 //        );
-//        const repoState = await getRepoState(datasource, repoId);
+//        const repoState = await getApplicationState(datasource, repoId);
 //        const mergeCurrState = await getMergedCommitState(
 //          datasource,
 //          mergeState,
