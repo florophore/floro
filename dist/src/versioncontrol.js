@@ -227,7 +227,7 @@ const getMergeSubSequence = (from, into, direction = "yours") => {
     }
     const lcs = (0, exports.getLCS)(from, into);
     if (lcs.length == 0) {
-        if (direction == "theirs") {
+        if (direction == "yours") {
             return [...from, ...into];
         }
         else {
@@ -241,7 +241,7 @@ const getMergeSubSequence = (from, into, direction = "yours") => {
     let mergeSequences = [];
     let mergeIndex = 0;
     while (mergeIndex <= lcs.length) {
-        if (direction == "theirs") {
+        if (direction == "yours") {
             mergeSequences.push(fromSequences[mergeIndex]);
             mergeSequences.push(intoSequences[mergeIndex]);
         }

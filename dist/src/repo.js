@@ -166,7 +166,12 @@ exports.getCurrentCommitSha = getCurrentCommitSha;
 const diffIsEmpty = (stateDiff) => {
     for (const prop in stateDiff) {
         if (prop == "store" && Object.keys(stateDiff?.store ?? {}).length != 0) {
-            return false;
+            for (const pluginName in stateDiff.store) {
+                if (Object.keys(stateDiff?.store?.[pluginName]?.add ?? {}).length != 0 ||
+                    Object.keys(stateDiff?.store?.[pluginName]?.remove ?? {}).length != 0) {
+                    return false;
+                }
+            }
         }
         if (Object.keys(stateDiff?.[prop]?.add ?? {}).length != 0) {
             return false;
@@ -380,13 +385,13 @@ exports.convertRenderedCommitStateToKv = convertRenderedCommitStateToKv;
 const updateCurrentCommitSHA = async (datasource, repoId, sha, isResolvingMerge) => {
     try {
         const current = await datasource.readCurrentRepoState(repoId);
-        if (current.isMerge && !isResolvingMerge) {
+        if (current.isInMergeConflict && !isResolvingMerge) {
             return null;
         }
         const updated = {
             ...current,
             commit: sha,
-            isMerge: false,
+            isInMergeConflict: false,
             merge: null,
         };
         const nextState = await datasource.saveCurrentRepoState(repoId, updated);
@@ -406,14 +411,14 @@ exports.updateCurrentCommitSHA = updateCurrentCommitSHA;
 const updateCurrentWithSHA = async (datasource, repoId, sha, isResolvingMerge) => {
     try {
         const current = await datasource.readCurrentRepoState(repoId);
-        if (current.isMerge && !isResolvingMerge) {
+        if (current.isInMergeConflict && !isResolvingMerge) {
             return null;
         }
         const updated = {
             ...current,
             commit: sha,
             branch: null,
-            isMerge: false,
+            isInMergeConflict: false,
             merge: null,
         };
         const nextState = await datasource.saveCurrentRepoState(repoId, updated);
@@ -430,7 +435,7 @@ exports.updateCurrentWithSHA = updateCurrentWithSHA;
 const updateCurrentWithNewBranch = async (datasource, repoId, branchName) => {
     try {
         const current = await datasource.readCurrentRepoState(repoId);
-        if (current.isMerge) {
+        if (current.isInMergeConflict) {
             return null;
         }
         const branch = await datasource.readBranch(repoId, branchName);
@@ -453,7 +458,7 @@ exports.updateCurrentWithNewBranch = updateCurrentWithNewBranch;
 const updateCurrentBranch = async (datasource, repoId, branchName) => {
     try {
         const current = await datasource.readCurrentRepoState(repoId);
-        if (current.isMerge) {
+        if (current.isInMergeConflict) {
             return null;
         }
         const branch = await datasource.readBranch(repoId, branchName);

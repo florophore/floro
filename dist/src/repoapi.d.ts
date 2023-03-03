@@ -30,3 +30,8 @@ export declare const checkoutSha: (datasource: DataSource, repoId: string, sha: 
 export declare const updatePlugins: (datasource: DataSource, repoId: string, plugins: Array<PluginElement>) => Promise<RenderedApplicationState>;
 export declare const updatePluginState: (datasource: DataSource, repoId: string, pluginName: string, updatedState: object) => Promise<RenderedApplicationState>;
 export declare const mergeCommit: (datasource: DataSource, repoId: string, fromSha: string) => Promise<RenderedApplicationState>;
+export declare const updateMergeDirection: (datasource: DataSource, repoId: string, direction: "yours" | "theirs") => Promise<RenderedApplicationState>;
+export declare const abortMerge: (datasource: DataSource, repoId: string) => Promise<RenderedApplicationState>;
+export declare const resolveMerge: (datasource: DataSource, repoId: string) => Promise<RenderedApplicationState>;
+export declare const getMergeConflictDiff: (datasource: DataSource, repoId: string) => Promise<import("./repo").StateDiff>;
+export declare const hasMergeConclictDiff: (datasource: DataSource, repoId: string) => Promise<boolean>;

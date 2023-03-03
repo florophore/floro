@@ -348,7 +348,7 @@ const getMergeSubSequence = (
   }
   const lcs = getLCS(from, into);
   if (lcs.length == 0) {
-    if (direction == "theirs") {
+    if (direction == "yours") {
       return [...from, ...into];
     } else {
       return [...into, ...from];
@@ -364,7 +364,7 @@ const getMergeSubSequence = (
   let mergeSequences = [];
   let mergeIndex = 0;
   while (mergeIndex <= lcs.length) {
-    if (direction == "theirs") {
+    if (direction == "yours") {
       mergeSequences.push(fromSequences[mergeIndex]);
       mergeSequences.push(intoSequences[mergeIndex]);
     } else {

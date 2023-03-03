@@ -67,7 +67,7 @@ export interface StateDiff {
 export interface RepoState {
     branch: string | null;
     commit: string | null;
-    isMerge: boolean;
+    isInMergeConflict: boolean;
     merge: null | {
         fromSha: string;
         intoSha: string;

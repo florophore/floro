@@ -82,7 +82,7 @@ export interface StateDiff {
 export interface RepoState {
   branch: string | null;
   commit: string | null;
-  isMerge: boolean;
+  isInMergeConflict: boolean;
   merge: null | {
     fromSha: string;
     intoSha: string;
@@ -253,7 +253,14 @@ export const getCurrentCommitSha = async (
 export const diffIsEmpty = (stateDiff: StateDiff) => {
   for (const prop in stateDiff) {
     if (prop == "store" && Object.keys(stateDiff?.store ?? {}).length != 0) {
-      return false;
+      for (const pluginName in stateDiff.store) {
+        if (
+          Object.keys(stateDiff?.store?.[pluginName]?.add ?? {}).length != 0 ||
+          Object.keys(stateDiff?.store?.[pluginName]?.remove ?? {}).length != 0
+        ) {
+          return false;
+        }
+      }
     }
     if (Object.keys(stateDiff?.[prop]?.add ?? {}).length != 0) {
       return false;
@@ -543,13 +550,13 @@ export const updateCurrentCommitSHA = async (
 ): Promise<RepoState | null> => {
   try {
     const current = await datasource.readCurrentRepoState(repoId);
-    if (current.isMerge && !isResolvingMerge) {
+    if (current.isInMergeConflict && !isResolvingMerge) {
       return null;
     }
     const updated: RepoState = {
       ...current,
       commit: sha,
-      isMerge: false,
+      isInMergeConflict: false,
       merge: null,
     };
     const nextState = await datasource.saveCurrentRepoState(repoId, updated);
@@ -573,14 +580,14 @@ export const updateCurrentWithSHA = async (
 ): Promise<RepoState | null> => {
   try {
     const current = await datasource.readCurrentRepoState(repoId);
-    if (current.isMerge && !isResolvingMerge) {
+    if (current.isInMergeConflict && !isResolvingMerge) {
       return null;
     }
     const updated: RepoState = {
       ...current,
       commit: sha,
       branch: null,
-      isMerge: false,
+      isInMergeConflict: false,
       merge: null,
     };
     const nextState = await datasource.saveCurrentRepoState(repoId, updated);
@@ -600,7 +607,7 @@ export const updateCurrentWithNewBranch = async (
 ): Promise<RepoState | null> => {
   try {
     const current = await datasource.readCurrentRepoState(repoId);
-    if (current.isMerge) {
+    if (current.isInMergeConflict) {
       return null;
     }
     const branch = await datasource.readBranch(repoId, branchName);
@@ -626,7 +633,7 @@ export const updateCurrentBranch = async (
 ): Promise<RepoState | null> => {
   try {
     const current = await datasource.readCurrentRepoState(repoId);
-    if (current.isMerge) {
+    if (current.isInMergeConflict) {
       return null;
     }
     const branch = await datasource.readBranch(repoId, branchName);
@@ -1136,13 +1143,13 @@ export const canAutoMergeOnTopCurrentState = async (
       datasource,
       repoId,
       repoState.commit,
-      mergeSha
+      mergeSha,
     );
     return await canAutoMergeCommitStates(
       datasource,
       currentAppKVstate,
       mergeState,
-      originCommit
+      originCommit,
     );
   } catch (e) {
     return null;

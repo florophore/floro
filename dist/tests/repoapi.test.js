@@ -394,12 +394,12 @@ describe("repoapi", () => {
             let lastCom;
             for (let i = 0; i < 3; ++i) {
                 const state = {
-                    aSet: []
+                    aSet: [],
                 };
                 for (let j = 0; j < 400_000; ++j) {
                     state.aSet.push({
                         mainKey: "key" + j,
-                        someProp: 100
+                        someProp: 100,
                     });
                 }
                 for (let k = 0; k < 100; ++k) {
@@ -420,8 +420,6 @@ describe("repoapi", () => {
     });
     describe("merge", () => {
         test("creates a new commit if can automerge", async () => {
-            let description = (await (0, repoapi_1.readRepoDescription)(datasource, "abc")).join("");
-            expect(description).toEqual("");
             const PLUGIN_A_0_MANIFEST = {
                 name: "A",
                 version: "0.0.0",
@@ -629,6 +627,452 @@ describe("repoapi", () => {
             const mainMergeState = await (0, repo_1.getCommitState)(datasource, "abc", mainMergedSha);
             const mainMergeRendered = await (0, repo_1.convertCommitStateToRenderedState)(datasource, mainMergeState);
             expect(mainMergeOut).toEqual(mainMergeRendered);
+        });
+        test("creates a conflict if cant automerge and aborts", async () => {
+            const PLUGIN_A_0_MANIFEST = {
+                name: "A",
+                version: "0.0.0",
+                displayName: "A",
+                icon: "",
+                imports: {},
+                types: {},
+                store: {
+                    aSet: {
+                        type: "set",
+                        values: {
+                            mainKey: {
+                                isKey: true,
+                                type: "string",
+                            },
+                            someProp: {
+                                value: {
+                                    type: "int",
+                                },
+                            },
+                        },
+                    },
+                },
+            };
+            (0, fsmocks_1.makeTestPlugin)(PLUGIN_A_0_MANIFEST);
+            const state1 = {
+                aSet: [
+                    {
+                        mainKey: "key1",
+                        someProp: {
+                            value: 1,
+                        },
+                    },
+                    {
+                        mainKey: "key2",
+                        someProp: {
+                            value: 2,
+                        },
+                    },
+                    {
+                        mainKey: "key3",
+                        someProp: {
+                            value: 3,
+                        },
+                    },
+                    {
+                        mainKey: "key4",
+                        someProp: {
+                            value: 4,
+                        },
+                    },
+                ],
+            };
+            let plugins = [
+                {
+                    key: "A",
+                    value: "0.0.0",
+                },
+            ];
+            await (0, repoapi_1.updatePlugins)(datasource, "abc", plugins);
+            await (0, repoapi_1.updatePluginState)(datasource, "abc", "A", state1);
+            const commitA = await (0, repoapi_1.writeRepoCommit)(datasource, "abc", "A");
+            const state2 = {
+                aSet: [
+                    {
+                        mainKey: "key1",
+                        someProp: {
+                            value: 1,
+                        },
+                    },
+                    {
+                        mainKey: "key1a",
+                        someProp: {
+                            value: 11,
+                        },
+                    },
+                    {
+                        mainKey: "key3",
+                        someProp: {
+                            value: 3,
+                        },
+                    },
+                    {
+                        mainKey: "key4",
+                        someProp: {
+                            value: 4,
+                        },
+                    },
+                    {
+                        mainKey: "key5",
+                        someProp: {
+                            value: 5,
+                        },
+                    },
+                ],
+            };
+            await (0, repoapi_1.updatePluginState)(datasource, "abc", "A", state2);
+            const commitB = await (0, repoapi_1.writeRepoCommit)(datasource, "abc", "B");
+            await (0, repoapi_1.checkoutSha)(datasource, "abc", commitA.sha);
+            await (0, repoapi_1.switchRepoBranch)(datasource, "abc", "feature-branch");
+            const state3 = {
+                aSet: [
+                    {
+                        mainKey: "key0",
+                        someProp: {
+                            value: 0,
+                        },
+                    },
+                    {
+                        mainKey: "key1",
+                        someProp: {
+                            value: 1,
+                        },
+                    },
+                    {
+                        mainKey: "key1a",
+                        someProp: {
+                            value: 12,
+                        },
+                    },
+                    {
+                        mainKey: "key3",
+                        someProp: {
+                            value: 3,
+                        },
+                    },
+                    {
+                        mainKey: "key4",
+                        someProp: {
+                            value: 4,
+                        },
+                    },
+                ],
+            };
+            await (0, repoapi_1.updatePluginState)(datasource, "abc", "A", state3);
+            const commitC = await (0, repoapi_1.writeRepoCommit)(datasource, "abc", "C");
+            const originalStateOut = await (0, repoapi_1.mergeCommit)(datasource, "abc", commitB.sha);
+            const theirStateOut = await (0, repoapi_1.updateMergeDirection)(datasource, "abc", "theirs");
+            const yourStateOut = await (0, repoapi_1.updateMergeDirection)(datasource, "abc", "yours");
+            expect(originalStateOut).toEqual(yourStateOut);
+            expect(yourStateOut).toEqual({
+                description: [],
+                licenses: [],
+                plugins: [
+                    {
+                        key: "A",
+                        value: "0.0.0",
+                    },
+                ],
+                store: {
+                    A: {
+                        aSet: [
+                            {
+                                mainKey: "key0",
+                                someProp: {
+                                    value: 0,
+                                },
+                            },
+                            {
+                                mainKey: "key1",
+                                someProp: {
+                                    value: 1,
+                                },
+                            },
+                            {
+                                mainKey: "key1a",
+                                someProp: {
+                                    value: 12,
+                                },
+                            },
+                            {
+                                mainKey: "key3",
+                                someProp: {
+                                    value: 3,
+                                },
+                            },
+                            {
+                                mainKey: "key4",
+                                someProp: {
+                                    value: 4,
+                                },
+                            },
+                            {
+                                mainKey: "key5",
+                                someProp: {
+                                    value: 5,
+                                },
+                            },
+                        ],
+                    },
+                },
+                binaries: [],
+            });
+            expect(theirStateOut).toEqual({
+                description: [],
+                licenses: [],
+                plugins: [
+                    {
+                        key: "A",
+                        value: "0.0.0",
+                    },
+                ],
+                store: {
+                    A: {
+                        aSet: [
+                            {
+                                mainKey: "key0",
+                                someProp: {
+                                    value: 0,
+                                },
+                            },
+                            {
+                                mainKey: "key1",
+                                someProp: {
+                                    value: 1,
+                                },
+                            },
+                            {
+                                mainKey: "key1a",
+                                someProp: {
+                                    value: 11,
+                                },
+                            },
+                            {
+                                mainKey: "key3",
+                                someProp: {
+                                    value: 3,
+                                },
+                            },
+                            {
+                                mainKey: "key4",
+                                someProp: {
+                                    value: 4,
+                                },
+                            },
+                            {
+                                mainKey: "key5",
+                                someProp: {
+                                    value: 5,
+                                },
+                            },
+                        ],
+                    },
+                },
+                binaries: [],
+            });
+            const abortedMerge = await (0, repoapi_1.abortMerge)(datasource, "abc");
+            const cState = await (0, repo_1.getCommitState)(datasource, "abc", commitC.sha);
+            const cStateRendered = await (0, repo_1.convertCommitStateToRenderedState)(datasource, cState);
+            expect(cStateRendered).toEqual(abortedMerge);
+        });
+        test("creates a conflict and can resolve", async () => {
+            const PLUGIN_A_0_MANIFEST = {
+                name: "A",
+                version: "0.0.0",
+                displayName: "A",
+                icon: "",
+                imports: {},
+                types: {},
+                store: {
+                    aSet: {
+                        type: "set",
+                        values: {
+                            mainKey: {
+                                isKey: true,
+                                type: "string",
+                            },
+                            someProp: {
+                                value: {
+                                    type: "int",
+                                },
+                            },
+                        },
+                    },
+                },
+            };
+            (0, fsmocks_1.makeTestPlugin)(PLUGIN_A_0_MANIFEST);
+            const state1 = {
+                aSet: [
+                    {
+                        mainKey: "key1",
+                        someProp: {
+                            value: 1,
+                        },
+                    },
+                    {
+                        mainKey: "key2",
+                        someProp: {
+                            value: 2,
+                        },
+                    },
+                    {
+                        mainKey: "key3",
+                        someProp: {
+                            value: 3,
+                        },
+                    },
+                    {
+                        mainKey: "key4",
+                        someProp: {
+                            value: 4,
+                        },
+                    },
+                ],
+            };
+            let plugins = [
+                {
+                    key: "A",
+                    value: "0.0.0",
+                },
+            ];
+            await (0, repoapi_1.updatePlugins)(datasource, "abc", plugins);
+            await (0, repoapi_1.updatePluginState)(datasource, "abc", "A", state1);
+            const commitA = await (0, repoapi_1.writeRepoCommit)(datasource, "abc", "A");
+            const state2 = {
+                aSet: [
+                    {
+                        mainKey: "key1",
+                        someProp: {
+                            value: 1,
+                        },
+                    },
+                    {
+                        mainKey: "key1a",
+                        someProp: {
+                            value: 11,
+                        },
+                    },
+                    {
+                        mainKey: "key3",
+                        someProp: {
+                            value: 3,
+                        },
+                    },
+                    {
+                        mainKey: "key4",
+                        someProp: {
+                            value: 4,
+                        },
+                    },
+                    {
+                        mainKey: "key5",
+                        someProp: {
+                            value: 5,
+                        },
+                    },
+                ],
+            };
+            await (0, repoapi_1.updatePluginState)(datasource, "abc", "A", state2);
+            const commitB = await (0, repoapi_1.writeRepoCommit)(datasource, "abc", "B");
+            await (0, repoapi_1.checkoutSha)(datasource, "abc", commitA.sha);
+            await (0, repoapi_1.switchRepoBranch)(datasource, "abc", "feature-branch");
+            const state3 = {
+                aSet: [
+                    {
+                        mainKey: "key0",
+                        someProp: {
+                            value: 0,
+                        },
+                    },
+                    {
+                        mainKey: "key1",
+                        someProp: {
+                            value: 1,
+                        },
+                    },
+                    {
+                        mainKey: "key1a",
+                        someProp: {
+                            value: 12,
+                        },
+                    },
+                    {
+                        mainKey: "key3",
+                        someProp: {
+                            value: 3,
+                        },
+                    },
+                    {
+                        mainKey: "key4",
+                        someProp: {
+                            value: 4,
+                        },
+                    },
+                ],
+            };
+            await (0, repoapi_1.updatePluginState)(datasource, "abc", "A", state3);
+            await (0, repoapi_1.writeRepoCommit)(datasource, "abc", "C");
+            await (0, repoapi_1.mergeCommit)(datasource, "abc", commitB.sha);
+            await (0, repoapi_1.updateMergeDirection)(datasource, "abc", "theirs");
+            const resolvedOut = await (0, repoapi_1.resolveMerge)(datasource, "abc");
+            expect(resolvedOut).toEqual({
+                description: [],
+                licenses: [],
+                plugins: [
+                    {
+                        key: "A",
+                        value: "0.0.0",
+                    },
+                ],
+                store: {
+                    A: {
+                        aSet: [
+                            {
+                                mainKey: "key0",
+                                someProp: {
+                                    value: 0,
+                                },
+                            },
+                            {
+                                mainKey: "key1",
+                                someProp: {
+                                    value: 1,
+                                },
+                            },
+                            {
+                                mainKey: "key1a",
+                                someProp: {
+                                    value: 11,
+                                },
+                            },
+                            {
+                                mainKey: "key3",
+                                someProp: {
+                                    value: 3,
+                                },
+                            },
+                            {
+                                mainKey: "key4",
+                                someProp: {
+                                    value: 4,
+                                },
+                            },
+                            {
+                                mainKey: "key5",
+                                someProp: {
+                                    value: 5,
+                                },
+                            },
+                        ],
+                    },
+                },
+                binaries: [],
+            });
         });
     });
 });
