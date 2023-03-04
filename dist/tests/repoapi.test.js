@@ -579,7 +579,7 @@ describe("repoapi", () => {
                 ],
             };
             await (0, repoapi_1.updatePluginState)(datasource, "abc", "A", state4);
-            await (0, repoapi_1.writeRepoCommit)(datasource, "abc", "D");
+            const commitD = await (0, repoapi_1.writeRepoCommit)(datasource, "abc", "D");
             const state5 = {
                 aSet: [
                     {
@@ -1440,6 +1440,247 @@ describe("repoapi", () => {
                 binaries: [],
             });
         });
+    });
+    describe("cherrypick", () => {
+        test("auto fixes reversion when it can", async () => {
+            const PLUGIN_A_0_MANIFEST = {
+                name: "A",
+                version: "0.0.0",
+                displayName: "A",
+                icon: "",
+                imports: {},
+                types: {},
+                store: {
+                    aSet: {
+                        type: "set",
+                        values: {
+                            mainKey: {
+                                isKey: true,
+                                type: "string",
+                            },
+                            someProp: {
+                                value: {
+                                    type: "int",
+                                },
+                            },
+                        },
+                    },
+                },
+            };
+            (0, fsmocks_1.makeTestPlugin)(PLUGIN_A_0_MANIFEST);
+            const state1 = {
+                aSet: [
+                    {
+                        mainKey: "key1",
+                        someProp: {
+                            value: 1,
+                        },
+                    },
+                    {
+                        mainKey: "key3",
+                        someProp: {
+                            value: 3,
+                        },
+                    },
+                    {
+                        mainKey: "key4",
+                        someProp: {
+                            value: 4,
+                        },
+                    },
+                ],
+            };
+            let plugins = [
+                {
+                    key: "A",
+                    value: "0.0.0",
+                },
+            ];
+            await (0, repoapi_1.updatePlugins)(datasource, "abc", plugins);
+            await (0, repoapi_1.updatePluginState)(datasource, "abc", "A", state1);
+            await (0, repoapi_1.writeRepoCommit)(datasource, "abc", "A");
+            const state2 = {
+                aSet: [
+                    {
+                        mainKey: "key1",
+                        someProp: {
+                            value: 1,
+                        },
+                    },
+                    {
+                        mainKey: "key2",
+                        someProp: {
+                            value: 2,
+                        },
+                    },
+                    {
+                        mainKey: "key4",
+                        someProp: {
+                            value: 4,
+                        },
+                    },
+                    {
+                        mainKey: "key5",
+                        someProp: {
+                            value: 5,
+                        },
+                    },
+                    {
+                        mainKey: "key6",
+                        someProp: {
+                            value: 6,
+                        },
+                    },
+                    {
+                        mainKey: "key7",
+                        someProp: {
+                            value: 7,
+                        },
+                    },
+                ],
+            };
+            await (0, repoapi_1.updatePluginState)(datasource, "abc", "A", state2);
+            const commitB = await (0, repoapi_1.writeRepoCommit)(datasource, "abc", "B");
+            const state3 = {
+                aSet: [
+                    {
+                        mainKey: "key0",
+                        someProp: {
+                            value: 0,
+                        },
+                    },
+                    {
+                        mainKey: "key1",
+                        someProp: {
+                            value: 1,
+                        },
+                    },
+                    {
+                        mainKey: "key3",
+                        someProp: {
+                            value: 3,
+                        },
+                    },
+                    {
+                        mainKey: "key4",
+                        someProp: {
+                            value: 4,
+                        },
+                    },
+                    {
+                        mainKey: "key5",
+                        someProp: {
+                            value: 5,
+                        },
+                    },
+                ],
+            };
+            await (0, repoapi_1.updatePluginState)(datasource, "abc", "A", state3);
+            await (0, repoapi_1.writeRepoCommit)(datasource, "abc", "C");
+            const state4 = {
+                aSet: [
+                    {
+                        mainKey: "key0",
+                        someProp: {
+                            value: 0,
+                        },
+                    },
+                    {
+                        mainKey: "key1",
+                        someProp: {
+                            value: 1,
+                        },
+                    },
+                    {
+                        mainKey: "key3",
+                        someProp: {
+                            value: 3,
+                        },
+                    },
+                    {
+                        mainKey: "key4",
+                        someProp: {
+                            value: 4,
+                        },
+                    },
+                    {
+                        mainKey: "key5",
+                        someProp: {
+                            value: 5,
+                        },
+                    },
+                    {
+                        mainKey: "key6",
+                        someProp: {
+                            value: 6,
+                        },
+                    },
+                ],
+            };
+            await (0, repoapi_1.updatePluginState)(datasource, "abc", "A", state4);
+            const cherryPickedState = await (0, repoapi_1.cherryPickRevision)(datasource, "abc", commitB.sha);
+            expect(cherryPickedState).toEqual({
+                description: [],
+                licenses: [],
+                plugins: [
+                    {
+                        key: "A",
+                        value: "0.0.0",
+                    },
+                ],
+                store: {
+                    A: {
+                        aSet: [
+                            {
+                                mainKey: "key0",
+                                someProp: {
+                                    value: 0,
+                                },
+                            },
+                            {
+                                mainKey: "key1",
+                                someProp: {
+                                    value: 1,
+                                },
+                            },
+                            {
+                                mainKey: "key2",
+                                someProp: {
+                                    value: 2,
+                                },
+                            },
+                            {
+                                mainKey: "key4",
+                                someProp: {
+                                    value: 4,
+                                },
+                            },
+                            {
+                                mainKey: "key5",
+                                someProp: {
+                                    value: 5,
+                                },
+                            },
+                            {
+                                mainKey: "key6",
+                                someProp: {
+                                    value: 6,
+                                },
+                            },
+                            {
+                                mainKey: "key7",
+                                someProp: {
+                                    value: 7,
+                                },
+                            },
+                        ],
+                    },
+                },
+                binaries: [],
+            });
+        });
+    });
+    describe("rollback", () => {
     });
 });
 //# sourceMappingURL=repoapi.test.js.map

@@ -28,6 +28,7 @@ export interface CommitData {
     parent: string | null;
     historicalParent: string | null;
     mergeBase?: string | null;
+    mergeRevertSha?: string | null;
     idx: number;
     message: string;
 }

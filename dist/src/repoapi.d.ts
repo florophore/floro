@@ -38,3 +38,6 @@ export declare const hasMergeConclictDiff: (datasource: DataSource, repoId: stri
 export declare const revertCommit: (datasource: DataSource, repoId: string, reversionSha: string) => Promise<RenderedApplicationState>;
 export declare const canAutofxReversion: (datasource: DataSource, repoId: string, reversionSha: string) => Promise<boolean>;
 export declare const autofixReversion: (datasource: DataSource, repoId: string, reversionSha: string) => Promise<RenderedApplicationState>;
+export declare const cherryPickRevision: (datasource: DataSource, repoId: string, cherryPickedSha: string) => Promise<RenderedApplicationState>;
+export declare const canCherryPickRevision: (datasource: DataSource, repoId: string, cherryPickedSha: string) => Promise<boolean>;
+export declare const rollbackCommit: (datasource: DataSource, repoId: string) => Promise<RenderedApplicationState>;

@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.autofixReversion = exports.canAutofxReversion = exports.revertCommit = exports.hasMergeConclictDiff = exports.getMergeConflictDiff = exports.resolveMerge = exports.abortMerge = exports.updateMergeDirection = exports.mergeCommit = exports.updatePluginState = exports.updatePlugins = exports.checkoutSha = exports.checkoutBranch = exports.writeRepoCommit = exports.readBranchState = exports.readCommitState = exports.readCurrentState = exports.readCommitHistory = exports.readBranchHistory = exports.readCurrentHistory = exports.readRepoCommit = exports.readLastCommit = exports.readSettings = exports.switchRepoBranch = exports.getRepoBranches = exports.getCurrentRepoBranch = exports.readRepoDescription = exports.readRepoLicenses = exports.writeRepoLicenses = exports.writeRepoDescription = void 0;
+exports.rollbackCommit = exports.canCherryPickRevision = exports.cherryPickRevision = exports.autofixReversion = exports.canAutofxReversion = exports.revertCommit = exports.hasMergeConclictDiff = exports.getMergeConflictDiff = exports.resolveMerge = exports.abortMerge = exports.updateMergeDirection = exports.mergeCommit = exports.updatePluginState = exports.updatePlugins = exports.checkoutSha = exports.checkoutBranch = exports.writeRepoCommit = exports.readBranchState = exports.readCommitState = exports.readCurrentState = exports.readCommitHistory = exports.readBranchHistory = exports.readCurrentHistory = exports.readRepoCommit = exports.readLastCommit = exports.readSettings = exports.switchRepoBranch = exports.getRepoBranches = exports.getCurrentRepoBranch = exports.readRepoDescription = exports.readRepoLicenses = exports.writeRepoLicenses = exports.writeRepoDescription = void 0;
 const path_1 = __importDefault(require("path"));
 const filestructure_1 = require("./filestructure");
 const repo_1 = require("./repo");
@@ -743,17 +743,32 @@ const mergeCommit = async (datasource, repoId, fromSha) => {
             const history = await (0, repo_1.getHistory)(datasource, repoId, currentRepoState.commit);
             const mergeState = await (0, repo_1.getMergedCommitState)(datasource, fromCommitState, intoCommitState, originCommit);
             if (originSha == currentRepoState.commit) {
-                await (0, repo_1.updateCurrentCommitSHA)(datasource, repoId, fromSha, false);
+                const currentCommit = await datasource.readCommit(repoId, currentRepoState.commit);
+                const fromCommit = await datasource.readCommit(repoId, fromSha);
+                // NEED TO ADD BASE SHA HERE FOR ROLLBACK
+                const mergeCommit = {
+                    parent: fromSha,
+                    historicalParent: fromSha,
+                    idx: fromCommit.idx + 1,
+                    message: `Merge [${fromSha}] into [${currentRepoState.commit}]`,
+                    mergeBase: currentCommit.sha,
+                    userId: user.id,
+                    timestamp: new Date().toString(),
+                    diff: repo_1.EMPTY_COMMIT_DIFF,
+                };
+                mergeCommit.sha = (0, versioncontrol_1.getDiffHash)(mergeCommit);
+                await datasource.saveCommit(repoId, mergeCommit.sha, mergeCommit);
+                await (0, repo_1.updateCurrentCommitSHA)(datasource, repoId, mergeCommit.sha, false);
                 if (currentRepoState.branch) {
                     const branchState = await datasource.readBranch(repoId, currentRepoState.branch);
-                    await (0, repo_1.updateCurrentCommitSHA)(datasource, repoId, fromSha, false);
+                    await (0, repo_1.updateCurrentCommitSHA)(datasource, repoId, mergeCommit.sha, false);
                     await datasource.saveBranch(repoId, currentRepoState.branch, {
                         ...branchState,
-                        lastCommit: fromSha,
+                        lastCommit: mergeCommit.sha,
                     });
                 }
                 else {
-                    await (0, repo_1.updateCurrentCommitSHA)(datasource, repoId, fromSha, false);
+                    await (0, repo_1.updateCurrentCommitSHA)(datasource, repoId, mergeCommit.sha, false);
                 }
                 if (!(0, repo_1.diffIsEmpty)(currentDiff) && canAutoMergeOnTopOfCurrentState) {
                     const mergeCurrState = await (0, repo_1.getMergedCommitState)(datasource, mergeState, currentKVState, intoCommitState);
@@ -1210,4 +1225,76 @@ const autofixReversion = async (datasource, repoId, reversionSha) => {
     }
 };
 exports.autofixReversion = autofixReversion;
+const cherryPickRevision = async (datasource, repoId, cherryPickedSha) => {
+    try {
+        const currentAppState = await (0, repo_1.getApplicationState)(datasource, repoId);
+        const currentKVState = await (0, repo_1.convertRenderedCommitStateToKv)(datasource, currentAppState);
+        const cherryPickedCommit = await datasource.readCommit(repoId, cherryPickedSha);
+        if (!cherryPickedCommit) {
+            return null;
+        }
+        const beforeCherryPickedSha = cherryPickedCommit?.parent ?? null;
+        const cherryPickedState = await (0, repo_1.getCommitState)(datasource, repoId, cherryPickedSha);
+        const beforeCherryPickedState = await (0, repo_1.getCommitState)(datasource, repoId, beforeCherryPickedSha);
+        const canCherryPick = await (0, repo_1.canAutoMergeCommitStates)(datasource, cherryPickedState, currentKVState, beforeCherryPickedState);
+        if (!canCherryPick) {
+            return null;
+        }
+        const updatedState = await (0, repo_1.getMergedCommitState)(datasource, cherryPickedState, currentKVState, beforeCherryPickedState);
+        const renderedState = await (0, repo_1.convertCommitStateToRenderedState)(datasource, updatedState);
+        return await datasource.saveRenderedState(repoId, renderedState);
+    }
+    catch (e) {
+        return null;
+    }
+};
+exports.cherryPickRevision = cherryPickRevision;
+const canCherryPickRevision = async (datasource, repoId, cherryPickedSha) => {
+    try {
+        const currentAppState = await (0, repo_1.getApplicationState)(datasource, repoId);
+        const currentKVState = await (0, repo_1.convertRenderedCommitStateToKv)(datasource, currentAppState);
+        const cherryPickedCommit = await datasource.readCommit(repoId, cherryPickedSha);
+        if (!cherryPickedCommit) {
+            return false;
+        }
+        const beforeCherryPickedSha = cherryPickedCommit?.parent ?? null;
+        const cherryPickedState = await (0, repo_1.getCommitState)(datasource, repoId, cherryPickedSha);
+        const beforeCherryPickedState = await (0, repo_1.getCommitState)(datasource, repoId, beforeCherryPickedSha);
+        const canCherryPick = await (0, repo_1.canAutoMergeCommitStates)(datasource, cherryPickedState, currentKVState, beforeCherryPickedState);
+        return canCherryPick;
+    }
+    catch (e) {
+        return null;
+    }
+};
+exports.canCherryPickRevision = canCherryPickRevision;
+const rollbackCommit = async (datasource, repoId) => {
+    try {
+        const currentRepoState = await datasource.readCurrentRepoState(repoId);
+        const currentAppState = await (0, repo_1.getApplicationState)(datasource, repoId);
+        const currentKVState = await (0, repo_1.convertRenderedCommitStateToKv)(datasource, currentAppState);
+        const unstagedState = await (0, repo_1.getUnstagedCommitState)(datasource, repoId);
+        const currentDiff = (0, repo_1.getStateDiffFromCommitStates)(unstagedState, currentKVState);
+        if (!(0, repo_1.diffIsEmpty)(currentDiff)) {
+            return null;
+        }
+        const currentCommit = await datasource.readCommit(repoId, currentRepoState.commit);
+        const rollbackSha = currentCommit?.mergeBase ?? currentCommit?.parent ?? null;
+        const parentKVState = await (0, repo_1.getCommitState)(datasource, repoId, rollbackSha);
+        if (currentRepoState.branch) {
+            const branchState = await datasource.readBranch(repoId, currentRepoState.branch);
+            await datasource.saveBranch(repoId, currentRepoState.branch, {
+                ...branchState,
+                lastCommit: rollbackSha,
+            });
+        }
+        await (0, repo_1.updateCurrentCommitSHA)(datasource, repoId, rollbackSha, false);
+        const renderedState = await (0, repo_1.convertCommitStateToRenderedState)(datasource, parentKVState);
+        return await datasource.saveRenderedState(repoId, renderedState);
+    }
+    catch (e) {
+        return null;
+    }
+};
+exports.rollbackCommit = rollbackCommit;
 //# sourceMappingURL=repoapi.js.map

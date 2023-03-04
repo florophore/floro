@@ -236,6 +236,9 @@ const getHistory = async (datasource, repoId, sha) => {
             sha,
             idx: commit.idx,
             message: commit.message,
+            mergeBase: commit.mergeBase,
+            parent: commit.parent,
+            historicalParent: commit.historicalParent,
         },
         ...history,
     ];
@@ -525,7 +528,7 @@ const convertCommitStateToRenderedState = async (datasource, appKVState) => {
     const store = await (0, exports.buildStateStore)(datasource, appKVState);
     return {
         ...appKVState,
-        store
+        store,
     };
 };
 exports.convertCommitStateToRenderedState = convertCommitStateToRenderedState;
@@ -627,21 +630,21 @@ const getStateDiffFromCommitStates = (beforeKVState, afterKVState) => {
     const stateDiff = {
         plugins: {
             add: {},
-            remove: {}
+            remove: {},
         },
         binaries: {
             add: {},
-            remove: {}
+            remove: {},
         },
         store: {},
         licenses: {
             add: {},
-            remove: {}
+            remove: {},
         },
         description: {
             add: {},
-            remove: {}
-        }
+            remove: {},
+        },
     };
     const pluginsToTraverse = Array.from([
         ...Object.keys(beforeKVState.store),

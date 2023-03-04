@@ -1,7 +1,6 @@
 import axios from "axios";
 import fs, { createWriteStream, existsSync } from "fs";
 import path from "path";
-import { Namespace } from "socket.io";
 import tar from "tar";
 import { DataSource } from "./datasource";
 import {
@@ -87,7 +86,7 @@ export interface RepoState {
     fromSha: string;
     intoSha: string;
     originSha: string;
-    direction: "yours"|"theirs";
+    direction: "yours" | "theirs";
   };
 }
 
@@ -101,6 +100,9 @@ export interface Branch {
 
 export interface CommitHistory {
   sha: null | string;
+  parent: null | string;
+  historicalParent: null | string;
+  mergeBase: null | string;
   idx: number;
   message: string;
 }
@@ -343,6 +345,9 @@ export const getHistory = async (
       sha,
       idx: commit.idx,
       message: commit.message,
+      mergeBase: commit.mergeBase,
+      parent: commit.parent,
+      historicalParent: commit.historicalParent,
     },
     ...history,
   ];
@@ -353,7 +358,7 @@ export const getBaseDivergenceSha = (
   origin: CommitData
 ): CommitHistory => {
   if (!origin) {
-    return null
+    return null;
   }
   const baseIdx = origin.idx + 1;
   for (const commit of history) {
@@ -473,7 +478,10 @@ export const applyStateDiffToCommitState = (
     }
     return {
       ...acc,
-      [namespace]: applyDiff(stateDiff[namespace], applicationKVState[namespace]),
+      [namespace]: applyDiff(
+        stateDiff[namespace],
+        applicationKVState[namespace]
+      ),
     };
   }, applicationKVState);
 };
@@ -534,7 +542,7 @@ export const convertRenderedCommitStateToKv = async (
       );
       continue;
     }
-    out[prop] = renderedAppState[prop]
+    out[prop] = renderedAppState[prop];
   }
   return out;
 };
@@ -561,7 +569,10 @@ export const updateCurrentCommitSHA = async (
     };
     const nextState = await datasource.saveCurrentRepoState(repoId, updated);
     const unrenderedState = await getCommitState(datasource, repoId, sha);
-    const renderedState = await convertCommitStateToRenderedState(datasource, unrenderedState);
+    const renderedState = await convertCommitStateToRenderedState(
+      datasource,
+      unrenderedState
+    );
     await datasource.saveRenderedState(repoId, renderedState);
     return nextState;
   } catch (e) {
@@ -592,7 +603,10 @@ export const updateCurrentWithSHA = async (
     };
     const nextState = await datasource.saveCurrentRepoState(repoId, updated);
     const unrenderedState = await getCommitState(datasource, repoId, sha);
-    const renderedState = await convertCommitStateToRenderedState(datasource, unrenderedState);
+    const renderedState = await convertCommitStateToRenderedState(
+      datasource,
+      unrenderedState
+    );
     await datasource.saveRenderedState(repoId, renderedState);
     return nextState;
   } catch (e) {
@@ -617,8 +631,15 @@ export const updateCurrentWithNewBranch = async (
       branch: branchName,
     };
     await datasource.saveCurrentRepoState(repoId, updated);
-    const unrenderedState = await getCommitState(datasource, repoId, branch.lastCommit);
-    const renderedState = await convertCommitStateToRenderedState(datasource, unrenderedState);
+    const unrenderedState = await getCommitState(
+      datasource,
+      repoId,
+      branch.lastCommit
+    );
+    const renderedState = await convertCommitStateToRenderedState(
+      datasource,
+      unrenderedState
+    );
     await datasource.saveRenderedState(repoId, renderedState);
     return updated;
   } catch (e) {
@@ -708,7 +729,10 @@ export const convertRenderedStateStoreToKV = async (
   renderedAppState: RenderedApplicationState
 ): Promise<RawStore> => {
   let out = {};
-  const manifests = await getPluginManifests(datasource, renderedAppState.plugins);
+  const manifests = await getPluginManifests(
+    datasource,
+    renderedAppState.plugins
+  );
   for (const pluginManifest of manifests) {
     const schemaMap = await getSchemaMapForManifest(datasource, pluginManifest);
     const kv = await getKVStateForPlugin(
@@ -729,9 +753,9 @@ export const convertCommitStateToRenderedState = async (
   const store = await buildStateStore(datasource, appKVState);
   return {
     ...appKVState,
-    store
-  }
-}
+    store,
+  };
+};
 
 export const tokenizeCommitState = (
   appKVState: ApplicationKVState
@@ -852,22 +876,22 @@ export const getStateDiffFromCommitStates = (
   const stateDiff: StateDiff = {
     plugins: {
       add: {},
-      remove: {}
+      remove: {},
     },
     binaries: {
       add: {},
-      remove: {}
+      remove: {},
     },
     store: {},
     licenses: {
       add: {},
-      remove: {}
+      remove: {},
     },
     description: {
       add: {},
-      remove: {}
-    }
-  }
+      remove: {},
+    },
+  };
   const pluginsToTraverse = Array.from([
     ...Object.keys(beforeKVState.store),
     ...Object.keys(afterKVState.store),
@@ -892,7 +916,10 @@ export const getStateDiffFromCommitStates = (
       continue;
     }
 
-    const diff = getDiff(beforeKVState?.[prop] ?? [], afterKVState?.[prop] ?? []);
+    const diff = getDiff(
+      beforeKVState?.[prop] ?? [],
+      afterKVState?.[prop] ?? []
+    );
     stateDiff[prop] = diff;
   }
   return stateDiff;
@@ -938,7 +965,10 @@ export const getCommitStateDiffList = (
       continue;
     }
 
-    const diff = getDiff(beforeKVState?.[prop] ?? [], afterKVState?.[prop] ?? []);
+    const diff = getDiff(
+      beforeKVState?.[prop] ?? [],
+      afterKVState?.[prop] ?? []
+    );
     diffList.push({
       diff,
       namespace: prop,
@@ -1043,8 +1073,10 @@ export const getMergedCommitState = async (
   direction: "yours" | "theirs" = "yours"
 ): Promise<ApplicationKVState> => {
   try {
-    const [tokenizedCommitFrom, tokenizedStoreFrom] = tokenizeCommitState(fromState);
-    const [tokenizedCommitInto, tokenizedStoreInto] = tokenizeCommitState(intoState);
+    const [tokenizedCommitFrom, tokenizedStoreFrom] =
+      tokenizeCommitState(fromState);
+    const [tokenizedCommitInto, tokenizedStoreInto] =
+      tokenizeCommitState(intoState);
     const [tokenizedOrigin] = tokenizeCommitState(originCommit);
 
     const tokenizedDescription = getMergeSequence(
@@ -1136,20 +1168,23 @@ export const canAutoMergeOnTopCurrentState = async (
 ) => {
   try {
     const currentRenderedState = await datasource.readRenderedState(repoId);
-    const currentAppKVstate = await convertRenderedCommitStateToKv(datasource, currentRenderedState);
+    const currentAppKVstate = await convertRenderedCommitStateToKv(
+      datasource,
+      currentRenderedState
+    );
     const repoState = await datasource.readCurrentRepoState(repoId);
     const mergeState = await getCommitState(datasource, repoId, mergeSha);
     const { originCommit } = await getMergeCommitStates(
       datasource,
       repoId,
       repoState.commit,
-      mergeSha,
+      mergeSha
     );
     return await canAutoMergeCommitStates(
       datasource,
       currentAppKVstate,
       mergeState,
-      originCommit,
+      originCommit
     );
   } catch (e) {
     return null;

@@ -84,6 +84,9 @@ export interface Branch {
 }
 export interface CommitHistory {
     sha: null | string;
+    parent: null | string;
+    historicalParent: null | string;
+    mergeBase: null | string;
     idx: number;
     message: string;
 }
