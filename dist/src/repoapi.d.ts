@@ -35,3 +35,6 @@ export declare const abortMerge: (datasource: DataSource, repoId: string) => Pro
 export declare const resolveMerge: (datasource: DataSource, repoId: string) => Promise<RenderedApplicationState>;
 export declare const getMergeConflictDiff: (datasource: DataSource, repoId: string) => Promise<import("./repo").StateDiff>;
 export declare const hasMergeConclictDiff: (datasource: DataSource, repoId: string) => Promise<boolean>;
+export declare const revertCommit: (datasource: DataSource, repoId: string, reversionSha: string) => Promise<RenderedApplicationState>;
+export declare const canAutofxReversion: (datasource: DataSource, repoId: string, reversionSha: string) => Promise<boolean>;
+export declare const autofixReversion: (datasource: DataSource, repoId: string, reversionSha: string) => Promise<RenderedApplicationState>;

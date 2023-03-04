@@ -13,6 +13,7 @@ import {
   getCurrentCommitSha,
   getCommitState,
   convertCommitStateToRenderedState,
+  convertStateStoreToKV,
 } from "../src/repo";
 import {
   checkoutSha,
@@ -31,6 +32,8 @@ import {
   abortMerge,
   resolveMerge,
   readLastCommit,
+  revertCommit,
+  autofixReversion,
 } from "../src/repoapi";
 import {
   createBlankRepo,
@@ -1160,6 +1163,389 @@ describe("repoapi", () => {
                 mainKey: "key4",
                 someProp: {
                   value: 4,
+                },
+              },
+              {
+                mainKey: "key5",
+                someProp: {
+                  value: 5,
+                },
+              },
+            ],
+          },
+        },
+        binaries: [],
+      });
+    });
+  });
+
+  describe("reversion", () => {
+    test("can revert past changes", async () => {
+      const PLUGIN_A_0_MANIFEST: Manifest = {
+        name: "A",
+        version: "0.0.0",
+        displayName: "A",
+        icon: "",
+        imports: {},
+        types: {},
+        store: {
+          aSet: {
+            type: "set",
+            values: {
+              mainKey: {
+                isKey: true,
+                type: "string",
+              },
+              someProp: {
+                value: {
+                  type: "int",
+                },
+              },
+            },
+          },
+        },
+      };
+      makeTestPlugin(PLUGIN_A_0_MANIFEST);
+      const state1 = {
+        aSet: [
+          {
+            mainKey: "key1",
+            someProp: {
+              value: 1,
+            },
+          },
+          {
+            mainKey: "key2",
+            someProp: {
+              value: 2,
+            },
+          },
+          {
+            mainKey: "key3",
+            someProp: {
+              value: 3,
+            },
+          },
+          {
+            mainKey: "key4",
+            someProp: {
+              value: 4,
+            },
+          },
+        ],
+      };
+      let plugins: PluginElement[] = [
+        {
+          key: "A",
+          value: "0.0.0",
+        },
+      ];
+      await updatePlugins(datasource, "abc", plugins);
+      await updatePluginState(datasource, "abc", "A", state1);
+      const commitA = await writeRepoCommit(datasource, "abc", "A");
+      const aCommitState = await getCommitState(datasource, "abc", commitA.sha);
+      const aStateRendered = await convertCommitStateToRenderedState(
+        datasource,
+        aCommitState
+      );
+
+      const state2 = {
+        aSet: [
+          {
+            mainKey: "key1",
+            someProp: {
+              value: 1,
+            },
+          },
+          {
+            mainKey: "key1a",
+            someProp: {
+              value: 11,
+            },
+          },
+          {
+            mainKey: "key3",
+            someProp: {
+              value: 3,
+            },
+          },
+          {
+            mainKey: "key4",
+            someProp: {
+              value: 4,
+            },
+          },
+        ],
+      };
+      await updatePluginState(datasource, "abc", "A", state2);
+      const commitB = await writeRepoCommit(datasource, "abc", "B");
+      const state3 = {
+        aSet: [
+          {
+            mainKey: "key0",
+            someProp: {
+              value: 0,
+            },
+          },
+          {
+            mainKey: "key1",
+            someProp: {
+              value: 1,
+            },
+          },
+          {
+            mainKey: "key2",
+            someProp: {
+              value: 2,
+            },
+          },
+          {
+            mainKey: "key3",
+            someProp: {
+              value: 36,
+            },
+          },
+          {
+            mainKey: "key5",
+            someProp: {
+              value: 5,
+            },
+          },
+        ],
+      };
+      await updatePluginState(datasource, "abc", "A", state3);
+      const commitC = await writeRepoCommit(datasource, "abc", "C");
+      const cCommitState = await getCommitState(datasource, "abc", commitC.sha);
+      const cStateRendered = await convertCommitStateToRenderedState(
+        datasource,
+        cCommitState
+      );
+
+      expect(await getApplicationState(datasource, "abc")).toEqual(
+        cStateRendered
+      );
+      const reversionState = await revertCommit(datasource, "abc", commitB.sha);
+      expect(reversionState).toEqual(aStateRendered);
+    });
+  });
+
+  describe("autofix", () => {
+    test("auto fixes reversion when it can", async () => {
+      const PLUGIN_A_0_MANIFEST: Manifest = {
+        name: "A",
+        version: "0.0.0",
+        displayName: "A",
+        icon: "",
+        imports: {},
+        types: {},
+        store: {
+          aSet: {
+            type: "set",
+            values: {
+              mainKey: {
+                isKey: true,
+                type: "string",
+              },
+              someProp: {
+                value: {
+                  type: "int",
+                },
+              },
+            },
+          },
+        },
+      };
+      makeTestPlugin(PLUGIN_A_0_MANIFEST);
+      const state1 = {
+        aSet: [
+          {
+            mainKey: "key1",
+            someProp: {
+              value: 1,
+            },
+          },
+          {
+            mainKey: "key2",
+            someProp: {
+              value: 2,
+            },
+          },
+          {
+            mainKey: "key3",
+            someProp: {
+              value: 3,
+            },
+          },
+          {
+            mainKey: "key4",
+            someProp: {
+              value: 4,
+            },
+          },
+        ],
+      };
+      let plugins: PluginElement[] = [
+        {
+          key: "A",
+          value: "0.0.0",
+        },
+      ];
+      await updatePlugins(datasource, "abc", plugins);
+      await updatePluginState(datasource, "abc", "A", state1);
+      await writeRepoCommit(datasource, "abc", "A");
+
+      const state2 = {
+        aSet: [
+          {
+            mainKey: "key1",
+            someProp: {
+              value: 1,
+            },
+          },
+          {
+            mainKey: "key1a",
+            someProp: {
+              value: 11,
+            },
+          },
+          {
+            mainKey: "key3",
+            someProp: {
+              value: 3,
+            },
+          },
+          {
+            mainKey: "key4",
+            someProp: {
+              value: 4,
+            },
+          },
+        ],
+      };
+      await updatePluginState(datasource, "abc", "A", state2);
+      const commitB = await writeRepoCommit(datasource, "abc", "B");
+      const state3 = {
+        aSet: [
+          {
+            mainKey: "key0",
+            someProp: {
+              value: 0,
+            },
+          },
+          {
+            mainKey: "key1",
+            someProp: {
+              value: 1,
+            },
+          },
+          {
+            mainKey: "key1a",
+            someProp: {
+              value: 11,
+            },
+          },
+          {
+            mainKey: "key3",
+            someProp: {
+              value: 36,
+            },
+          },
+          {
+            mainKey: "key5",
+            someProp: {
+              value: 5,
+            },
+          },
+        ],
+      };
+      await updatePluginState(datasource, "abc", "A", state3);
+      await writeRepoCommit(datasource, "abc", "C");
+      const autoReversionState = await autofixReversion(
+        datasource,
+        "abc",
+        commitB.sha
+      );
+      expect(autoReversionState).toEqual({
+        description: [],
+        licenses: [],
+        plugins: [
+          {
+            key: "A",
+            value: "0.0.0",
+          },
+        ],
+        store: {
+          A: {
+            aSet: [
+              {
+                mainKey: "key0",
+                someProp: {
+                  value: 0,
+                },
+              },
+              {
+                mainKey: "key1",
+                someProp: {
+                  value: 1,
+                },
+              },
+              {
+                mainKey: "key2",
+                someProp: {
+                  value: 2,
+                },
+              },
+              {
+                mainKey: "key3",
+                someProp: {
+                  value: 36,
+                },
+              },
+              {
+                mainKey: "key5",
+                someProp: {
+                  value: 5,
+                },
+              },
+            ],
+          },
+        },
+        binaries: [],
+      });
+      expect(autoReversionState).toEqual({
+        description: [],
+        licenses: [],
+        plugins: [
+          {
+            key: "A",
+            value: "0.0.0",
+          },
+        ],
+        store: {
+          A: {
+            aSet: [
+              {
+                mainKey: "key0",
+                someProp: {
+                  value: 0,
+                },
+              },
+              {
+                mainKey: "key1",
+                someProp: {
+                  value: 1,
+                },
+              },
+              {
+                mainKey: "key2",
+                someProp: {
+                  value: 2,
+                },
+              },
+              {
+                mainKey: "key3",
+                someProp: {
+                  value: 36,
                 },
               },
               {

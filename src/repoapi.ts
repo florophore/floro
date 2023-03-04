@@ -1390,3 +1390,252 @@ export const hasMergeConclictDiff = async (datasource: DataSource, repoId: strin
     return null;
   }
 };
+
+export const revertCommit = async (datasource: DataSource, repoId: string, reversionSha: string) => {
+  try {
+    const user = await getUserAsync();
+    if (!user.id) {
+      return null;
+    }
+    const currentRepoState = await datasource.readCurrentRepoState(repoId);
+    if (currentRepoState.isInMergeConflict) {
+      return null;
+    }
+    if (!currentRepoState.commit) {
+      return null;
+    }
+
+    const unstagedState = await getUnstagedCommitState(datasource, repoId)
+    const currentAppState = await getApplicationState(datasource, repoId);
+    const currentKVState = await convertRenderedCommitStateToKv(
+      datasource,
+      currentAppState
+    );
+    const currentDiff = getStateDiffFromCommitStates(unstagedState, currentKVState);
+    if (!diffIsEmpty(currentDiff)) {
+      return null;
+    }
+    const history = await getHistory(datasource, repoId, currentRepoState.commit);
+    const commitToRevert = await datasource.readCommit(repoId, reversionSha);
+    if (!commitToRevert || history[commitToRevert.idx].sha != reversionSha) {
+      return null;
+    }
+    let shaBeforeReversion = history[commitToRevert.idx + 1]?.sha ?? null;
+    const reversionState = await getCommitState(datasource, repoId, shaBeforeReversion);
+    const revertingCommit = await datasource.readCommit(repoId, shaBeforeReversion);
+    const currentCommit = await datasource.readCommit(repoId, currentRepoState.commit);
+
+    const reversionDiff = getStateDiffFromCommitStates(unstagedState, reversionState);
+
+    const revertCommit: CommitData = {
+      parent: currentCommit.sha,
+      historicalParent: currentCommit.sha,
+      idx: currentCommit.idx + 1,
+      message: `Revert [${reversionSha}]: (message) ${commitToRevert.message}`,
+      userId: user.id,
+      authorUserId: revertingCommit.authorUserId,
+      timestamp: new Date().toString(),
+      diff: reversionDiff,
+    };
+    revertCommit.sha = getDiffHash(revertCommit);
+    await datasource.saveCommit(repoId, revertCommit.sha, revertCommit);
+    if (currentRepoState.branch) {
+      const branchState = await datasource.readBranch(
+        repoId,
+        currentRepoState.branch
+      );
+      await datasource.saveBranch(repoId, currentRepoState.branch, {
+        ...branchState,
+        lastCommit: revertCommit.sha,
+      });
+    }
+    await updateCurrentCommitSHA(datasource, repoId, revertCommit.sha, false);
+    const renderedState = await convertCommitStateToRenderedState(
+      datasource,
+      reversionState
+    );
+    const state = await datasource.saveRenderedState(repoId, renderedState);
+    return state;
+  } catch(e) {
+    return null;
+  }
+}
+
+export const canAutofxReversion = async (
+  datasource: DataSource,
+  repoId: string,
+  reversionSha: string
+) => {
+  try {
+    const user = await getUserAsync();
+    if (!user.id) {
+      return null;
+    }
+    const currentRepoState = await datasource.readCurrentRepoState(repoId);
+    if (currentRepoState.isInMergeConflict) {
+      return null;
+    }
+    if (!currentRepoState.commit) {
+      return null;
+    }
+
+    const unstagedState = await getUnstagedCommitState(datasource, repoId);
+    const currentAppState = await getApplicationState(datasource, repoId);
+    const currentKVState = await convertRenderedCommitStateToKv(
+      datasource,
+      currentAppState
+    );
+    const currentDiff = getStateDiffFromCommitStates(
+      unstagedState,
+      currentKVState
+    );
+    if (!diffIsEmpty(currentDiff)) {
+      return false;
+    }
+    const history = await getHistory(
+      datasource,
+      repoId,
+      currentRepoState.commit
+    );
+    const commitToRevert = await datasource.readCommit(repoId, reversionSha);
+    if (!commitToRevert || history[commitToRevert.idx].sha != reversionSha) {
+      return false;
+    }
+    let shaBeforeReversion = history[commitToRevert.idx + 1]?.sha ?? null;
+    const beforeReversionState = await getCommitState(
+      datasource,
+      repoId,
+      shaBeforeReversion
+    );
+    const reversionState = await getCommitState(
+      datasource,
+      repoId,
+      reversionSha
+    );
+
+    const canAutoFix = await canAutoMergeCommitStates(
+      datasource,
+      currentKVState, //theirs
+      beforeReversionState, //yours
+      reversionState //origin
+    );
+    return canAutoFix;
+  } catch (e) {
+    return null;
+  }
+};
+
+export const autofixReversion = async (
+  datasource: DataSource,
+  repoId: string,
+  reversionSha: string
+) => {
+  try {
+    const user = await getUserAsync();
+    if (!user.id) {
+      return null;
+    }
+    const currentRepoState = await datasource.readCurrentRepoState(repoId);
+    if (currentRepoState.isInMergeConflict) {
+      return null;
+    }
+    if (!currentRepoState.commit) {
+      return null;
+    }
+
+    const unstagedState = await getUnstagedCommitState(datasource, repoId);
+    const currentAppState = await getApplicationState(datasource, repoId);
+    const currentKVState = await convertRenderedCommitStateToKv(
+      datasource,
+      currentAppState
+    );
+    const currentDiff = getStateDiffFromCommitStates(
+      unstagedState,
+      currentKVState
+    );
+    if (!diffIsEmpty(currentDiff)) {
+      return null;
+    }
+    const history = await getHistory(
+      datasource,
+      repoId,
+      currentRepoState.commit
+    );
+    const commitToRevert = await datasource.readCommit(repoId, reversionSha);
+    if (!commitToRevert || history[commitToRevert.idx].sha != reversionSha) {
+      return null;
+    }
+    let shaBeforeReversion = history[commitToRevert.idx + 1]?.sha ?? null;
+    const beforeReversionState = await getCommitState(
+      datasource,
+      repoId,
+      shaBeforeReversion
+    );
+    const reversionState = await getCommitState(
+      datasource,
+      repoId,
+      reversionSha
+    );
+
+    const canAutoFix = await canAutoMergeCommitStates(
+      datasource,
+      currentKVState, //theirs
+      beforeReversionState, //yours
+      reversionState //origin
+    );
+    if (!canAutoFix) {
+      return null;
+    }
+
+    const revertingCommit = await datasource.readCommit(repoId, reversionSha);
+
+    const autoFixState = await getMergedCommitState(
+      datasource,
+      currentKVState, //theirs
+      beforeReversionState, //yours
+      reversionState //origin
+    );
+
+    const currentCommit = await datasource.readCommit(
+      repoId,
+      currentRepoState.commit
+    );
+
+    const autofixDiff = getStateDiffFromCommitStates(
+      unstagedState,
+      autoFixState
+    );
+
+    const autofixCommit: CommitData = {
+      parent: currentCommit.sha,
+      historicalParent: currentCommit.sha,
+      idx: currentCommit.idx + 1,
+      message: `Autofix [${reversionSha}]: (message) ${commitToRevert.message}`,
+      userId: user.id,
+      authorUserId: revertingCommit.authorUserId,
+      timestamp: new Date().toString(),
+      diff: autofixDiff,
+    };
+    autofixCommit.sha = getDiffHash(autofixCommit);
+    await datasource.saveCommit(repoId, autofixCommit.sha, autofixCommit);
+    if (currentRepoState.branch) {
+      const branchState = await datasource.readBranch(
+        repoId,
+        currentRepoState.branch
+      );
+      await datasource.saveBranch(repoId, currentRepoState.branch, {
+        ...branchState,
+        lastCommit: autofixCommit.sha,
+      });
+    }
+    await updateCurrentCommitSHA(datasource, repoId, autofixCommit.sha, false);
+    const renderedState = await convertCommitStateToRenderedState(
+      datasource,
+      autoFixState
+    );
+    const state = await datasource.saveRenderedState(repoId, renderedState);
+    return state;
+  } catch (e) {
+    return null;
+  }
+};
