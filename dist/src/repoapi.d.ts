@@ -41,3 +41,8 @@ export declare const autofixReversion: (datasource: DataSource, repoId: string, 
 export declare const cherryPickRevision: (datasource: DataSource, repoId: string, cherryPickedSha: string) => Promise<RenderedApplicationState>;
 export declare const canCherryPickRevision: (datasource: DataSource, repoId: string, cherryPickedSha: string) => Promise<boolean>;
 export declare const rollbackCommit: (datasource: DataSource, repoId: string) => Promise<RenderedApplicationState>;
+export declare const canStash: (datasource: DataSource, repoId: string) => Promise<boolean>;
+export declare const stashChanges: (datasource: DataSource, repoId: string) => Promise<RenderedApplicationState>;
+export declare const getStashSize: (datasource: DataSource, repoId: string) => Promise<number>;
+export declare const canPopStashedChanges: (datasource: DataSource, repoId: string) => Promise<boolean>;
+export declare const popStashedChanges: (datasource: DataSource, repoId: string) => Promise<RenderedApplicationState>;

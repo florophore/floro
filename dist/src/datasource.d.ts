@@ -22,6 +22,8 @@ export interface DataSource {
     deleteHotCheckpoint?(repoId: string): Promise<boolean>;
     readRenderedState?(repoId: string): Promise<RenderedApplicationState>;
     saveRenderedState?(repoId: string, commitState: RenderedApplicationState): Promise<RenderedApplicationState>;
+    readStash?(repoId: string, sha: string | null): Promise<Array<ApplicationKVState>>;
+    saveStash?(repoId: string, sha: string | null, stashState: Array<ApplicationKVState>): Promise<Array<ApplicationKVState>>;
 }
 /**
  * We need to export readDevPluginManifest for the daemon server
@@ -53,6 +55,8 @@ export declare const makeDataSource: (datasource?: DataSource) => {
     deleteHotCheckpoint?: (repoId: string) => Promise<boolean>;
     readRenderedState?: (repoId: string) => Promise<RenderedApplicationState>;
     saveRenderedState?: (repoId: string, commitState: RenderedApplicationState) => Promise<RenderedApplicationState>;
+    readStash?: (repoId: string, sha: string | null) => Promise<Array<ApplicationKVState>>;
+    saveStash?: (repoId: string, sha: string | null, stashState: Array<ApplicationKVState>) => Promise<Array<ApplicationKVState>>;
 };
 export declare const makeMemoizedDataSource: (dataSourceOverride?: DataSource) => {
     getPluginManifest?: (pluginName: string, pluginVersion: string) => Promise<Manifest>;
@@ -75,4 +79,6 @@ export declare const makeMemoizedDataSource: (dataSourceOverride?: DataSource) =
     deleteHotCheckpoint?: (repoId: string) => Promise<boolean>;
     readRenderedState?: (repoId: string) => Promise<RenderedApplicationState>;
     saveRenderedState?: (repoId: string, commitState: RenderedApplicationState) => Promise<RenderedApplicationState>;
+    readStash?: (repoId: string, sha: string | null) => Promise<Array<ApplicationKVState>>;
+    saveStash?: (repoId: string, sha: string | null, stashState: Array<ApplicationKVState>) => Promise<Array<ApplicationKVState>>;
 };

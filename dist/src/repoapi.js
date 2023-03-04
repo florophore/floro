@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.rollbackCommit = exports.canCherryPickRevision = exports.cherryPickRevision = exports.autofixReversion = exports.canAutofxReversion = exports.revertCommit = exports.hasMergeConclictDiff = exports.getMergeConflictDiff = exports.resolveMerge = exports.abortMerge = exports.updateMergeDirection = exports.mergeCommit = exports.updatePluginState = exports.updatePlugins = exports.checkoutSha = exports.checkoutBranch = exports.writeRepoCommit = exports.readBranchState = exports.readCommitState = exports.readCurrentState = exports.readCommitHistory = exports.readBranchHistory = exports.readCurrentHistory = exports.readRepoCommit = exports.readLastCommit = exports.readSettings = exports.switchRepoBranch = exports.getRepoBranches = exports.getCurrentRepoBranch = exports.readRepoDescription = exports.readRepoLicenses = exports.writeRepoLicenses = exports.writeRepoDescription = void 0;
+exports.popStashedChanges = exports.canPopStashedChanges = exports.getStashSize = exports.stashChanges = exports.canStash = exports.rollbackCommit = exports.canCherryPickRevision = exports.cherryPickRevision = exports.autofixReversion = exports.canAutofxReversion = exports.revertCommit = exports.hasMergeConclictDiff = exports.getMergeConflictDiff = exports.resolveMerge = exports.abortMerge = exports.updateMergeDirection = exports.mergeCommit = exports.updatePluginState = exports.updatePlugins = exports.checkoutSha = exports.checkoutBranch = exports.writeRepoCommit = exports.readBranchState = exports.readCommitState = exports.readCurrentState = exports.readCommitHistory = exports.readBranchHistory = exports.readCurrentHistory = exports.readRepoCommit = exports.readLastCommit = exports.readSettings = exports.switchRepoBranch = exports.getRepoBranches = exports.getCurrentRepoBranch = exports.readRepoDescription = exports.readRepoLicenses = exports.writeRepoLicenses = exports.writeRepoDescription = void 0;
 const path_1 = __importDefault(require("path"));
 const filestructure_1 = require("./filestructure");
 const repo_1 = require("./repo");
@@ -465,7 +465,6 @@ const writeRepoCommit = async (datasource, repoId, message) => {
             const branchState = await datasource.readBranch(repoId, currentState.branch);
             // be careful
             if (!branchState) {
-                //TODO: FIX THIS
                 return null;
             }
             await datasource.saveBranch(repoId, currentState.branch, {
@@ -790,7 +789,6 @@ const mergeCommit = async (datasource, repoId, fromSha) => {
                 : (0, repo_1.getBaseDivergenceSha)(history, origin);
             const mergeDiff = (0, repo_1.getStateDiffFromCommitStates)(fromCommitState, mergeState);
             const baseCommit = await (0, repo_1.getCommitState)(datasource, repoId, baseSha);
-            // m2
             const baseDiff = (0, repo_1.getStateDiffFromCommitStates)(intoCommitState, baseCommit);
             const baseCommitData = await datasource.readCommit(repoId, baseSha);
             const mergeCommitData = await datasource.readCommit(repoId, fromSha);
@@ -1083,7 +1081,6 @@ const revertCommit = async (datasource, repoId, reversionSha) => {
         }
         let shaBeforeReversion = history[commitToRevert.idx + 1]?.sha ?? null;
         const reversionState = await (0, repo_1.getCommitState)(datasource, repoId, shaBeforeReversion);
-        const revertingCommit = await datasource.readCommit(repoId, shaBeforeReversion);
         const currentCommit = await datasource.readCommit(repoId, currentRepoState.commit);
         const reversionDiff = (0, repo_1.getStateDiffFromCommitStates)(unstagedState, reversionState);
         const revertCommit = {
@@ -1092,7 +1089,7 @@ const revertCommit = async (datasource, repoId, reversionSha) => {
             idx: currentCommit.idx + 1,
             message: `Revert [${reversionSha}]: (message) ${commitToRevert.message}`,
             userId: user.id,
-            authorUserId: revertingCommit.authorUserId,
+            authorUserId: commitToRevert.authorUserId,
             timestamp: new Date().toString(),
             diff: reversionDiff,
         };
@@ -1143,9 +1140,9 @@ const canAutofxReversion = async (datasource, repoId, reversionSha) => {
         let shaBeforeReversion = history[commitToRevert.idx + 1]?.sha ?? null;
         const beforeReversionState = await (0, repo_1.getCommitState)(datasource, repoId, shaBeforeReversion);
         const reversionState = await (0, repo_1.getCommitState)(datasource, repoId, reversionSha);
-        const canAutoFix = await (0, repo_1.canAutoMergeCommitStates)(datasource, currentKVState, //theirs
-        beforeReversionState, //yours
-        reversionState //origin
+        const canAutoFix = await (0, repo_1.canAutoMergeCommitStates)(datasource, currentKVState, // yours
+        beforeReversionState, // theirs
+        reversionState // origin
         );
         return canAutoFix;
     }
@@ -1189,7 +1186,6 @@ const autofixReversion = async (datasource, repoId, reversionSha) => {
         if (!canAutoFix) {
             return null;
         }
-        const revertingCommit = await datasource.readCommit(repoId, reversionSha);
         const autoFixState = await (0, repo_1.getMergedCommitState)(datasource, currentKVState, //theirs
         beforeReversionState, //yours
         reversionState //origin
@@ -1202,7 +1198,7 @@ const autofixReversion = async (datasource, repoId, reversionSha) => {
             idx: currentCommit.idx + 1,
             message: `Autofix [${reversionSha}]: (message) ${commitToRevert.message}`,
             userId: user.id,
-            authorUserId: revertingCommit.authorUserId,
+            authorUserId: commitToRevert.authorUserId,
             timestamp: new Date().toString(),
             diff: autofixDiff,
         };
@@ -1240,7 +1236,10 @@ const cherryPickRevision = async (datasource, repoId, cherryPickedSha) => {
         if (!canCherryPick) {
             return null;
         }
-        const updatedState = await (0, repo_1.getMergedCommitState)(datasource, cherryPickedState, currentKVState, beforeCherryPickedState);
+        const updatedState = await (0, repo_1.getMergedCommitState)(datasource, cherryPickedState, // yours
+        currentKVState, // theirs
+        beforeCherryPickedState // origin
+        );
         const renderedState = await (0, repo_1.convertCommitStateToRenderedState)(datasource, updatedState);
         return await datasource.saveRenderedState(repoId, renderedState);
     }
@@ -1260,7 +1259,10 @@ const canCherryPickRevision = async (datasource, repoId, cherryPickedSha) => {
         const beforeCherryPickedSha = cherryPickedCommit?.parent ?? null;
         const cherryPickedState = await (0, repo_1.getCommitState)(datasource, repoId, cherryPickedSha);
         const beforeCherryPickedState = await (0, repo_1.getCommitState)(datasource, repoId, beforeCherryPickedSha);
-        const canCherryPick = await (0, repo_1.canAutoMergeCommitStates)(datasource, cherryPickedState, currentKVState, beforeCherryPickedState);
+        const canCherryPick = await (0, repo_1.canAutoMergeCommitStates)(datasource, cherryPickedState, // yours
+        currentKVState, // theirs
+        beforeCherryPickedState // origin
+        );
         return canCherryPick;
     }
     catch (e) {
@@ -1297,4 +1299,105 @@ const rollbackCommit = async (datasource, repoId) => {
     }
 };
 exports.rollbackCommit = rollbackCommit;
+const canStash = async (datasource, repoId) => {
+    try {
+        const currentAppState = await (0, repo_1.getApplicationState)(datasource, repoId);
+        const currentKVState = await (0, repo_1.convertRenderedCommitStateToKv)(datasource, currentAppState);
+        const unstagedState = await (0, repo_1.getUnstagedCommitState)(datasource, repoId);
+        const currentDiff = (0, repo_1.getStateDiffFromCommitStates)(unstagedState, currentKVState);
+        if ((0, repo_1.diffIsEmpty)(currentDiff)) {
+            return false;
+        }
+        return true;
+    }
+    catch (e) {
+        return null;
+    }
+};
+exports.canStash = canStash;
+const stashChanges = async (datasource, repoId) => {
+    try {
+        const currentRepoState = await datasource.readCurrentRepoState(repoId);
+        const currentAppState = await (0, repo_1.getApplicationState)(datasource, repoId);
+        const currentKVState = await (0, repo_1.convertRenderedCommitStateToKv)(datasource, currentAppState);
+        const unstagedState = await (0, repo_1.getUnstagedCommitState)(datasource, repoId);
+        const currentDiff = (0, repo_1.getStateDiffFromCommitStates)(unstagedState, currentKVState);
+        if ((0, repo_1.diffIsEmpty)(currentDiff)) {
+            return null;
+        }
+        const stashList = await datasource.readStash(repoId, currentRepoState.commit);
+        stashList.push(currentKVState);
+        await datasource.saveStash(repoId, currentRepoState.commit, stashList);
+        const renderedState = await (0, repo_1.convertCommitStateToRenderedState)(datasource, unstagedState);
+        return await datasource.saveRenderedState(repoId, renderedState);
+    }
+    catch (e) {
+        return null;
+    }
+};
+exports.stashChanges = stashChanges;
+const getStashSize = async (datasource, repoId) => {
+    try {
+        const currentRepoState = await datasource.readCurrentRepoState(repoId);
+        const stashList = await datasource.readStash(repoId, currentRepoState.commit);
+        return stashList.length;
+    }
+    catch (e) {
+        return null;
+    }
+};
+exports.getStashSize = getStashSize;
+const canPopStashedChanges = async (datasource, repoId) => {
+    try {
+        const currentRepoState = await datasource.readCurrentRepoState(repoId);
+        const currentAppState = await (0, repo_1.getApplicationState)(datasource, repoId);
+        const currentKVState = await (0, repo_1.convertRenderedCommitStateToKv)(datasource, currentAppState);
+        const unstagedState = await (0, repo_1.getUnstagedCommitState)(datasource, repoId);
+        const stashList = await datasource.readStash(repoId, currentRepoState.commit);
+        if (stashList.length == 0) {
+            return false;
+        }
+        const topChanges = stashList.pop();
+        const canPop = await (0, repo_1.canAutoMergeCommitStates)(datasource, topChanges, // theirs
+        currentKVState, // yours
+        unstagedState // origin
+        );
+        return canPop;
+    }
+    catch (e) {
+        return null;
+    }
+};
+exports.canPopStashedChanges = canPopStashedChanges;
+const popStashedChanges = async (datasource, repoId) => {
+    try {
+        const currentRepoState = await datasource.readCurrentRepoState(repoId);
+        const currentAppState = await (0, repo_1.getApplicationState)(datasource, repoId);
+        const currentKVState = await (0, repo_1.convertRenderedCommitStateToKv)(datasource, currentAppState);
+        const unstagedState = await (0, repo_1.getUnstagedCommitState)(datasource, repoId);
+        const stashList = await datasource.readStash(repoId, currentRepoState.commit);
+        if (stashList.length == 0) {
+            return null;
+        }
+        const topChanges = stashList.pop();
+        const canPop = await (0, repo_1.canAutoMergeCommitStates)(datasource, topChanges, // theirs
+        currentKVState, // yours
+        unstagedState // origin
+        );
+        if (!canPop) {
+            return null;
+        }
+        const appliedStash = await (0, repo_1.getMergedCommitState)(datasource, topChanges, // theirs
+        currentKVState, // yours
+        unstagedState // origin
+        );
+        await datasource.saveStash(repoId, currentRepoState.commit, stashList);
+        const renderedState = await (0, repo_1.convertCommitStateToRenderedState)(datasource, appliedStash);
+        return await datasource.saveRenderedState(repoId, renderedState);
+    }
+    catch (e) {
+        return null;
+    }
+};
+exports.popStashedChanges = popStashedChanges;
 //# sourceMappingURL=repoapi.js.map

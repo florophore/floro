@@ -153,16 +153,6 @@ export declare const uniqueKV: (kvList: Array<{
     value: string;
 }>;
 export declare const getStateDiffFromCommitStates: (beforeKVState: ApplicationKVState, afterKVState: ApplicationKVState) => StateDiff;
-export declare const getCommitStateDiffList: (beforeKVState: ApplicationKVState, afterKVState: ApplicationKVState) => Array<{
-    diff: Diff | TextDiff;
-    namespace: string;
-    pluginName?: string;
-}>;
-export declare const renderDiffList: (diffList: Array<{
-    diff: Diff | TextDiff;
-    namespace: string;
-    pluginName?: string;
-}>) => StateDiff;
 export declare const getMergeCommitStates: (datasource: DataSource, repoId: string, fromSha: string, intoSha: string) => Promise<{
     fromCommitState: ApplicationKVState;
     intoCommitState: ApplicationKVState;

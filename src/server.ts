@@ -47,7 +47,7 @@ import {
   writeRepoLicenses,
   readRepoLicenses,
   checkoutBranch,
-  deleteBranch,
+  //deleteBranch,
 } from "./repoapi";
 import { makeMemoizedDataSource, readDevPluginManifest } from "./datasource";
 
@@ -140,7 +140,7 @@ app.get(
   "/repos",
   cors(corsOptionsDelegate),
   async (_req, res): Promise<void> => {
-    const repos = await datasource.getRepos();
+    const repos = await datasource.readRepos();
     res.send({
       repos,
     });
@@ -244,20 +244,20 @@ app.get(
   }
 );
 
-app.post(
-  "/repo/:repoId/delete/branch/:branch",
-  cors(corsOptionsDelegate),
-  async (req, res): Promise<void> => {
-    const repoId = req.params["repoId"];
-    const branchName = req.params["branch"];
-    const branches = await deleteBranch(datasource, repoId, branchName);
-    if (!branches) {
-      res.sendStatus(400);
-      return;
-    }
-    res.send(branches);
-  }
-);
+//app.post(
+//  "/repo/:repoId/delete/branch/:branch",
+//  cors(corsOptionsDelegate),
+//  async (req, res): Promise<void> => {
+//    const repoId = req.params["repoId"];
+//    const branchName = req.params["branch"];
+//    const branches = await deleteBranch(datasource, repoId, branchName);
+//    if (!branches) {
+//      res.sendStatus(400);
+//      return;
+//    }
+//    res.send(branches);
+//  }
+//);
 
 app.post(
   "/repo/:repoId/description",

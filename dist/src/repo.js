@@ -26,7 +26,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.canAutoMergeOnTopCurrentState = exports.getMergedCommitState = exports.canAutoMergeCommitStates = exports.getMergeCommitStates = exports.renderDiffList = exports.getCommitStateDiffList = exports.getStateDiffFromCommitStates = exports.uniqueKV = exports.mergeTokenStores = exports.detokenizeStore = exports.tokenizeCommitState = exports.convertCommitStateToRenderedState = exports.convertRenderedStateStoreToKV = exports.convertStateStoreToKV = exports.buildStateStore = exports.getPluginsToRunUpdatesOn = exports.updateCurrentBranch = exports.updateCurrentWithNewBranch = exports.updateCurrentWithSHA = exports.updateCurrentCommitSHA = exports.convertRenderedCommitStateToKv = exports.getApplicationState = exports.getUnstagedCommitState = exports.getCurrentBranch = exports.applyStateDiffToCommitState = exports.getCommitState = exports.getDivergenceOriginSha = exports.getBaseDivergenceSha = exports.getHistory = exports.buildCommitData = exports.canCommit = exports.diffIsEmpty = exports.getCurrentCommitSha = exports.cloneRepo = exports.getRemovedDeps = exports.getAddedDeps = exports.getRepos = exports.EMPTY_COMMIT_DIFF = exports.EMPTY_RENDERED_APPLICATION_STATE = exports.EMPTY_COMMIT_STATE = void 0;
+exports.canAutoMergeOnTopCurrentState = exports.getMergedCommitState = exports.canAutoMergeCommitStates = exports.getMergeCommitStates = exports.getStateDiffFromCommitStates = exports.uniqueKV = exports.mergeTokenStores = exports.detokenizeStore = exports.tokenizeCommitState = exports.convertCommitStateToRenderedState = exports.convertRenderedStateStoreToKV = exports.convertStateStoreToKV = exports.buildStateStore = exports.getPluginsToRunUpdatesOn = exports.updateCurrentBranch = exports.updateCurrentWithNewBranch = exports.updateCurrentWithSHA = exports.updateCurrentCommitSHA = exports.convertRenderedCommitStateToKv = exports.getApplicationState = exports.getUnstagedCommitState = exports.getCurrentBranch = exports.applyStateDiffToCommitState = exports.getCommitState = exports.getDivergenceOriginSha = exports.getBaseDivergenceSha = exports.getHistory = exports.buildCommitData = exports.canCommit = exports.diffIsEmpty = exports.getCurrentCommitSha = exports.cloneRepo = exports.getRemovedDeps = exports.getAddedDeps = exports.getRepos = exports.EMPTY_COMMIT_DIFF = exports.EMPTY_RENDERED_APPLICATION_STATE = exports.EMPTY_COMMIT_STATE = void 0;
 const axios_1 = __importDefault(require("axios"));
 const fs_1 = __importStar(require("fs"));
 const path_1 = __importDefault(require("path"));
@@ -669,65 +669,6 @@ const getStateDiffFromCommitStates = (beforeKVState, afterKVState) => {
     return stateDiff;
 };
 exports.getStateDiffFromCommitStates = getStateDiffFromCommitStates;
-const getCommitStateDiffList = (beforeKVState, afterKVState) => {
-    const diffList = [];
-    const pluginsToTraverse = Array.from([
-        ...Object.keys(beforeKVState.store),
-        ...Object.keys(afterKVState.store),
-    ]);
-    for (const prop in afterKVState) {
-        if (prop == "store") {
-            for (const pluginName of pluginsToTraverse) {
-                const diff = (0, versioncontrol_1.getDiff)(beforeKVState?.store?.[pluginName] ?? [], afterKVState?.store?.[pluginName] ?? []);
-                diffList.push({
-                    diff,
-                    namespace: "store",
-                    pluginName,
-                });
-            }
-            continue;
-        }
-        if (prop == "description") {
-            const diff = (0, versioncontrol_1.getTextDiff)((beforeKVState?.[prop] ?? []).join(""), (afterKVState?.[prop] ?? [])?.join(""));
-            diffList.push({
-                diff,
-                namespace: prop,
-            });
-            continue;
-        }
-        const diff = (0, versioncontrol_1.getDiff)(beforeKVState?.[prop] ?? [], afterKVState?.[prop] ?? []);
-        diffList.push({
-            diff,
-            namespace: prop,
-        });
-    }
-    return diffList;
-};
-exports.getCommitStateDiffList = getCommitStateDiffList;
-const renderDiffList = (diffList) => {
-    return diffList.reduce((acc, { namespace, diff, pluginName }) => {
-        if (namespace != "store") {
-            return {
-                ...acc,
-                diff: {
-                    ...acc.diff,
-                    [namespace]: diff,
-                },
-            };
-        }
-        return {
-            ...acc,
-            diff: {
-                ...acc.diff,
-                store: {
-                    ...(acc.diff?.store ?? {}),
-                    [pluginName]: diff,
-                },
-            },
-        };
-    }, { diff: exports.EMPTY_COMMIT_DIFF }).diff;
-};
-exports.renderDiffList = renderDiffList;
 const getMergeCommitStates = async (datasource, repoId, fromSha, intoSha) => {
     try {
         const originSha = await (0, exports.getDivergenceOriginSha)(datasource, repoId, fromSha, intoSha);

@@ -86,6 +86,14 @@ export interface DataSource {
     repoId: string,
     commitState: RenderedApplicationState
   ): Promise<RenderedApplicationState>;
+
+  readStash?(repoId: string, sha: string|null): Promise<Array<ApplicationKVState>>;
+
+  saveStash?(
+    repoId: string,
+    sha: string|null,
+    stashState: Array<ApplicationKVState>
+  ): Promise<Array<ApplicationKVState>>;
 }
 
 /* PLUGINS */
@@ -595,6 +603,43 @@ const saveCheckpoint = async (
   }
 };
 
+/**
+ * STASH
+ */
+
+const readStash = async (repoId: string, sha: string | null): Promise<Array<ApplicationKVState>> => {
+  try {
+    const stashDir = path.join(vReposPath, repoId, "stash");
+    const stashName = sha ? `${sha}.json` : `null_stash.json`;
+    const stashPath = path.join(stashDir, stashName);
+    const existsStash = await existsAsync(stashPath);
+    let stash = [];
+    if (existsStash) {
+      const rawStash = await fs.promises.readFile(stashPath, 'utf8')
+      stash = JSON.parse(rawStash) as Array<ApplicationKVState>;
+    }
+    return stash;
+  } catch(e) {
+    return null;
+  }
+};
+
+const saveStash = async (
+  repoId: string,
+  sha: string | null,
+  stashState: Array<ApplicationKVState>
+) => {
+  try {
+    const stashDir = path.join(vReposPath, repoId, "stash");
+    const stashName = sha ? `${sha}.json` : `null_stash.json`;
+    const stashPath = path.join(stashDir, stashName);
+    await fs.promises.writeFile(stashPath, JSON.stringify(stashState));
+    return stashState;
+  } catch(e) {
+    return null;
+  }
+};
+
 export const makeDataSource = (datasource: DataSource = {}) => {
   const defaultDataSource: DataSource = {
     readRepos,
@@ -617,6 +662,8 @@ export const makeDataSource = (datasource: DataSource = {}) => {
     saveHotCheckpoint,
     readRenderedState,
     saveRenderedState,
+    readStash,
+    saveStash
   };
   return {
     ...defaultDataSource,

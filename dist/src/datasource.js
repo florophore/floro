@@ -411,6 +411,38 @@ const saveCheckpoint = async (repoId, sha, commitState) => {
         return null;
     }
 };
+/**
+ * STASH
+ */
+const readStash = async (repoId, sha) => {
+    try {
+        const stashDir = path_1.default.join(filestructure_1.vReposPath, repoId, "stash");
+        const stashName = sha ? `${sha}.json` : `null_stash.json`;
+        const stashPath = path_1.default.join(stashDir, stashName);
+        const existsStash = await (0, filestructure_1.existsAsync)(stashPath);
+        let stash = [];
+        if (existsStash) {
+            const rawStash = await fs_1.default.promises.readFile(stashPath, 'utf8');
+            stash = JSON.parse(rawStash);
+        }
+        return stash;
+    }
+    catch (e) {
+        return null;
+    }
+};
+const saveStash = async (repoId, sha, stashState) => {
+    try {
+        const stashDir = path_1.default.join(filestructure_1.vReposPath, repoId, "stash");
+        const stashName = sha ? `${sha}.json` : `null_stash.json`;
+        const stashPath = path_1.default.join(stashDir, stashName);
+        await fs_1.default.promises.writeFile(stashPath, JSON.stringify(stashState));
+        return stashState;
+    }
+    catch (e) {
+        return null;
+    }
+};
 const makeDataSource = (datasource = {}) => {
     const defaultDataSource = {
         readRepos: exports.readRepos,
@@ -433,6 +465,8 @@ const makeDataSource = (datasource = {}) => {
         saveHotCheckpoint,
         readRenderedState,
         saveRenderedState,
+        readStash,
+        saveStash
     };
     return {
         ...defaultDataSource,

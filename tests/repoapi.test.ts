@@ -1,8 +1,6 @@
 import { fs, vol } from "memfs";
-import sizeof from "object-sizeof";
 import {
   DataSource,
-  makeDataSource,
   makeMemoizedDataSource,
 } from "../src/datasource";
 import { buildFloroFilestructure, userHome } from "../src/filestructure";
@@ -12,7 +10,6 @@ import {
   getCurrentCommitSha,
   getCommitState,
   convertCommitStateToRenderedState,
-  getHistory,
 } from "../src/repo";
 import {
   checkoutSha,
@@ -49,7 +46,7 @@ describe("repoapi", () => {
     buildFloroFilestructure();
     await makeSignedInUser();
     createBlankRepo("abc");
-    datasource = makeDataSource();
+    datasource = makeMemoizedDataSource();
   });
 
   afterEach(() => {
@@ -412,70 +409,6 @@ describe("repoapi", () => {
       await writeRepoDescription(datasource, "abc", descriptionB);
       const commitB = await writeRepoCommit(datasource, "abc", "B");
       expect(commitB).toEqual(null);
-    });
-  });
-
-  describe("benchmark", () => {
-    test.skip("commit benchmark", async () => {
-      const datasource = makeMemoizedDataSource();
-      const PLUGIN_A_0_MANIFEST: Manifest = {
-        name: "A",
-        version: "0.0.0",
-        displayName: "A",
-        icon: "",
-        imports: {},
-        types: {},
-        store: {
-          aSet: {
-            type: "set",
-            values: {
-              mainKey: {
-                isKey: true,
-                type: "string",
-              },
-              someProp: {
-                type: "float",
-              },
-            },
-          },
-        },
-      };
-      makeTestPlugin(PLUGIN_A_0_MANIFEST);
-      let plugins: PluginElement[] = [
-        {
-          key: "A",
-          value: "0.0.0",
-        },
-      ];
-      await updatePlugins(datasource, "abc", plugins);
-
-      let lastCom;
-      for (let i = 0; i < 3; ++i) {
-        const state = {
-          aSet: [],
-        };
-        for (let j = 0; j < 400_000; ++j) {
-          state.aSet.push({
-            mainKey: "key" + j,
-            someProp: 100,
-          });
-        }
-        for (let k = 0; k < 100; ++k) {
-          const index = Math.round((400_000 - 1) * Math.random());
-          state.aSet[index].someProp = k * 10;
-        }
-
-        console.time("UPDATE" + i);
-        await updatePluginState(datasource, "abc", "A", state);
-        console.timeEnd("UPDATE" + i);
-        console.time("COMMIT" + i);
-        lastCom = await writeRepoCommit(datasource, "abc", "commit: " + i);
-        console.timeEnd("COMMIT" + i);
-      }
-
-      console.time("TEST");
-      const a = await getApplicationState(datasource, "abc");
-      console.timeEnd("TEST");
     });
   });
 
@@ -1804,9 +1737,5 @@ describe("repoapi", () => {
         binaries: [],
       });
     });
-  });
-
-  describe("rollback", () => {
-
   });
 });

@@ -104,7 +104,7 @@ app.get("/ping", (0, cors_1.default)(corsOptionsDelegate), async (_req, res) => 
     res.send("PONG");
 });
 app.get("/repos", (0, cors_1.default)(corsOptionsDelegate), async (_req, res) => {
-    const repos = await datasource.getRepos();
+    const repos = await datasource.readRepos();
     res.send({
         repos,
     });
@@ -171,16 +171,20 @@ app.get("/repo/:repoId/branches", (0, cors_1.default)(corsOptionsDelegate), asyn
     }
     res.send(branches);
 });
-app.post("/repo/:repoId/delete/branch/:branch", (0, cors_1.default)(corsOptionsDelegate), async (req, res) => {
-    const repoId = req.params["repoId"];
-    const branchName = req.params["branch"];
-    const branches = await (0, repoapi_1.deleteBranch)(datasource, repoId, branchName);
-    if (!branches) {
-        res.sendStatus(400);
-        return;
-    }
-    res.send(branches);
-});
+//app.post(
+//  "/repo/:repoId/delete/branch/:branch",
+//  cors(corsOptionsDelegate),
+//  async (req, res): Promise<void> => {
+//    const repoId = req.params["repoId"];
+//    const branchName = req.params["branch"];
+//    const branches = await deleteBranch(datasource, repoId, branchName);
+//    if (!branches) {
+//      res.sendStatus(400);
+//      return;
+//    }
+//    res.send(branches);
+//  }
+//);
 app.post("/repo/:repoId/description", (0, cors_1.default)(corsOptionsDelegate), async (req, res) => {
     const repoId = req.params["repoId"];
     const description = await (0, repoapi_1.writeRepoDescription)(datasource, repoId, req.body?.["description"] ?? "");

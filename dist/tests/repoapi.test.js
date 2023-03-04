@@ -15,7 +15,7 @@ describe("repoapi", () => {
         (0, filestructure_1.buildFloroFilestructure)();
         await (0, fsmocks_1.makeSignedInUser)();
         (0, fsmocks_1.createBlankRepo)("abc");
-        datasource = (0, datasource_1.makeDataSource)();
+        datasource = (0, datasource_1.makeMemoizedDataSource)();
     });
     afterEach(() => {
         memfs_1.vol.reset();
@@ -356,66 +356,6 @@ describe("repoapi", () => {
             await (0, repoapi_1.writeRepoDescription)(datasource, "abc", descriptionB);
             const commitB = await (0, repoapi_1.writeRepoCommit)(datasource, "abc", "B");
             expect(commitB).toEqual(null);
-        });
-    });
-    describe("benchmark", () => {
-        test.skip("commit benchmark", async () => {
-            const datasource = (0, datasource_1.makeMemoizedDataSource)();
-            const PLUGIN_A_0_MANIFEST = {
-                name: "A",
-                version: "0.0.0",
-                displayName: "A",
-                icon: "",
-                imports: {},
-                types: {},
-                store: {
-                    aSet: {
-                        type: "set",
-                        values: {
-                            mainKey: {
-                                isKey: true,
-                                type: "string",
-                            },
-                            someProp: {
-                                type: "float",
-                            },
-                        },
-                    },
-                },
-            };
-            (0, fsmocks_1.makeTestPlugin)(PLUGIN_A_0_MANIFEST);
-            let plugins = [
-                {
-                    key: "A",
-                    value: "0.0.0",
-                },
-            ];
-            await (0, repoapi_1.updatePlugins)(datasource, "abc", plugins);
-            let lastCom;
-            for (let i = 0; i < 3; ++i) {
-                const state = {
-                    aSet: [],
-                };
-                for (let j = 0; j < 400_000; ++j) {
-                    state.aSet.push({
-                        mainKey: "key" + j,
-                        someProp: 100,
-                    });
-                }
-                for (let k = 0; k < 100; ++k) {
-                    const index = Math.round((400_000 - 1) * Math.random());
-                    state.aSet[index].someProp = k * 10;
-                }
-                console.time("UPDATE" + i);
-                await (0, repoapi_1.updatePluginState)(datasource, "abc", "A", state);
-                console.timeEnd("UPDATE" + i);
-                console.time("COMMIT" + i);
-                lastCom = await (0, repoapi_1.writeRepoCommit)(datasource, "abc", "commit: " + i);
-                console.timeEnd("COMMIT" + i);
-            }
-            console.time("TEST");
-            const a = await (0, repo_1.getApplicationState)(datasource, "abc");
-            console.timeEnd("TEST");
         });
     });
     describe("merge", () => {
@@ -1679,8 +1619,6 @@ describe("repoapi", () => {
                 binaries: [],
             });
         });
-    });
-    describe("rollback", () => {
     });
 });
 //# sourceMappingURL=repoapi.test.js.map
