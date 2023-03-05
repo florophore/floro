@@ -26,7 +26,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.canAutoMergeOnTopCurrentState = exports.getMergedCommitState = exports.canAutoMergeCommitStates = exports.getMergeCommitStates = exports.getStateDiffFromCommitStates = exports.uniqueKV = exports.mergeTokenStores = exports.detokenizeStore = exports.tokenizeCommitState = exports.convertCommitStateToRenderedState = exports.convertRenderedStateStoreToKV = exports.convertStateStoreToKV = exports.buildStateStore = exports.getPluginsToRunUpdatesOn = exports.updateCurrentBranch = exports.updateCurrentWithNewBranch = exports.updateCurrentWithSHA = exports.updateCurrentCommitSHA = exports.convertRenderedCommitStateToKv = exports.getApplicationState = exports.getUnstagedCommitState = exports.getCurrentBranch = exports.applyStateDiffToCommitState = exports.getCommitState = exports.getDivergenceOriginSha = exports.getBaseDivergenceSha = exports.getHistory = exports.buildCommitData = exports.canCommit = exports.diffIsEmpty = exports.getCurrentCommitSha = exports.cloneRepo = exports.getRemovedDeps = exports.getAddedDeps = exports.getRepos = exports.EMPTY_COMMIT_DIFF = exports.EMPTY_RENDERED_APPLICATION_STATE = exports.EMPTY_COMMIT_STATE = void 0;
+exports.canAutoMergeOnTopCurrentState = exports.getMergedCommitState = exports.canAutoMergeCommitStates = exports.getMergeCommitStates = exports.getStateDiffFromCommitStates = exports.uniqueKV = exports.mergeTokenStores = exports.detokenizeStore = exports.tokenizeCommitState = exports.convertCommitStateToRenderedState = exports.convertRenderedStateStoreToKV = exports.convertStateStoreToKV = exports.buildStateStore = exports.getPluginsToRunUpdatesOn = exports.updateCurrentBranch = exports.updateCurrentWithNewBranch = exports.updateCurrentWithSHA = exports.updateCurrentCommitSHA = exports.convertRenderedCommitStateToKv = exports.getApplicationState = exports.getUnstagedCommitState = exports.getCurrentBranch = exports.applyStateDiffToCommitState = exports.getCommitState = exports.getDivergenceOriginSha = exports.getBaseDivergenceSha = exports.getHistory = exports.buildCommitData = exports.canCommit = exports.diffIsEmpty = exports.getCurrentCommitSha = exports.cloneRepo = exports.getRemovedDeps = exports.getAddedDeps = exports.getBranchIdFromName = exports.getRepos = exports.BRANCH_NAME_REGEX = exports.EMPTY_COMMIT_DIFF = exports.EMPTY_RENDERED_APPLICATION_STATE = exports.EMPTY_COMMIT_STATE = void 0;
 const axios_1 = __importDefault(require("axios"));
 const fs_1 = __importStar(require("fs"));
 const path_1 = __importDefault(require("path"));
@@ -57,6 +57,7 @@ exports.EMPTY_COMMIT_DIFF = {
     binaries: { add: {}, remove: {} },
 };
 const CHECKPOINT_MODULO = 50;
+exports.BRANCH_NAME_REGEX = /^[-_ a-zA-Z0-9]{3,100}$/;
 const getRepos = async () => {
     const repoDir = await fs_1.default.promises.readdir(filestructure_1.vReposPath);
     return repoDir?.filter((repoName) => {
@@ -64,6 +65,10 @@ const getRepos = async () => {
     });
 };
 exports.getRepos = getRepos;
+const getBranchIdFromName = (name) => {
+    return name.toLowerCase().replaceAll(" ", "-");
+};
+exports.getBranchIdFromName = getBranchIdFromName;
 const getAddedDeps = (oldPlugins, newPlugins) => {
     const oldPluginMap = (0, plugins_1.pluginListToMap)(oldPlugins);
     const out = [];
@@ -435,17 +440,17 @@ const updateCurrentWithSHA = async (datasource, repoId, sha, isResolvingMerge) =
     }
 };
 exports.updateCurrentWithSHA = updateCurrentWithSHA;
-const updateCurrentWithNewBranch = async (datasource, repoId, branchName) => {
+const updateCurrentWithNewBranch = async (datasource, repoId, branchId) => {
     try {
         const current = await datasource.readCurrentRepoState(repoId);
         if (current.isInMergeConflict) {
             return null;
         }
-        const branch = await datasource.readBranch(repoId, branchName);
+        const branch = await datasource.readBranch(repoId, branchId);
         const updated = {
             ...current,
             commit: branch.lastCommit,
-            branch: branchName,
+            branch: branch.id,
         };
         await datasource.saveCurrentRepoState(repoId, updated);
         const unrenderedState = await (0, exports.getCommitState)(datasource, repoId, branch.lastCommit);
@@ -458,19 +463,24 @@ const updateCurrentWithNewBranch = async (datasource, repoId, branchName) => {
     }
 };
 exports.updateCurrentWithNewBranch = updateCurrentWithNewBranch;
-const updateCurrentBranch = async (datasource, repoId, branchName) => {
+const updateCurrentBranch = async (datasource, repoId, branchId) => {
     try {
         const current = await datasource.readCurrentRepoState(repoId);
         if (current.isInMergeConflict) {
             return null;
         }
-        const branch = await datasource.readBranch(repoId, branchName);
+        const branch = await datasource.readBranch(repoId, branchId);
         const updated = {
             ...current,
             commit: branch.lastCommit,
-            branch: branchName,
+            branch: branchId,
         };
-        return await datasource.saveCurrentRepoState(repoId, updated);
+        await datasource.saveBranch(repoId, branchId, branch);
+        const out = await datasource.saveCurrentRepoState(repoId, updated);
+        const state = await (0, exports.getCommitState)(datasource, repoId, branch.lastCommit);
+        const renderedState = await (0, exports.convertCommitStateToRenderedState)(datasource, state);
+        await datasource.saveRenderedState(repoId, renderedState);
+        return out;
     }
     catch (e) {
         return null;

@@ -15,7 +15,7 @@
     "dev": "concurrently \"npx tsc --watch\" \"nodemon -q dist/src/server.js\""
   },
   "author": "",
-  "license": "ISC",
+  "license": "MIT",
   "devDependencies": {
     "@jest/types": "^29.1.2",
     "@types/command-line-args": "^5.2.0",

@@ -57,25 +57,8 @@ const REPO_CURRENT = `
 {
     "branch": "main",
     "commit": null,
-    "diff": {
-      "description": {
-        "add": {},
-        "remove": {}
-      },
-      "licenses": {
-        "add": {},
-        "remove": {}
-      },
-      "plugins": {
-        "add": {},
-        "remove": {}
-      },
-      "store": {},
-      "binaries": {
-        "add": {},
-        "remove": {}
-      }
-    }
+    "isInMergeConflict": false,
+    "merge": null
   }
 `;
 
@@ -83,10 +66,31 @@ const REPO_SETTINGS = `
     {"mainBranch":"main"}
 `;
 
+const META_BRANCHES_JSON = JSON.stringify(
+  {
+    userBranches: [
+      {
+        branchId: "main",
+        lastLocalCommit: null,
+        lastRemoteCommit: null,
+      },
+    ],
+    allBranches: [
+      {
+        branchId: "main",
+        lastLocalCommit: null,
+        lastRemoteCommit: null,
+      },
+    ],
+  },
+  null,
+  2
+);
+
 const MAIN_BRANCH = `
 {
     "lastCommit": null,
-    "firstCommit": null,
+    "id": "main",
     "stashes": [],
     "createdBy": "3edbc450-7e78-40db-895e-5eed8de73fcf",
     "createdAt": "Wed Dec 21 2022 15:59:50 GMT-0500 (Eastern Standard Time)",
@@ -183,10 +187,12 @@ export const createBlankRepo = (repoId: string) => {
     const repoSettingsPath = path.join(repoPath, "settings.json");
     const repoStatePath = path.join(repoPath, "state.json");
     const currentPath = path.join(repoPath, "current.json");
+    const branchesJsonPath = path.join(repoPath, "branches.json");
     const mainBranchPath = path.join(branchesPath, "main.json");
     fs.writeFileSync(repoSettingsPath, REPO_SETTINGS, "utf-8");
     fs.writeFileSync(repoStatePath, EMPTY_STATE, "utf-8");
     fs.writeFileSync(currentPath, REPO_CURRENT, "utf-8");
     fs.writeFileSync(mainBranchPath, MAIN_BRANCH, "utf-8");
+    fs.writeFileSync(branchesJsonPath, META_BRANCHES_JSON, "utf-8");
   }
 };

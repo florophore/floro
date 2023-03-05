@@ -91,11 +91,23 @@ export interface RepoState {
 }
 
 export interface Branch {
+  id: string;
   name: string;
-  firstCommit: null | string;
   lastCommit: null | string;
+  baseBranchId: null | string;
   createdBy: string;
   createdAt: string;
+}
+
+export interface BranchMeta {
+  branchId: string;
+  lastLocalCommit: string | null;
+  lastRemoteCommit: string | null;
+}
+
+export interface BranchesMetaState {
+  userBranches: Array<BranchMeta>;
+  allBranches: Array<BranchMeta>;
 }
 
 export interface CommitHistory {
@@ -137,6 +149,8 @@ export const EMPTY_COMMIT_DIFF: StateDiff = {
 
 const CHECKPOINT_MODULO = 50;
 
+export const BRANCH_NAME_REGEX = /^[-_ a-zA-Z0-9]{3,100}$/;
+
 export const getRepos = async (): Promise<string[]> => {
   const repoDir = await fs.promises.readdir(vReposPath);
   return repoDir?.filter((repoName) => {
@@ -144,6 +158,10 @@ export const getRepos = async (): Promise<string[]> => {
       repoName
     );
   });
+};
+
+export const getBranchIdFromName = (name: string): string => {
+  return name.toLowerCase().replaceAll(" ", "-");
 };
 
 export const getAddedDeps = (
@@ -617,18 +635,18 @@ export const updateCurrentWithSHA = async (
 export const updateCurrentWithNewBranch = async (
   datasource: DataSource,
   repoId: string,
-  branchName: string
+  branchId: string
 ): Promise<RepoState | null> => {
   try {
     const current = await datasource.readCurrentRepoState(repoId);
     if (current.isInMergeConflict) {
       return null;
     }
-    const branch = await datasource.readBranch(repoId, branchName);
+    const branch = await datasource.readBranch(repoId, branchId);
     const updated = {
       ...current,
       commit: branch.lastCommit,
-      branch: branchName,
+      branch: branch.id,
     };
     await datasource.saveCurrentRepoState(repoId, updated);
     const unrenderedState = await getCommitState(
@@ -650,20 +668,25 @@ export const updateCurrentWithNewBranch = async (
 export const updateCurrentBranch = async (
   datasource: DataSource,
   repoId: string,
-  branchName: string
+  branchId: string
 ): Promise<RepoState | null> => {
   try {
     const current = await datasource.readCurrentRepoState(repoId);
     if (current.isInMergeConflict) {
       return null;
     }
-    const branch = await datasource.readBranch(repoId, branchName);
+    const branch = await datasource.readBranch(repoId, branchId);
     const updated = {
       ...current,
       commit: branch.lastCommit,
-      branch: branchName,
+      branch: branchId,
     };
-    return await datasource.saveCurrentRepoState(repoId, updated);
+    await datasource.saveBranch(repoId, branchId, branch);
+    const out = await datasource.saveCurrentRepoState(repoId, updated);
+    const state = await getCommitState(datasource, repoId, branch.lastCommit);
+    const renderedState = await convertCommitStateToRenderedState(datasource, state);
+    await datasource.saveRenderedState(repoId, renderedState);
+    return out;
   } catch (e) {
     return null;
   }

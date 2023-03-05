@@ -76,11 +76,21 @@ export interface RepoState {
     };
 }
 export interface Branch {
+    id: string;
     name: string;
-    firstCommit: null | string;
     lastCommit: null | string;
+    baseBranchId: null | string;
     createdBy: string;
     createdAt: string;
+}
+export interface BranchMeta {
+    branchId: string;
+    lastLocalCommit: string | null;
+    lastRemoteCommit: string | null;
+}
+export interface BranchesMetaState {
+    userBranches: Array<BranchMeta>;
+    allBranches: Array<BranchMeta>;
 }
 export interface CommitHistory {
     sha: null | string;
@@ -96,7 +106,9 @@ export interface CheckpointMap {
 export declare const EMPTY_COMMIT_STATE: ApplicationKVState;
 export declare const EMPTY_RENDERED_APPLICATION_STATE: RenderedApplicationState;
 export declare const EMPTY_COMMIT_DIFF: StateDiff;
+export declare const BRANCH_NAME_REGEX: RegExp;
 export declare const getRepos: () => Promise<string[]>;
+export declare const getBranchIdFromName: (name: string) => string;
 export declare const getAddedDeps: (oldPlugins: Array<PluginElement>, newPlugins: Array<PluginElement>) => Array<PluginElement>;
 export declare const getRemovedDeps: (oldPlugins: Array<PluginElement>, newPlugins: Array<PluginElement>) => Array<PluginElement>;
 export declare const cloneRepo: (repoId: string) => Promise<boolean>;
@@ -121,8 +133,8 @@ export declare const updateCurrentCommitSHA: (datasource: DataSource, repoId: st
  * use when HEAD is detached
  */
 export declare const updateCurrentWithSHA: (datasource: DataSource, repoId: string, sha: string, isResolvingMerge: boolean) => Promise<RepoState | null>;
-export declare const updateCurrentWithNewBranch: (datasource: DataSource, repoId: string, branchName: string) => Promise<RepoState | null>;
-export declare const updateCurrentBranch: (datasource: DataSource, repoId: string, branchName: string) => Promise<RepoState | null>;
+export declare const updateCurrentWithNewBranch: (datasource: DataSource, repoId: string, branchId: string) => Promise<RepoState | null>;
+export declare const updateCurrentBranch: (datasource: DataSource, repoId: string, branchId: string) => Promise<RepoState | null>;
 export declare const getPluginsToRunUpdatesOn: (pastPlugins: Array<PluginElement>, nextPlugins: Array<PluginElement>) => PluginElement[];
 export declare const buildStateStore: (datasource: DataSource, appKvState: ApplicationKVState) => Promise<{
     [key: string]: object;

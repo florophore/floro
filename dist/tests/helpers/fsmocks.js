@@ -53,34 +53,33 @@ const REPO_CURRENT = `
 {
     "branch": "main",
     "commit": null,
-    "diff": {
-      "description": {
-        "add": {},
-        "remove": {}
-      },
-      "licenses": {
-        "add": {},
-        "remove": {}
-      },
-      "plugins": {
-        "add": {},
-        "remove": {}
-      },
-      "store": {},
-      "binaries": {
-        "add": {},
-        "remove": {}
-      }
-    }
+    "isInMergeConflict": false,
+    "merge": null
   }
 `;
 const REPO_SETTINGS = `
     {"mainBranch":"main"}
 `;
+const META_BRANCHES_JSON = JSON.stringify({
+    userBranches: [
+        {
+            branchId: "main",
+            lastLocalCommit: null,
+            lastRemoteCommit: null,
+        },
+    ],
+    allBranches: [
+        {
+            branchId: "main",
+            lastLocalCommit: null,
+            lastRemoteCommit: null,
+        },
+    ],
+}, null, 2);
 const MAIN_BRANCH = `
 {
     "lastCommit": null,
-    "firstCommit": null,
+    "id": "main",
     "stashes": [],
     "createdBy": "3edbc450-7e78-40db-895e-5eed8de73fcf",
     "createdAt": "Wed Dec 21 2022 15:59:50 GMT-0500 (Eastern Standard Time)",
@@ -167,11 +166,13 @@ const createBlankRepo = (repoId) => {
         const repoSettingsPath = path_1.default.join(repoPath, "settings.json");
         const repoStatePath = path_1.default.join(repoPath, "state.json");
         const currentPath = path_1.default.join(repoPath, "current.json");
+        const branchesJsonPath = path_1.default.join(repoPath, "branches.json");
         const mainBranchPath = path_1.default.join(branchesPath, "main.json");
         fs_1.default.writeFileSync(repoSettingsPath, REPO_SETTINGS, "utf-8");
         fs_1.default.writeFileSync(repoStatePath, EMPTY_STATE, "utf-8");
         fs_1.default.writeFileSync(currentPath, REPO_CURRENT, "utf-8");
         fs_1.default.writeFileSync(mainBranchPath, MAIN_BRANCH, "utf-8");
+        fs_1.default.writeFileSync(branchesJsonPath, META_BRANCHES_JSON, "utf-8");
     }
 };
 exports.createBlankRepo = createBlankRepo;

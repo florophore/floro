@@ -14,6 +14,7 @@ import { Manifest } from "./plugins";
 import {
   ApplicationKVState,
   Branch,
+  BranchesMetaState,
   RenderedApplicationState,
   RepoSetting,
   RepoState,
@@ -47,12 +48,12 @@ export interface DataSource {
     state: RepoState
   ) => Promise<RepoState>;
 
-  readBranch?: (repoId: string, branchName: string) => Promise<Branch>;
+  readBranch?: (repoId: string, branchId: string) => Promise<Branch>;
   readBranches?: (repoId: string) => Promise<Array<Branch>>;
-  deleteBranch?: (repoId: string, branchName: string) => Promise<boolean>;
+  deleteBranch?: (repoId: string, branchId: string) => Promise<boolean>;
   saveBranch?: (
     repoId: string,
-    branchName: string,
+    branchId: string,
     branchData: Branch
   ) => Promise<Branch>;
 
@@ -87,13 +88,23 @@ export interface DataSource {
     commitState: RenderedApplicationState
   ): Promise<RenderedApplicationState>;
 
-  readStash?(repoId: string, sha: string|null): Promise<Array<ApplicationKVState>>;
+  readStash?(
+    repoId: string,
+    sha: string | null
+  ): Promise<Array<ApplicationKVState>>;
 
   saveStash?(
     repoId: string,
-    sha: string|null,
+    sha: string | null,
     stashState: Array<ApplicationKVState>
   ): Promise<Array<ApplicationKVState>>;
+
+  readBranchesMetaState?(repoId: string): Promise<BranchesMetaState>;
+
+  saveBranchesMetaState?(
+    repoId: string,
+    branchesMetaState: BranchesMetaState
+  ): Promise<BranchesMetaState>;
 }
 
 /* PLUGINS */
@@ -391,16 +402,16 @@ const saveCurrentRepoState = async (
 
 const readBranch = async (
   repoId: string,
-  branchName: string
+  branchId: string
 ): Promise<Branch> => {
   try {
     const repoPath = path.join(vReposPath, repoId);
-    const branchPath = path.join(repoPath, "branches", `${branchName}.json`);
+    const branchPath = path.join(repoPath, "branches", `${branchId}.json`);
     const branchData = await fs.promises.readFile(branchPath);
     const branch = JSON.parse(branchData.toString());
     return {
       ...branch,
-      name: branchName,
+      name: branchId,
     };
   } catch (e) {
     return null;
@@ -412,8 +423,8 @@ const readBranches = async (repoId: string): Promise<Array<Branch>> => {
   const branchesDir = await fs.promises.readdir(branchesPath);
   const branches = await Promise.all(
     branchesDir
-      ?.filter((branchName) => {
-        return /.*\.json$/.test(branchName);
+      ?.filter((branchId) => {
+        return /.*\.json$/.test(branchId);
       })
       ?.map((branchFileName) => {
         const branchName = branchFileName.substring(
@@ -427,11 +438,11 @@ const readBranches = async (repoId: string): Promise<Array<Branch>> => {
 };
 const deleteBranch = async (
   repoId: string,
-  branchName: string
+  branchId: string
 ): Promise<boolean> => {
   try {
     const repoPath = path.join(vReposPath, repoId);
-    const branchPath = path.join(repoPath, "branches", `${branchName}.json`);
+    const branchPath = path.join(repoPath, "branches", `${branchId}.json`);
     await fs.promises.rm(branchPath);
     return true;
   } catch (e) {
@@ -441,12 +452,12 @@ const deleteBranch = async (
 
 const saveBranch = async (
   repoId: string,
-  branchName: string,
+  branchId: string,
   branchData: Branch
 ): Promise<Branch> => {
   try {
     const repoPath = path.join(vReposPath, repoId);
-    const branchPath = path.join(repoPath, "branches", `${branchName}.json`);
+    const branchPath = path.join(repoPath, "branches", `${branchId}.json`);
     await fs.promises.writeFile(
       branchPath,
       Buffer.from(JSON.stringify(branchData, null, 2))
@@ -607,7 +618,10 @@ const saveCheckpoint = async (
  * STASH
  */
 
-const readStash = async (repoId: string, sha: string | null): Promise<Array<ApplicationKVState>> => {
+const readStash = async (
+  repoId: string,
+  sha: string | null
+): Promise<Array<ApplicationKVState>> => {
   try {
     const stashDir = path.join(vReposPath, repoId, "stash");
     const stashName = sha ? `${sha}.json` : `null_stash.json`;
@@ -615,11 +629,11 @@ const readStash = async (repoId: string, sha: string | null): Promise<Array<Appl
     const existsStash = await existsAsync(stashPath);
     let stash = [];
     if (existsStash) {
-      const rawStash = await fs.promises.readFile(stashPath, 'utf8')
+      const rawStash = await fs.promises.readFile(stashPath, "utf8");
       stash = JSON.parse(rawStash) as Array<ApplicationKVState>;
     }
     return stash;
-  } catch(e) {
+  } catch (e) {
     return null;
   }
 };
@@ -635,7 +649,42 @@ const saveStash = async (
     const stashPath = path.join(stashDir, stashName);
     await fs.promises.writeFile(stashPath, JSON.stringify(stashState));
     return stashState;
-  } catch(e) {
+  } catch (e) {
+    return null;
+  }
+};
+
+const readBranchesMetaState = async (
+  repoId: string
+): Promise<BranchesMetaState> => {
+  try {
+    const branchesPath = path.join(vReposPath, repoId, "branches.json");
+    const branchesMetaStateString = await fs.promises.readFile(
+      branchesPath,
+      "utf8"
+    );
+    const branchesMetaState = JSON.parse(
+      branchesMetaStateString
+    ) as BranchesMetaState;
+    return branchesMetaState;
+  } catch (e) {
+    return null;
+  }
+};
+
+const saveBranchesMetaState = async (
+  repoId: string,
+  branchesMetaState: BranchesMetaState
+): Promise<BranchesMetaState> => {
+  try {
+    const branchesPath = path.join(vReposPath, repoId, "branches.json");
+    await fs.promises.writeFile(
+      branchesPath,
+      JSON.stringify(branchesMetaState),
+      "utf8"
+    );
+    return branchesMetaState;
+  } catch (e) {
     return null;
   }
 };
@@ -663,7 +712,9 @@ export const makeDataSource = (datasource: DataSource = {}) => {
     readRenderedState,
     saveRenderedState,
     readStash,
-    saveStash
+    saveStash,
+    readBranchesMetaState,
+    saveBranchesMetaState,
   };
   return {
     ...defaultDataSource,
@@ -930,6 +981,31 @@ export const makeMemoizedDataSource = (dataSourceOverride: DataSource = {}) => {
     return result;
   };
 
+  const branchesMetaStateMemo = {};
+
+  const _readBranchesMetaState = async (
+    repoId: string
+  ): Promise<BranchesMetaState> => {
+    if (branchesMetaStateMemo[repoId]) {
+      return branchesMetaStateMemo[repoId];
+    }
+    const result = await dataSource.readBranchesMetaState(repoId);
+    branchesMetaStateMemo[repoId] = result;
+    return result;
+  };
+
+  const _saveBranchesMetaState = async (
+    repoId: string,
+    branchesMetaState: BranchesMetaState
+  ): Promise<BranchesMetaState> => {
+    const result = await dataSource.saveBranchesMetaState(
+      repoId,
+      branchesMetaState
+    );
+    branchesMetaStateMemo[repoId] = result;
+    return result;
+  };
+
   const defaultDataSource: DataSource = {
     repoExists: _repoExists,
     pluginManifestExists: _pluginManifestExists,
@@ -950,6 +1026,8 @@ export const makeMemoizedDataSource = (dataSourceOverride: DataSource = {}) => {
     deleteHotCheckpoint: _deleteHotCheckpoint,
     readRenderedState: _readRenderedState,
     saveRenderedState: _saveRenderedState,
+    readBranchesMetaState: _readBranchesMetaState,
+    saveBranchesMetaState: _saveBranchesMetaState,
   };
   return {
     ...dataSource,

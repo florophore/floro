@@ -46,7 +46,6 @@ import {
   readRepoDescription,
   writeRepoLicenses,
   readRepoLicenses,
-  checkoutBranch,
   //deleteBranch,
 } from "./repoapi";
 import { makeMemoizedDataSource, readDevPluginManifest } from "./datasource";
@@ -206,7 +205,7 @@ app.post(
   async (req, res): Promise<void> => {
     const repoId = req.params["repoId"];
     const branchName = req.params["branch"];
-    const state = await checkoutBranch(datasource, repoId, branchName);
+    const state = await switchRepoBranch(datasource, repoId, branchName);
     if (!state) {
       res.sendStatus(400);
       return;
@@ -221,7 +220,7 @@ app.post(
   async (req, res): Promise<void> => {
     const repoId = req.params["repoId"];
     const sha = req.params["sha"];
-    const state = await checkoutBranch(datasource, repoId, sha);
+    const state = await switchRepoBranch(datasource, repoId, sha);
     if (!state) {
       res.sendStatus(400);
       return;

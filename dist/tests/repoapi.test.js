@@ -453,6 +453,7 @@ describe("repoapi", () => {
             await (0, repoapi_1.updatePluginState)(datasource, "abc", "A", state2);
             const commitB = await (0, repoapi_1.writeRepoCommit)(datasource, "abc", "B");
             await (0, repoapi_1.checkoutSha)(datasource, "abc", commitA.sha);
+            await (0, repoapi_1.createRepoBranch)(datasource, "abc", "feature-branch");
             await (0, repoapi_1.switchRepoBranch)(datasource, "abc", "feature-branch");
             const state3 = {
                 aSet: [
@@ -560,10 +561,10 @@ describe("repoapi", () => {
             const commitE = await (0, repoapi_1.writeRepoCommit)(datasource, "abc", "E");
             const eState = await (0, repo_1.getCommitState)(datasource, "abc", commitE.sha);
             const eStateRendered = await (0, repo_1.convertCommitStateToRenderedState)(datasource, eState);
+            expect(eStateRendered).toEqual(mergeStateOut);
             await (0, repoapi_1.switchRepoBranch)(datasource, "abc", "main");
             const mainMergeOut = await (0, repoapi_1.mergeCommit)(datasource, "abc", mergeSha);
             const mainMergedSha = await (0, repo_1.getCurrentCommitSha)(datasource, "abc");
-            expect(eStateRendered).toEqual(mergeStateOut);
             const mainMergeState = await (0, repo_1.getCommitState)(datasource, "abc", mainMergedSha);
             const mainMergeRendered = await (0, repo_1.convertCommitStateToRenderedState)(datasource, mainMergeState);
             expect(mainMergeOut).toEqual(mainMergeRendered);
@@ -668,6 +669,7 @@ describe("repoapi", () => {
             await (0, repoapi_1.updatePluginState)(datasource, "abc", "A", state2);
             const commitB = await (0, repoapi_1.writeRepoCommit)(datasource, "abc", "B");
             await (0, repoapi_1.checkoutSha)(datasource, "abc", commitA.sha);
+            await (0, repoapi_1.createRepoBranch)(datasource, "abc", "feature-branch");
             await (0, repoapi_1.switchRepoBranch)(datasource, "abc", "feature-branch");
             const state3 = {
                 aSet: [
@@ -920,6 +922,7 @@ describe("repoapi", () => {
             await (0, repoapi_1.updatePluginState)(datasource, "abc", "A", state2);
             const commitB = await (0, repoapi_1.writeRepoCommit)(datasource, "abc", "B");
             await (0, repoapi_1.checkoutSha)(datasource, "abc", commitA.sha);
+            await (0, repoapi_1.createRepoBranch)(datasource, "abc", "feature-branch");
             await (0, repoapi_1.switchRepoBranch)(datasource, "abc", "feature-branch");
             const state3 = {
                 aSet: [

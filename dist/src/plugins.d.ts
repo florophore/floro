@@ -205,7 +205,8 @@ export declare const cascadePluginState: (datasource: DataSource, schemaMap: {
 /***
  * cascading is heavy but infrequent. It only needs to be
  * called when updating state. Not called when applying diffs
- * @deprecated because it is not scalable at all
+ * @deprecated because it is not scalable at all and couples
+ * kv state to plugin transformations
  */
 export declare const cascadePluginStateDeprecated: (datasource: DataSource, schemaMap: {
     [key: string]: Manifest;

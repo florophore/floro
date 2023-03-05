@@ -1,5 +1,5 @@
 import { Manifest } from "./plugins";
-import { ApplicationKVState, Branch, RenderedApplicationState, RepoSetting, RepoState } from "./repo";
+import { ApplicationKVState, Branch, BranchesMetaState, RenderedApplicationState, RepoSetting, RepoState } from "./repo";
 import { CommitData } from "./versioncontrol";
 export interface DataSource {
     getPluginManifest?: (pluginName: string, pluginVersion: string) => Promise<Manifest>;
@@ -9,10 +9,10 @@ export interface DataSource {
     readRepoSettings?: (repoId: string) => Promise<RepoSetting>;
     readCurrentRepoState?: (repoId: string) => Promise<RepoState>;
     saveCurrentRepoState?: (repoId: string, state: RepoState) => Promise<RepoState>;
-    readBranch?: (repoId: string, branchName: string) => Promise<Branch>;
+    readBranch?: (repoId: string, branchId: string) => Promise<Branch>;
     readBranches?: (repoId: string) => Promise<Array<Branch>>;
-    deleteBranch?: (repoId: string, branchName: string) => Promise<boolean>;
-    saveBranch?: (repoId: string, branchName: string, branchData: Branch) => Promise<Branch>;
+    deleteBranch?: (repoId: string, branchId: string) => Promise<boolean>;
+    saveBranch?: (repoId: string, branchId: string, branchData: Branch) => Promise<Branch>;
     saveCommit?: (repoId: string, sha: string, commitData: CommitData) => Promise<CommitData>;
     readCommit?: (repoId: string, sha: string) => Promise<CommitData>;
     readCheckpoint?(repoId: string, sha: string): Promise<ApplicationKVState>;
@@ -24,6 +24,8 @@ export interface DataSource {
     saveRenderedState?(repoId: string, commitState: RenderedApplicationState): Promise<RenderedApplicationState>;
     readStash?(repoId: string, sha: string | null): Promise<Array<ApplicationKVState>>;
     saveStash?(repoId: string, sha: string | null, stashState: Array<ApplicationKVState>): Promise<Array<ApplicationKVState>>;
+    readBranchesMetaState?(repoId: string): Promise<BranchesMetaState>;
+    saveBranchesMetaState?(repoId: string, branchesMetaState: BranchesMetaState): Promise<BranchesMetaState>;
 }
 /**
  * We need to export readDevPluginManifest for the daemon server
@@ -42,10 +44,10 @@ export declare const makeDataSource: (datasource?: DataSource) => {
     readRepoSettings?: (repoId: string) => Promise<RepoSetting>;
     readCurrentRepoState?: (repoId: string) => Promise<RepoState>;
     saveCurrentRepoState?: (repoId: string, state: RepoState) => Promise<RepoState>;
-    readBranch?: (repoId: string, branchName: string) => Promise<Branch>;
+    readBranch?: (repoId: string, branchId: string) => Promise<Branch>;
     readBranches?: (repoId: string) => Promise<Array<Branch>>;
-    deleteBranch?: (repoId: string, branchName: string) => Promise<boolean>;
-    saveBranch?: (repoId: string, branchName: string, branchData: Branch) => Promise<Branch>;
+    deleteBranch?: (repoId: string, branchId: string) => Promise<boolean>;
+    saveBranch?: (repoId: string, branchId: string, branchData: Branch) => Promise<Branch>;
     saveCommit?: (repoId: string, sha: string, commitData: CommitData) => Promise<CommitData>;
     readCommit?: (repoId: string, sha: string) => Promise<CommitData>;
     readCheckpoint?: (repoId: string, sha: string) => Promise<ApplicationKVState>;
@@ -57,6 +59,8 @@ export declare const makeDataSource: (datasource?: DataSource) => {
     saveRenderedState?: (repoId: string, commitState: RenderedApplicationState) => Promise<RenderedApplicationState>;
     readStash?: (repoId: string, sha: string | null) => Promise<Array<ApplicationKVState>>;
     saveStash?: (repoId: string, sha: string | null, stashState: Array<ApplicationKVState>) => Promise<Array<ApplicationKVState>>;
+    readBranchesMetaState?: (repoId: string) => Promise<BranchesMetaState>;
+    saveBranchesMetaState?: (repoId: string, branchesMetaState: BranchesMetaState) => Promise<BranchesMetaState>;
 };
 export declare const makeMemoizedDataSource: (dataSourceOverride?: DataSource) => {
     getPluginManifest?: (pluginName: string, pluginVersion: string) => Promise<Manifest>;
@@ -66,10 +70,10 @@ export declare const makeMemoizedDataSource: (dataSourceOverride?: DataSource) =
     readRepoSettings?: (repoId: string) => Promise<RepoSetting>;
     readCurrentRepoState?: (repoId: string) => Promise<RepoState>;
     saveCurrentRepoState?: (repoId: string, state: RepoState) => Promise<RepoState>;
-    readBranch?: (repoId: string, branchName: string) => Promise<Branch>;
+    readBranch?: (repoId: string, branchId: string) => Promise<Branch>;
     readBranches?: (repoId: string) => Promise<Array<Branch>>;
-    deleteBranch?: (repoId: string, branchName: string) => Promise<boolean>;
-    saveBranch?: (repoId: string, branchName: string, branchData: Branch) => Promise<Branch>;
+    deleteBranch?: (repoId: string, branchId: string) => Promise<boolean>;
+    saveBranch?: (repoId: string, branchId: string, branchData: Branch) => Promise<Branch>;
     saveCommit?: (repoId: string, sha: string, commitData: CommitData) => Promise<CommitData>;
     readCommit?: (repoId: string, sha: string) => Promise<CommitData>;
     readCheckpoint?: (repoId: string, sha: string) => Promise<ApplicationKVState>;
@@ -81,4 +85,6 @@ export declare const makeMemoizedDataSource: (dataSourceOverride?: DataSource) =
     saveRenderedState?: (repoId: string, commitState: RenderedApplicationState) => Promise<RenderedApplicationState>;
     readStash?: (repoId: string, sha: string | null) => Promise<Array<ApplicationKVState>>;
     saveStash?: (repoId: string, sha: string | null, stashState: Array<ApplicationKVState>) => Promise<Array<ApplicationKVState>>;
+    readBranchesMetaState?: (repoId: string) => Promise<BranchesMetaState>;
+    saveBranchesMetaState?: (repoId: string, branchesMetaState: BranchesMetaState) => Promise<BranchesMetaState>;
 };

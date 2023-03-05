@@ -29,6 +29,7 @@ import {
   revertCommit,
   autofixReversion,
   cherryPickRevision,
+  createRepoBranch,
 } from "../src/repoapi";
 import {
   createBlankRepo,
@@ -508,6 +509,7 @@ describe("repoapi", () => {
       await updatePluginState(datasource, "abc", "A", state2);
       const commitB = await writeRepoCommit(datasource, "abc", "B");
       await checkoutSha(datasource, "abc", commitA.sha);
+      await createRepoBranch(datasource, "abc", "feature-branch");
       await switchRepoBranch(datasource, "abc", "feature-branch");
 
       const state3 = {
@@ -624,11 +626,10 @@ describe("repoapi", () => {
         eState
       );
 
+      expect(eStateRendered).toEqual(mergeStateOut);
       await switchRepoBranch(datasource, "abc", "main");
       const mainMergeOut = await mergeCommit(datasource, "abc", mergeSha);
       const mainMergedSha = await getCurrentCommitSha(datasource, "abc");
-
-      expect(eStateRendered).toEqual(mergeStateOut);
 
       const mainMergeState = await getCommitState(
         datasource,
@@ -743,6 +744,7 @@ describe("repoapi", () => {
       await updatePluginState(datasource, "abc", "A", state2);
       const commitB = await writeRepoCommit(datasource, "abc", "B");
       await checkoutSha(datasource, "abc", commitA.sha);
+      await createRepoBranch(datasource, "abc", "feature-branch")
       await switchRepoBranch(datasource, "abc", "feature-branch");
 
       const state3 = {
@@ -1013,6 +1015,7 @@ describe("repoapi", () => {
       await updatePluginState(datasource, "abc", "A", state2);
       const commitB = await writeRepoCommit(datasource, "abc", "B");
       await checkoutSha(datasource, "abc", commitA.sha);
+      await createRepoBranch(datasource, "abc", "feature-branch")
       await switchRepoBranch(datasource, "abc", "feature-branch");
 
       const state3 = {
