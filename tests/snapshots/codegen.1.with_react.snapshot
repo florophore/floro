@@ -148,10 +148,13 @@ const splitPath = (str: string): Array<string> => {
   return out;
 };
 
-const decodeSchemaPath = (
+const decodeSchemaPathWithArrays = (
   pathString: string
-): Array<{ key: string; value: string } | string> => {
+): Array<DiffElement | string | number> => {
   return splitPath(pathString).map((part) => {
+    if (/^[(d+)]$/.test(part)) {
+      return parseInt(/^[(d+)]$/.exec(part)[1]);
+    }
     if (/^(.+)<(.+)>$/.test(part) && getCounterArrowBalanance(part) == 0) {
       const { key, value } = extractKeyValueFromRefString(part);
       return {
@@ -163,28 +166,33 @@ const decodeSchemaPath = (
   });
 };
 
-export const getObjectInStateMap = (stateMap: object&{[key: string]: object}, path: string): object | null => {
-  let current: null | undefined | object&{[key: string]: object}| unknown = null;
-  const [pluginWrapper, ...decodedPath] = decodeSchemaPath(path);
+const getObjectInStateMap = (
+  stateMap: { [pluginName: string]: object },
+  path: string
+): object | null => {
+  let current: null | object = null;
+  const [pluginWrapper, ...decodedPath] = decodeSchemaPathWithArrays(path);
   const pluginName = /^$((.+))$/.exec(pluginWrapper as string)?.[1] ?? null;
-  if (!pluginName) {
+  if (pluginName == null) {
     return null;
   }
   current = stateMap[pluginName];
-  for (let part of decodedPath) {
+  for (const part of decodedPath) {
     if (!current) {
       return null;
     }
-    if (typeof part != "string") {
-      const { key, value } = part as { key: string; value: string };
+    if (typeof part == "number") {
+      current = current[part];
+    } else if (typeof part != "string") {
+      const { key, value } = part as DiffElement;
       if (Array.isArray(current)) {
-        const element = current.find?.((v) => v?.[key] == value);
+        const element = current?.find?.((v) => v?.[key] == value);
         current = element;
       } else {
         return null;
       }
     } else {
-      current = (current as {[key: string]: object|unknown})[part];
+      current = current[part];
     }
   }
   return current ?? null;

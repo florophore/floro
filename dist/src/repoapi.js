@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.applyStashedChange = exports.popStashedChanges = exports.canPopStashedChanges = exports.getStashSize = exports.stashChanges = exports.canStash = exports.rollbackCommit = exports.canCherryPickRevision = exports.cherryPickRevision = exports.autofixReversion = exports.canAutofxReversion = exports.revertCommit = exports.hasMergeConflictDiff = exports.getMergeConflictDiff = exports.resolveMerge = exports.abortMerge = exports.updateMergeDirection = exports.mergeCommit = exports.updatePluginState = exports.updatePlugins = exports.checkoutSha = exports.writeRepoCommit = exports.readBranchState = exports.readCommitState = exports.readCurrentState = exports.readCommitHistory = exports.readBranchHistory = exports.readCurrentHistory = exports.readRepoCommit = exports.readLastCommit = exports.readSettings = exports.deleteUserBranch = exports.switchRepoBranch = exports.createRepoBranch = exports.getRepoBranches = exports.getCurrentRepoBranch = exports.readRepoDescription = exports.readRepoLicenses = exports.writeRepoLicenses = exports.writeRepoDescription = void 0;
+exports.discardCurrentChanges = exports.applyStashedChange = exports.popStashedChanges = exports.canPopStashedChanges = exports.getStashSize = exports.stashChanges = exports.canStash = exports.rollbackCommit = exports.canCherryPickRevision = exports.cherryPickRevision = exports.autofixReversion = exports.canAutofixReversion = exports.revertCommit = exports.hasMergeConflictDiff = exports.getMergeConflictDiff = exports.resolveMerge = exports.abortMerge = exports.updateMergeDirection = exports.mergeCommit = exports.updatePluginState = exports.updatePlugins = exports.checkoutSha = exports.writeRepoCommit = exports.readBranchState = exports.readCommitState = exports.readCurrentState = exports.readCommitHistory = exports.readBranchHistory = exports.readCurrentHistory = exports.readRepoCommit = exports.readLastCommit = exports.readSettings = exports.deleteUserBranch = exports.switchRepoBranch = exports.createRepoBranch = exports.getRepoBranches = exports.getCurrentRepoBranch = exports.readRepoDescription = exports.readRepoLicenses = exports.writeRepoLicenses = exports.writeRepoDescription = void 0;
 const path_1 = __importDefault(require("path"));
 const filestructure_1 = require("./filestructure");
 const repo_1 = require("./repo");
@@ -775,7 +775,7 @@ const mergeCommit = async (datasource, repoId, fromSha) => {
                 await datasource.saveCommit(repoId, mergeCommit.sha, mergeCommit);
                 if (currentRepoState.branch) {
                     const branchState = await datasource.readBranch(repoId, currentRepoState.branch);
-                    const o = await datasource.saveBranch(repoId, currentRepoState.branch, {
+                    await datasource.saveBranch(repoId, currentRepoState.branch, {
                         ...branchState,
                         lastCommit: mergeCommit.sha,
                     });
@@ -1022,7 +1022,6 @@ const resolveMerge = async (datasource, repoId) => {
             ? history[history.length - 1]
             : (0, repo_1.getBaseDivergenceSha)(history, origin);
         const baseCommit = await (0, repo_1.getCommitState)(datasource, repoId, baseSha);
-        // m2
         const baseDiff = (0, repo_1.getStateDiffFromCommitStates)(intoCommitState, baseCommit);
         const baseCommitData = await datasource.readCommit(repoId, baseSha);
         const mergeCommitData = await datasource.readCommit(repoId, fromSha);
@@ -1228,7 +1227,7 @@ const revertCommit = async (datasource, repoId, reversionSha) => {
     }
 };
 exports.revertCommit = revertCommit;
-const canAutofxReversion = async (datasource, repoId, reversionSha) => {
+const canAutofixReversion = async (datasource, repoId, reversionSha) => {
     if (!repoId) {
         return null;
     }
@@ -1276,7 +1275,7 @@ const canAutofxReversion = async (datasource, repoId, reversionSha) => {
         return null;
     }
 };
-exports.canAutofxReversion = canAutofxReversion;
+exports.canAutofixReversion = canAutofixReversion;
 const autofixReversion = async (datasource, repoId, reversionSha) => {
     if (!repoId) {
         return null;
@@ -1673,4 +1672,22 @@ const applyStashedChange = async (datasource, repoId, index) => {
     }
 };
 exports.applyStashedChange = applyStashedChange;
+const discardCurrentChanges = async (datasource, repoId) => {
+    if (!repoId) {
+        return null;
+    }
+    const exists = await datasource.repoExists(repoId);
+    if (!exists) {
+        return null;
+    }
+    try {
+        const unstagedState = await (0, repo_1.getUnstagedCommitState)(datasource, repoId);
+        const renderedState = await (0, repo_1.convertCommitStateToRenderedState)(datasource, unstagedState);
+        return await datasource.saveRenderedState(repoId, renderedState);
+    }
+    catch (e) {
+        return null;
+    }
+};
+exports.discardCurrentChanges = discardCurrentChanges;
 //# sourceMappingURL=repoapi.js.map

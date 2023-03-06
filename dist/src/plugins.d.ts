@@ -102,7 +102,9 @@ export declare const defaultVoidedState: (datasource: DataSource, schemaMap: {
     [key: string]: object;
 }) => Promise<{}>;
 export declare const writePathString: (pathParts: Array<DiffElement | string>) => string;
+export declare const writePathStringWithArrays: (pathParts: Array<DiffElement | string | number>) => string;
 export declare const decodeSchemaPath: (pathString: string) => Array<DiffElement | string>;
+export declare const decodeSchemaPathWithArrays: (pathString: string) => Array<DiffElement | string | number>;
 export declare const getStateId: (schema: TypeStruct, state: object) => string;
 export declare const flattenStateToSchemaPathKV: (schemaRoot: Manifest, state: object, traversalPath: Array<string | DiffElement>) => {
     key: string | Array<string | DiffElement>;
@@ -221,6 +223,7 @@ export declare const cascadePluginStateDeprecated: (datasource: DataSource, sche
 }) => Promise<{
     [key: string]: object;
 }>;
+export declare const reIndexSchemaArrays: (kvs: Array<DiffElement>) => Array<string>;
 export declare const validatePluginState: (datasource: DataSource, schemaMap: {
     [key: string]: Manifest;
 }, stateMap: {

@@ -1206,6 +1206,22 @@ export const writePathString = (
     .join(".");
 };
 
+export const writePathStringWithArrays = (
+  pathParts: Array<DiffElement | string | number>
+): string => {
+  return pathParts
+    .map((part) => {
+      if (typeof part == "string") {
+        return part;
+      }
+      if (typeof part == "number") {
+        return `[${part}]`;
+      }
+      return `${part.key}<${part.value}>`;
+    })
+    .join(".");
+};
+
 const extractKeyValueFromRefString = (
   str: string
 ): { key: string; value: string } => {
@@ -1269,6 +1285,24 @@ export const decodeSchemaPath = (
   pathString: string
 ): Array<DiffElement | string> => {
   return splitPath(pathString).map((part) => {
+    if (/^(.+)<(.+)>$/.test(part) && getCounterArrowBalanance(part) == 0) {
+      const { key, value } = extractKeyValueFromRefString(part);
+      return {
+        key,
+        value,
+      };
+    }
+    return part;
+  });
+};
+
+export const decodeSchemaPathWithArrays = (
+  pathString: string
+): Array<DiffElement | string | number> => {
+  return splitPath(pathString).map((part) => {
+    if (/^\[(\d+)\]$/.test(part)) {
+      return parseInt(/^\[(\d+)\]$/.exec(part)[1]);
+    }
     if (/^(.+)<(.+)>$/.test(part) && getCounterArrowBalanance(part) == 0) {
       const { key, value } = extractKeyValueFromRefString(part);
       return {
@@ -1413,15 +1447,23 @@ export const flattenStateToSchemaPathKV = (
         ...flattenStateToSchemaPathKV(
           schemaRoot[prop].values,
           { ...element, ["(id)"]: id },
-          [...traversalPath, prop]
+          [
+            ...traversalPath,
+            ...(primaryKey ? [primaryKey] : []),
+            prop
+          ],
         )
       );
     });
   }
   for (const prop of sets) {
     (state?.[prop] ?? []).forEach((element) => {
+      debugger;
       kv.push(
-        ...flattenStateToSchemaPathKV(schemaRoot[prop].values, element, [
+        ...flattenStateToSchemaPathKV(
+          schemaRoot[prop].values,
+          element,
+          [
           ...traversalPath,
           ...(primaryKey ? [primaryKey] : []),
           prop,
@@ -1586,7 +1628,7 @@ const getObjectInStateMap = (
   path: string
 ): object | null => {
   let current: null | object = null;
-  const [pluginWrapper, ...decodedPath] = decodeSchemaPath(path);
+  const [pluginWrapper, ...decodedPath] = decodeSchemaPathWithArrays(path);
   const pluginName = /^\$\((.+)\)$/.exec(pluginWrapper as string)?.[1] ?? null;
   if (pluginName == null) {
     return null;
@@ -1596,7 +1638,9 @@ const getObjectInStateMap = (
     if (!current) {
       return null;
     }
-    if (typeof part != "string") {
+    if (typeof part == "number") {
+      current = current[part];
+    } else if (typeof part != "string") {
       const { key, value } = part as DiffElement;
       if (Array.isArray(current)) {
         const element = current?.find?.((v) => v?.[key] == value);
@@ -2607,6 +2651,52 @@ export const cascadePluginStateDeprecated = async (
   );
   return result;
 };
+
+export const reIndexSchemaArrays = (kvs: Array<DiffElement>): Array<string> => {
+  const out = [];
+  const listStack: Array<string> = [];
+  let indexStack: Array<number> = [];
+  for (const { key, value } of kvs) {
+    const decodedPath = decodeSchemaPath(key);
+    const lastPart = decodedPath[decodedPath.length - 1];
+    if (typeof lastPart == "object" && lastPart.key == "(id)") {
+      const parentPath = decodedPath.slice(0, -1);
+      const parentPathString = writePathString(parentPath);
+      const peek = listStack?.[listStack.length - 1];
+      if (peek != parentPathString) {
+        if (!peek || key.startsWith(peek)) {
+          listStack.push(parentPathString);
+          indexStack.push(0);
+        } else {
+          while (
+            listStack.length > 0 &&
+            !key.startsWith(listStack[listStack.length - 1])
+          ) {
+            listStack.pop();
+            indexStack.pop();
+          }
+          indexStack[indexStack.length - 1]++;
+        }
+      } else {
+        const currIndex = indexStack.pop();
+        indexStack.push(currIndex + 1);
+      }
+      let pathIdx = 0;
+      const pathWithNumbers = decodedPath.map((part) => {
+        if (typeof part == "object" && part.key == "(id)") {
+          return indexStack[pathIdx++];
+        }
+        return part;
+      });
+      const arrayPath = writePathStringWithArrays(pathWithNumbers);
+      out.push(arrayPath);
+    } else {
+      out.push(key);
+    }
+  }
+  return out;
+};
+
 
 export const validatePluginState = async (
   datasource: DataSource,
@@ -3834,10 +3924,13 @@ const splitPath = (str: string): Array<string> => {
   return out;
 };
 
-const decodeSchemaPath = (
+const decodeSchemaPathWithArrays = (
   pathString: string
-): Array<{ key: string; value: string } | string> => {
+): Array<DiffElement | string | number> => {
   return splitPath(pathString).map((part) => {
+    if (/^\[(\d+)\]$/.test(part)) {
+      return parseInt(/^\[(\d+)\]$/.exec(part)[1]);
+    }
     if (/^(.+)<(.+)>$/.test(part) && getCounterArrowBalanance(part) == 0) {
       const { key, value } = extractKeyValueFromRefString(part);
       return {
@@ -3849,28 +3942,33 @@ const decodeSchemaPath = (
   });
 };
 
-export const getObjectInStateMap = (stateMap: object&{[key: string]: object}, path: string): object | null => {
-  let current: null | undefined | object&{[key: string]: object}| unknown = null;
-  const [pluginWrapper, ...decodedPath] = decodeSchemaPath(path);
-  const pluginName = /^$((.+))$/.exec(pluginWrapper as string)?.[1] ?? null;
-  if (!pluginName) {
+const getObjectInStateMap = (
+  stateMap: { [pluginName: string]: object },
+  path: string
+): object | null => {
+  let current: null | object = null;
+  const [pluginWrapper, ...decodedPath] = decodeSchemaPathWithArrays(path);
+  const pluginName = /^\$\((.+)\)$/.exec(pluginWrapper as string)?.[1] ?? null;
+  if (pluginName == null) {
     return null;
   }
   current = stateMap[pluginName];
-  for (let part of decodedPath) {
+  for (const part of decodedPath) {
     if (!current) {
       return null;
     }
-    if (typeof part != "string") {
-      const { key, value } = part as { key: string; value: string };
+    if (typeof part == "number") {
+      current = current[part];
+    } else if (typeof part != "string") {
+      const { key, value } = part as DiffElement;
       if (Array.isArray(current)) {
-        const element = current.find?.((v) => v?.[key] == value);
+        const element = current?.find?.((v) => v?.[key] == value);
         current = element;
       } else {
         return null;
       }
     } else {
-      current = (current as {[key: string]: object|unknown})[part];
+      current = current[part];
     }
   }
   return current ?? null;

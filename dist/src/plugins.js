@@ -3,8 +3,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.buildPointerArgsMap = exports.buildPointerReturnTypeMap = exports.typestructsAreEquivalent = exports.replaceRawRefsInExpandedType = exports.replaceRefVarsWithWildcards = exports.collectKeyRefs = exports.invalidSchemaPropsCheck = exports.isSchemaValid = exports.isTopologicalSubsetValid = exports.isTopologicalSubset = exports.pluginManifestIsSubsetOfManifest = exports.validatePluginState = exports.cascadePluginStateDeprecated = exports.cascadePluginState = exports.recursivelyCheckIfReferenceExists = exports.compileStatePointers = exports.getDownstreamDepsInSchemaMap = exports.getUpstreamDepsInSchemaMap = exports.getKVStateForPlugin = exports.getRootSchemaMap = exports.getRootSchemaForPlugin = exports.getExpandedTypesForPlugin = exports.getStateFromKVForPlugin = exports.buildObjectsAtPath = exports.indexArrayDuplicates = exports.flattenStateToSchemaPathKV = exports.getStateId = exports.decodeSchemaPath = exports.writePathString = exports.defaultVoidedState = exports.validatePluginManifest = exports.containsCyclicTypes = exports.schemaHasInvalidTypeSytax = exports.schemaManifestHasInvalidSyntax = exports.getSchemaMapForManifest = exports.verifyPluginDependencyCompatability = exports.coalesceDependencyVersions = exports.getUpstreamDependencyManifests = exports.getDependenciesForManifest = exports.hasPluginManifest = exports.hasPlugin = exports.manifestListToPluginList = exports.manifestListToSchemaMap = exports.pluginMapToList = exports.pluginListToMap = exports.getManifestMapFromManifestList = exports.getPluginManifests = exports.topSortManifests = exports.schemaMapsAreCompatible = exports.pluginManifestsAreCompatibleForUpdate = void 0;
-exports.drawGetPluginStore = exports.drawGetReferencedObject = exports.drawRefReturnTypes = exports.drawSchemaRoot = exports.drawMakeQueryRef = void 0;
+exports.replaceRawRefsInExpandedType = exports.replaceRefVarsWithWildcards = exports.collectKeyRefs = exports.invalidSchemaPropsCheck = exports.isSchemaValid = exports.isTopologicalSubsetValid = exports.isTopologicalSubset = exports.pluginManifestIsSubsetOfManifest = exports.validatePluginState = exports.reIndexSchemaArrays = exports.cascadePluginStateDeprecated = exports.cascadePluginState = exports.recursivelyCheckIfReferenceExists = exports.compileStatePointers = exports.getDownstreamDepsInSchemaMap = exports.getUpstreamDepsInSchemaMap = exports.getKVStateForPlugin = exports.getRootSchemaMap = exports.getRootSchemaForPlugin = exports.getExpandedTypesForPlugin = exports.getStateFromKVForPlugin = exports.buildObjectsAtPath = exports.indexArrayDuplicates = exports.flattenStateToSchemaPathKV = exports.getStateId = exports.decodeSchemaPathWithArrays = exports.decodeSchemaPath = exports.writePathStringWithArrays = exports.writePathString = exports.defaultVoidedState = exports.validatePluginManifest = exports.containsCyclicTypes = exports.schemaHasInvalidTypeSytax = exports.schemaManifestHasInvalidSyntax = exports.getSchemaMapForManifest = exports.verifyPluginDependencyCompatability = exports.coalesceDependencyVersions = exports.getUpstreamDependencyManifests = exports.getDependenciesForManifest = exports.hasPluginManifest = exports.hasPlugin = exports.manifestListToPluginList = exports.manifestListToSchemaMap = exports.pluginMapToList = exports.pluginListToMap = exports.getManifestMapFromManifestList = exports.getPluginManifests = exports.topSortManifests = exports.schemaMapsAreCompatible = exports.pluginManifestsAreCompatibleForUpdate = void 0;
+exports.drawGetPluginStore = exports.drawGetReferencedObject = exports.drawRefReturnTypes = exports.drawSchemaRoot = exports.drawMakeQueryRef = exports.buildPointerArgsMap = exports.buildPointerReturnTypeMap = exports.typestructsAreEquivalent = void 0;
 const axios_1 = __importDefault(require("axios"));
 const semver_1 = __importDefault(require("semver"));
 axios_1.default.defaults.validateStatus = function () {
@@ -862,6 +862,20 @@ const writePathString = (pathParts) => {
         .join(".");
 };
 exports.writePathString = writePathString;
+const writePathStringWithArrays = (pathParts) => {
+    return pathParts
+        .map((part) => {
+        if (typeof part == "string") {
+            return part;
+        }
+        if (typeof part == "number") {
+            return `[${part}]`;
+        }
+        return `${part.key}<${part.value}>`;
+    })
+        .join(".");
+};
+exports.writePathStringWithArrays = writePathStringWithArrays;
 const extractKeyValueFromRefString = (str) => {
     let key = "";
     let i = 0;
@@ -933,6 +947,22 @@ const decodeSchemaPath = (pathString) => {
     });
 };
 exports.decodeSchemaPath = decodeSchemaPath;
+const decodeSchemaPathWithArrays = (pathString) => {
+    return splitPath(pathString).map((part) => {
+        if (/^\[(\d+)\]$/.test(part)) {
+            return parseInt(/^\[(\d+)\]$/.exec(part)[1]);
+        }
+        if (/^(.+)<(.+)>$/.test(part) && getCounterArrowBalanance(part) == 0) {
+            const { key, value } = extractKeyValueFromRefString(part);
+            return {
+                key,
+                value,
+            };
+        }
+        return part;
+    });
+};
+exports.decodeSchemaPathWithArrays = decodeSchemaPathWithArrays;
 const fastHash = (str) => {
     let hash = 0;
     for (let i = 0; i < str.length; i++) {
@@ -1032,11 +1062,16 @@ const flattenStateToSchemaPathKV = (schemaRoot, state, traversalPath) => {
     for (const prop of arrays) {
         (state?.[prop] ?? []).forEach((element) => {
             const id = (0, exports.getStateId)(schemaRoot[prop].values, element);
-            kv.push(...(0, exports.flattenStateToSchemaPathKV)(schemaRoot[prop].values, { ...element, ["(id)"]: id }, [...traversalPath, prop]));
+            kv.push(...(0, exports.flattenStateToSchemaPathKV)(schemaRoot[prop].values, { ...element, ["(id)"]: id }, [
+                ...traversalPath,
+                ...(primaryKey ? [primaryKey] : []),
+                prop
+            ]));
         });
     }
     for (const prop of sets) {
         (state?.[prop] ?? []).forEach((element) => {
+            debugger;
             kv.push(...(0, exports.flattenStateToSchemaPathKV)(schemaRoot[prop].values, element, [
                 ...traversalPath,
                 ...(primaryKey ? [primaryKey] : []),
@@ -1184,7 +1219,7 @@ const getStaticSchemaAtPath = (rootSchema, path) => {
 };
 const getObjectInStateMap = (stateMap, path) => {
     let current = null;
-    const [pluginWrapper, ...decodedPath] = (0, exports.decodeSchemaPath)(path);
+    const [pluginWrapper, ...decodedPath] = (0, exports.decodeSchemaPathWithArrays)(path);
     const pluginName = /^\$\((.+)\)$/.exec(pluginWrapper)?.[1] ?? null;
     if (pluginName == null) {
         return null;
@@ -1194,7 +1229,10 @@ const getObjectInStateMap = (stateMap, path) => {
         if (!current) {
             return null;
         }
-        if (typeof part != "string") {
+        if (typeof part == "number") {
+            current = current[part];
+        }
+        else if (typeof part != "string") {
             const { key, value } = part;
             if (Array.isArray(current)) {
                 const element = current?.find?.((v) => v?.[key] == value);
@@ -1855,6 +1893,52 @@ const cascadePluginStateDeprecated = async (datasource, schemaMap, stateMap, plu
     return result;
 };
 exports.cascadePluginStateDeprecated = cascadePluginStateDeprecated;
+const reIndexSchemaArrays = (kvs) => {
+    const out = [];
+    const listStack = [];
+    let indexStack = [];
+    for (const { key, value } of kvs) {
+        const decodedPath = (0, exports.decodeSchemaPath)(key);
+        const lastPart = decodedPath[decodedPath.length - 1];
+        if (typeof lastPart == "object" && lastPart.key == "(id)") {
+            const parentPath = decodedPath.slice(0, -1);
+            const parentPathString = (0, exports.writePathString)(parentPath);
+            const peek = listStack?.[listStack.length - 1];
+            if (peek != parentPathString) {
+                if (!peek || key.startsWith(peek)) {
+                    listStack.push(parentPathString);
+                    indexStack.push(0);
+                }
+                else {
+                    while (listStack.length > 0 &&
+                        !key.startsWith(listStack[listStack.length - 1])) {
+                        listStack.pop();
+                        indexStack.pop();
+                    }
+                    indexStack[indexStack.length - 1]++;
+                }
+            }
+            else {
+                const currIndex = indexStack.pop();
+                indexStack.push(currIndex + 1);
+            }
+            let pathIdx = 0;
+            const pathWithNumbers = decodedPath.map((part) => {
+                if (typeof part == "object" && part.key == "(id)") {
+                    return indexStack[pathIdx++];
+                }
+                return part;
+            });
+            const arrayPath = (0, exports.writePathStringWithArrays)(pathWithNumbers);
+            out.push(arrayPath);
+        }
+        else {
+            out.push(key);
+        }
+    }
+    return out;
+};
+exports.reIndexSchemaArrays = reIndexSchemaArrays;
 const validatePluginState = async (datasource, schemaMap, stateMap, pluginName) => {
     const rootSchemaMap = (await (0, exports.getRootSchemaMap)(datasource, schemaMap)) ?? {};
     // ignore $(store)
@@ -2724,10 +2808,13 @@ const splitPath = (str: string): Array<string> => {
   return out;
 };
 
-const decodeSchemaPath = (
+const decodeSchemaPathWithArrays = (
   pathString: string
-): Array<{ key: string; value: string } | string> => {
+): Array<DiffElement | string | number> => {
   return splitPath(pathString).map((part) => {
+    if (/^\[(\d+)\]$/.test(part)) {
+      return parseInt(/^\[(\d+)\]$/.exec(part)[1]);
+    }
     if (/^(.+)<(.+)>$/.test(part) && getCounterArrowBalanance(part) == 0) {
       const { key, value } = extractKeyValueFromRefString(part);
       return {
@@ -2739,28 +2826,33 @@ const decodeSchemaPath = (
   });
 };
 
-export const getObjectInStateMap = (stateMap: object&{[key: string]: object}, path: string): object | null => {
-  let current: null | undefined | object&{[key: string]: object}| unknown = null;
-  const [pluginWrapper, ...decodedPath] = decodeSchemaPath(path);
-  const pluginName = /^$((.+))$/.exec(pluginWrapper as string)?.[1] ?? null;
-  if (!pluginName) {
+const getObjectInStateMap = (
+  stateMap: { [pluginName: string]: object },
+  path: string
+): object | null => {
+  let current: null | object = null;
+  const [pluginWrapper, ...decodedPath] = decodeSchemaPathWithArrays(path);
+  const pluginName = /^\$\((.+)\)$/.exec(pluginWrapper as string)?.[1] ?? null;
+  if (pluginName == null) {
     return null;
   }
   current = stateMap[pluginName];
-  for (let part of decodedPath) {
+  for (const part of decodedPath) {
     if (!current) {
       return null;
     }
-    if (typeof part != "string") {
-      const { key, value } = part as { key: string; value: string };
+    if (typeof part == "number") {
+      current = current[part];
+    } else if (typeof part != "string") {
+      const { key, value } = part as DiffElement;
       if (Array.isArray(current)) {
-        const element = current.find?.((v) => v?.[key] == value);
+        const element = current?.find?.((v) => v?.[key] == value);
         current = element;
       } else {
         return null;
       }
     } else {
-      current = (current as {[key: string]: object|unknown})[part];
+      current = current[part];
     }
   }
   return current ?? null;

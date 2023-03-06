@@ -440,6 +440,134 @@ describe("plugins", () => {
             });
         });
     });
+    describe("array re-indexing", () => {
+        test("can re-index nested arrays", async () => {
+            const ARRAY_PLUGIN_MANIFEST = {
+                version: "0.0.0",
+                name: "simple",
+                displayName: "Simple",
+                icon: {
+                    light: "./palette-plugin-icon.svg",
+                    dark: "./palette-plugin-icon.svg",
+                },
+                imports: {},
+                types: {
+                    entity: {
+                        name: {
+                            type: "string",
+                            isKey: true,
+                        },
+                        list: {
+                            type: "array",
+                            values: {
+                                someProp: {
+                                    type: "string",
+                                },
+                                subList: {
+                                    type: "array",
+                                    values: {
+                                        subProp: {
+                                            type: "int",
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
+                store: {
+                    objects: {
+                        type: "set",
+                        values: "entity",
+                    },
+                },
+            };
+            const stateMap = {
+                [ARRAY_PLUGIN_MANIFEST.name]: {
+                    objects: [
+                        {
+                            name: "abc",
+                            list: [
+                                {
+                                    someProp: "first prop",
+                                    subList: [
+                                        {
+                                            subProp: 1,
+                                        },
+                                        {
+                                            subProp: 2,
+                                        },
+                                        {
+                                            subProp: 2,
+                                        },
+                                        {
+                                            subProp: 1,
+                                        },
+                                    ],
+                                },
+                                {
+                                    someProp: "second prop",
+                                    subList: [
+                                        {
+                                            subProp: 1,
+                                        },
+                                        {
+                                            subProp: 2,
+                                        },
+                                        {
+                                            subProp: 2,
+                                        },
+                                    ],
+                                },
+                                {
+                                    someProp: "first prop",
+                                    subList: [
+                                        {
+                                            subProp: 1,
+                                        },
+                                        {
+                                            subProp: 2,
+                                        },
+                                        {
+                                            subProp: 2,
+                                        },
+                                        {
+                                            subProp: 1,
+                                        },
+                                    ],
+                                },
+                            ],
+                        },
+                    ],
+                },
+            };
+            const kvs = await (0, plugins_1.getKVStateForPlugin)({
+                ...datasource,
+                getPluginManifest: async () => {
+                    return ARRAY_PLUGIN_MANIFEST;
+                },
+            }, { [ARRAY_PLUGIN_MANIFEST.name]: ARRAY_PLUGIN_MANIFEST }, ARRAY_PLUGIN_MANIFEST.name, stateMap);
+            const out = (0, plugins_1.reIndexSchemaArrays)(kvs);
+            expect(out).toEqual([
+                "$(simple)",
+                "$(simple).objects.name<abc>",
+                "$(simple).objects.name<abc>.list.[0]",
+                "$(simple).objects.name<abc>.list.[0].subList.[0]",
+                "$(simple).objects.name<abc>.list.[0].subList.[1]",
+                "$(simple).objects.name<abc>.list.[0].subList.[2]",
+                "$(simple).objects.name<abc>.list.[0].subList.[3]",
+                "$(simple).objects.name<abc>.list.[1]",
+                "$(simple).objects.name<abc>.list.[1].subList.[0]",
+                "$(simple).objects.name<abc>.list.[1].subList.[1]",
+                "$(simple).objects.name<abc>.list.[1].subList.[2]",
+                "$(simple).objects.name<abc>.list.[2]",
+                "$(simple).objects.name<abc>.list.[2].subList.[0]",
+                "$(simple).objects.name<abc>.list.[2].subList.[1]",
+                "$(simple).objects.name<abc>.list.[2].subList.[2]",
+                "$(simple).objects.name<abc>.list.[2].subList.[3]",
+            ]);
+        });
+    });
     describe("can stich schemas", () => {
         test("getRootSchemaForPlugin", async () => {
             const A_PLUGIN_MANIFEST = {
@@ -1317,7 +1445,7 @@ describe("plugins", () => {
                                 values: {
                                     pKey: {
                                         type: "int",
-                                        isKey: true
+                                        isKey: true,
                                     },
                                     someRef: {
                                         type: "ref<$(A).cObjects.values>",
@@ -1325,23 +1453,23 @@ describe("plugins", () => {
                                     nested: {
                                         nestedRef: {
                                             type: "ref<$(A).cObjects.values>",
-                                            onDelete: "nullify"
+                                            onDelete: "nullify",
                                         },
                                         nestedSet: {
                                             type: "set",
                                             values: {
                                                 dKey: {
                                                     isKey: true,
-                                                    type: "string"
+                                                    type: "string",
                                                 },
                                                 randomRef: {
                                                     type: "ref<$(A).cObjects.values>",
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
+                                                },
+                                            },
+                                        },
+                                    },
+                                },
+                            },
                         },
                     },
                     cObjects: {
@@ -1384,14 +1512,14 @@ describe("plugins", () => {
                                         nestedSet: [
                                             {
                                                 dKey: "a",
-                                                randomRef: "$(A).cObjects.cVal<$(A).bObjects.mainKey<$(A).aObjects.name<abc>>>"
+                                                randomRef: "$(A).cObjects.cVal<$(A).bObjects.mainKey<$(A).aObjects.name<abc>>>",
                                             },
                                             {
                                                 dKey: "b",
-                                                randomRef: "$(A).cObjects.cVal<$(A).bObjects.mainKey<$(A).aObjects.name<def>>>"
-                                            }
-                                        ]
-                                    }
+                                                randomRef: "$(A).cObjects.cVal<$(A).bObjects.mainKey<$(A).aObjects.name<def>>>",
+                                            },
+                                        ],
+                                    },
                                 },
                                 {
                                     pKey: 2,
@@ -1401,16 +1529,16 @@ describe("plugins", () => {
                                         nestedSet: [
                                             {
                                                 dKey: "a",
-                                                randomRef: "$(A).cObjects.cVal<$(A).bObjects.mainKey<$(A).aObjects.name<abc>>>"
+                                                randomRef: "$(A).cObjects.cVal<$(A).bObjects.mainKey<$(A).aObjects.name<abc>>>",
                                             },
                                             {
                                                 dKey: "b",
-                                                randomRef: "$(A).cObjects.cVal<$(A).bObjects.mainKey<$(A).aObjects.name<def>>>"
-                                            }
-                                        ]
-                                    }
+                                                randomRef: "$(A).cObjects.cVal<$(A).bObjects.mainKey<$(A).aObjects.name<def>>>",
+                                            },
+                                        ],
+                                    },
                                 },
-                            ]
+                            ],
                         },
                         {
                             mainKey: "$(A).aObjects.name<def>",
@@ -1423,14 +1551,14 @@ describe("plugins", () => {
                                         nestedSet: [
                                             {
                                                 dKey: "a",
-                                                randomRef: "$(A).cObjects.cVal<$(A).bObjects.mainKey<$(A).aObjects.name<abc>>>"
+                                                randomRef: "$(A).cObjects.cVal<$(A).bObjects.mainKey<$(A).aObjects.name<abc>>>",
                                             },
                                             {
                                                 dKey: "x",
-                                                randomRef: "$(A).cObjects.cVal<$(A).bObjects.mainKey<$(A).aObjects.name<xyz>>>"
-                                            }
-                                        ]
-                                    }
+                                                randomRef: "$(A).cObjects.cVal<$(A).bObjects.mainKey<$(A).aObjects.name<xyz>>>",
+                                            },
+                                        ],
+                                    },
                                 },
                                 {
                                     pKey: 2,
@@ -1440,20 +1568,20 @@ describe("plugins", () => {
                                         nestedSet: [
                                             {
                                                 dKey: "a",
-                                                randomRef: "$(A).cObjects.cVal<$(A).bObjects.mainKey<$(A).aObjects.name<abc>>>"
+                                                randomRef: "$(A).cObjects.cVal<$(A).bObjects.mainKey<$(A).aObjects.name<abc>>>",
                                             },
                                             {
                                                 dKey: "x",
-                                                randomRef: "$(A).cObjects.cVal<$(A).bObjects.mainKey<$(A).aObjects.name<xyz>>>"
+                                                randomRef: "$(A).cObjects.cVal<$(A).bObjects.mainKey<$(A).aObjects.name<xyz>>>",
                                             },
                                             {
                                                 dKey: "b",
-                                                randomRef: "$(A).cObjects.cVal<$(A).bObjects.mainKey<$(A).aObjects.name<def>>>"
-                                            }
-                                        ]
-                                    }
+                                                randomRef: "$(A).cObjects.cVal<$(A).bObjects.mainKey<$(A).aObjects.name<def>>>",
+                                            },
+                                        ],
+                                    },
                                 },
-                            ]
+                            ],
                         },
                     ],
                     cObjects: [

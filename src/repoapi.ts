@@ -1023,7 +1023,7 @@ export const mergeCommit = async (
             repoId,
             currentRepoState.branch
           );
-          const o = await datasource.saveBranch(repoId, currentRepoState.branch, {
+          await datasource.saveBranch(repoId, currentRepoState.branch, {
             ...branchState,
             lastCommit: mergeCommit.sha,
           });
@@ -1399,7 +1399,6 @@ export const resolveMerge = async (datasource: DataSource, repoId: string) => {
       : getBaseDivergenceSha(history, origin);
 
     const baseCommit = await getCommitState(datasource, repoId, baseSha);
-    // m2
     const baseDiff = getStateDiffFromCommitStates(intoCommitState, baseCommit);
     const baseCommitData = await datasource.readCommit(repoId, baseSha);
     const mergeCommitData = await datasource.readCommit(repoId, fromSha);
@@ -1689,7 +1688,7 @@ export const revertCommit = async (
   }
 };
 
-export const canAutofxReversion = async (
+export const canAutofixReversion = async (
   datasource: DataSource,
   repoId: string,
   reversionSha: string
@@ -2356,3 +2355,27 @@ export const applyStashedChange = async (
     return null;
   }
 };
+
+
+export const discardCurrentChanges = async (
+  datasource: DataSource,
+  repoId: string,
+) => {
+  if (!repoId) {
+    return null;
+  }
+  const exists = await datasource.repoExists(repoId);
+  if (!exists) {
+    return null;
+  }
+  try {
+    const unstagedState = await getUnstagedCommitState(datasource, repoId);
+    const renderedState = await convertCommitStateToRenderedState(
+      datasource,
+      unstagedState
+    );
+    return await datasource.saveRenderedState(repoId, renderedState);
+  } catch (e) {
+    return null;
+  }
+}

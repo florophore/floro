@@ -566,7 +566,7 @@ export const convertRenderedCommitStateToKv = async (
 };
 
 /**
- * use when committing against branch or sha
+ * MAINTAINS BRANCH
  */
 export const updateCurrentCommitSHA = async (
   datasource: DataSource,
@@ -599,7 +599,7 @@ export const updateCurrentCommitSHA = async (
 };
 
 /**
- * use when HEAD is detached
+ * DETACHES HEAD FROM BRANCH
  */
 export const updateCurrentWithSHA = async (
   datasource: DataSource,

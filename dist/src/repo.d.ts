@@ -126,11 +126,11 @@ export declare const getUnstagedCommitState: (datasource: DataSource, repoId: st
 export declare const getApplicationState: (datasource: DataSource, repoId: string) => Promise<RenderedApplicationState>;
 export declare const convertRenderedCommitStateToKv: (datasource: DataSource, renderedAppState: RenderedApplicationState) => Promise<ApplicationKVState>;
 /**
- * use when committing against branch or sha
+ * MAINTAINS BRANCH
  */
 export declare const updateCurrentCommitSHA: (datasource: DataSource, repoId: string, sha: string, isResolvingMerge: boolean) => Promise<RepoState | null>;
 /**
- * use when HEAD is detached
+ * DETACHES HEAD FROM BRANCH
  */
 export declare const updateCurrentWithSHA: (datasource: DataSource, repoId: string, sha: string, isResolvingMerge: boolean) => Promise<RepoState | null>;
 export declare const updateCurrentWithNewBranch: (datasource: DataSource, repoId: string, branchId: string) => Promise<RepoState | null>;

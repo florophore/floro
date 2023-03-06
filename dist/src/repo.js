@@ -388,7 +388,7 @@ const convertRenderedCommitStateToKv = async (datasource, renderedAppState) => {
 };
 exports.convertRenderedCommitStateToKv = convertRenderedCommitStateToKv;
 /**
- * use when committing against branch or sha
+ * MAINTAINS BRANCH
  */
 const updateCurrentCommitSHA = async (datasource, repoId, sha, isResolvingMerge) => {
     try {
@@ -414,7 +414,7 @@ const updateCurrentCommitSHA = async (datasource, repoId, sha, isResolvingMerge)
 };
 exports.updateCurrentCommitSHA = updateCurrentCommitSHA;
 /**
- * use when HEAD is detached
+ * DETACHES HEAD FROM BRANCH
  */
 const updateCurrentWithSHA = async (datasource, repoId, sha, isResolvingMerge) => {
     try {
