@@ -2736,6 +2736,39 @@ export const validatePluginState = async (
   return true;
 };
 
+export const getPluginInvalidStateIndices = async (
+  datasource: DataSource,
+  schemaMap: { [key: string]: Manifest },
+  kvs: Array<DiffElement>,
+  pluginName: string
+): Promise<Array<number>> => {
+  const out = [];
+  const rootSchemaMap = (await getRootSchemaMap(datasource, schemaMap)) ?? {};
+  for (let i = 1; i < kvs.length; ++i) {
+    const { key, value } = kvs[i]
+    const subSchema = getSchemaAtPath(rootSchemaMap[pluginName], key);
+    for (const prop in subSchema) {
+      if (subSchema[prop]?.type == "array" || subSchema[prop]?.type == "set") {
+        if (!subSchema[prop]?.emptyable) {
+          const referencedObject = value;
+          if ((referencedObject?.[prop]?.length ?? 0) == 0) {
+            out.push(i);
+          }
+        }
+        continue;
+      }
+      if (
+        subSchema[prop]?.type &&
+        (!subSchema[prop]?.nullable || subSchema[prop]?.isKey) &&
+        value[prop] == null
+      ) {
+        out.push(i);
+      }
+    }
+  }
+  return out;
+};
+
 const objectIsSubsetOfObject = (current: object, next: object): boolean => {
   if (typeof current != "object") {
     return false;

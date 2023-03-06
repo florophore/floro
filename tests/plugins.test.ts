@@ -10,6 +10,7 @@ import {
   validatePluginState,
   isTopologicalSubsetValid,
   reIndexSchemaArrays,
+  getPluginInvalidStateIndices,
 } from "../src/plugins";
 import { makeSignedInUser, makeTestPlugin } from "./helpers/fsmocks";
 import { SIMPLE_PLUGIN_MANIFEST } from "./helpers/pluginmocks";
@@ -1957,6 +1958,100 @@ describe("plugins", () => {
         A_PLUGIN_MANIFEST.name
       );
       expect(validState).toEqual(true);
+    });
+
+    test("collects invalid references", async () => {
+      const A_PLUGIN_MANIFEST = {
+        version: "0.0.0",
+        name: "a-plugin",
+        displayName: "A",
+        icon: {
+          light: "./palette-plugin-icon.svg",
+          dark: "./palette-plugin-icon.svg",
+        },
+        imports: {},
+        types: {
+          typeA: {
+            name: {
+              type: "string",
+              isKey: true,
+            },
+            nullableProp: {
+              type: "int",
+              nullable: true,
+            },
+            nonNullableProp: {
+              type: "int",
+              nullable: false,
+            },
+            list: {
+              type: "array",
+              values: "string",
+            },
+            subList: {
+              type: "array",
+              values: {
+                someProp: {
+                  type: "string"
+                }
+              }
+            }
+          },
+        },
+        store: {
+          aObjects: {
+            type: "set",
+            values: "typeA",
+          },
+        },
+      };
+
+      const schemaMap: { [key: string]: Manifest } = {
+        "a-plugin": A_PLUGIN_MANIFEST as Manifest,
+      };
+
+      const invalidStateMap = {
+        [A_PLUGIN_MANIFEST.name]: {
+          aObjects: [
+            {
+              name: "test",
+              nonNullableProp: 3.14,
+              nullableProp: 13,
+              list: ["ok", "1"],
+              subList: [
+                {
+                  someProp: 1
+                },
+                {
+                  someProp: "abc"
+                },
+                {
+                  someProp: 3
+                },
+              ]
+            },
+          ],
+        },
+      };
+
+      const kvs = await getKVStateForPlugin(
+        {
+          ...datasource,
+          getPluginManifest: async (pluginName) => {
+            return schemaMap[pluginName];
+          },
+        },
+        schemaMap,
+        A_PLUGIN_MANIFEST.name,
+        invalidStateMap
+      )
+      const invalidStates = await getPluginInvalidStateIndices(
+        datasource,
+        schemaMap,
+        kvs,
+        A_PLUGIN_MANIFEST.name,
+      );
+      expect(invalidStates).toEqual([2, 4]);
     });
 
     test("returns false when state is invalid", async () => {

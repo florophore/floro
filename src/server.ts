@@ -46,6 +46,7 @@ import {
   readRepoDescription,
   writeRepoLicenses,
   readRepoLicenses,
+  checkoutSha,
   //deleteBranch,
 } from "./repoapi";
 import { makeMemoizedDataSource, readDevPluginManifest } from "./datasource";
@@ -220,7 +221,7 @@ app.post(
   async (req, res): Promise<void> => {
     const repoId = req.params["repoId"];
     const sha = req.params["sha"];
-    const state = await switchRepoBranch(datasource, repoId, sha);
+    const state = await checkoutSha(datasource, repoId, sha);
     if (!state) {
       res.sendStatus(400);
       return;

@@ -229,6 +229,9 @@ export declare const validatePluginState: (datasource: DataSource, schemaMap: {
 }, stateMap: {
     [key: string]: object;
 }, pluginName: string) => Promise<boolean>;
+export declare const getPluginInvalidStateIndices: (datasource: DataSource, schemaMap: {
+    [key: string]: Manifest;
+}, kvs: Array<DiffElement>, pluginName: string) => Promise<Array<number>>;
 export declare const pluginManifestIsSubsetOfManifest: (datasource: DataSource, currentSchemaMap: {
     [key: string]: Manifest;
 }, nextSchemaMap: {

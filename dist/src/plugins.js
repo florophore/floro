@@ -3,8 +3,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.replaceRawRefsInExpandedType = exports.replaceRefVarsWithWildcards = exports.collectKeyRefs = exports.invalidSchemaPropsCheck = exports.isSchemaValid = exports.isTopologicalSubsetValid = exports.isTopologicalSubset = exports.pluginManifestIsSubsetOfManifest = exports.validatePluginState = exports.reIndexSchemaArrays = exports.cascadePluginStateDeprecated = exports.cascadePluginState = exports.recursivelyCheckIfReferenceExists = exports.compileStatePointers = exports.getDownstreamDepsInSchemaMap = exports.getUpstreamDepsInSchemaMap = exports.getKVStateForPlugin = exports.getRootSchemaMap = exports.getRootSchemaForPlugin = exports.getExpandedTypesForPlugin = exports.getStateFromKVForPlugin = exports.buildObjectsAtPath = exports.indexArrayDuplicates = exports.flattenStateToSchemaPathKV = exports.getStateId = exports.decodeSchemaPathWithArrays = exports.decodeSchemaPath = exports.writePathStringWithArrays = exports.writePathString = exports.defaultVoidedState = exports.validatePluginManifest = exports.containsCyclicTypes = exports.schemaHasInvalidTypeSytax = exports.schemaManifestHasInvalidSyntax = exports.getSchemaMapForManifest = exports.verifyPluginDependencyCompatability = exports.coalesceDependencyVersions = exports.getUpstreamDependencyManifests = exports.getDependenciesForManifest = exports.hasPluginManifest = exports.hasPlugin = exports.manifestListToPluginList = exports.manifestListToSchemaMap = exports.pluginMapToList = exports.pluginListToMap = exports.getManifestMapFromManifestList = exports.getPluginManifests = exports.topSortManifests = exports.schemaMapsAreCompatible = exports.pluginManifestsAreCompatibleForUpdate = void 0;
-exports.drawGetPluginStore = exports.drawGetReferencedObject = exports.drawRefReturnTypes = exports.drawSchemaRoot = exports.drawMakeQueryRef = exports.buildPointerArgsMap = exports.buildPointerReturnTypeMap = exports.typestructsAreEquivalent = void 0;
+exports.replaceRefVarsWithWildcards = exports.collectKeyRefs = exports.invalidSchemaPropsCheck = exports.isSchemaValid = exports.isTopologicalSubsetValid = exports.isTopologicalSubset = exports.pluginManifestIsSubsetOfManifest = exports.getPluginInvalidStateIndices = exports.validatePluginState = exports.reIndexSchemaArrays = exports.cascadePluginStateDeprecated = exports.cascadePluginState = exports.recursivelyCheckIfReferenceExists = exports.compileStatePointers = exports.getDownstreamDepsInSchemaMap = exports.getUpstreamDepsInSchemaMap = exports.getKVStateForPlugin = exports.getRootSchemaMap = exports.getRootSchemaForPlugin = exports.getExpandedTypesForPlugin = exports.getStateFromKVForPlugin = exports.buildObjectsAtPath = exports.indexArrayDuplicates = exports.flattenStateToSchemaPathKV = exports.getStateId = exports.decodeSchemaPathWithArrays = exports.decodeSchemaPath = exports.writePathStringWithArrays = exports.writePathString = exports.defaultVoidedState = exports.validatePluginManifest = exports.containsCyclicTypes = exports.schemaHasInvalidTypeSytax = exports.schemaManifestHasInvalidSyntax = exports.getSchemaMapForManifest = exports.verifyPluginDependencyCompatability = exports.coalesceDependencyVersions = exports.getUpstreamDependencyManifests = exports.getDependenciesForManifest = exports.hasPluginManifest = exports.hasPlugin = exports.manifestListToPluginList = exports.manifestListToSchemaMap = exports.pluginMapToList = exports.pluginListToMap = exports.getManifestMapFromManifestList = exports.getPluginManifests = exports.topSortManifests = exports.schemaMapsAreCompatible = exports.pluginManifestsAreCompatibleForUpdate = void 0;
+exports.drawGetPluginStore = exports.drawGetReferencedObject = exports.drawRefReturnTypes = exports.drawSchemaRoot = exports.drawMakeQueryRef = exports.buildPointerArgsMap = exports.buildPointerReturnTypeMap = exports.typestructsAreEquivalent = exports.replaceRawRefsInExpandedType = void 0;
 const axios_1 = __importDefault(require("axios"));
 const semver_1 = __importDefault(require("semver"));
 axios_1.default.defaults.validateStatus = function () {
@@ -1965,6 +1965,32 @@ const validatePluginState = async (datasource, schemaMap, stateMap, pluginName) 
     return true;
 };
 exports.validatePluginState = validatePluginState;
+const getPluginInvalidStateIndices = async (datasource, schemaMap, kvs, pluginName) => {
+    const out = [];
+    const rootSchemaMap = (await (0, exports.getRootSchemaMap)(datasource, schemaMap)) ?? {};
+    for (let i = 1; i < kvs.length; ++i) {
+        const { key, value } = kvs[i];
+        const subSchema = getSchemaAtPath(rootSchemaMap[pluginName], key);
+        for (const prop in subSchema) {
+            if (subSchema[prop]?.type == "array" || subSchema[prop]?.type == "set") {
+                if (!subSchema[prop]?.emptyable) {
+                    const referencedObject = value;
+                    if ((referencedObject?.[prop]?.length ?? 0) == 0) {
+                        out.push(i);
+                    }
+                }
+                continue;
+            }
+            if (subSchema[prop]?.type &&
+                (!subSchema[prop]?.nullable || subSchema[prop]?.isKey) &&
+                value[prop] == null) {
+                out.push(i);
+            }
+        }
+    }
+    return out;
+};
+exports.getPluginInvalidStateIndices = getPluginInvalidStateIndices;
 const objectIsSubsetOfObject = (current, next) => {
     if (typeof current != "object") {
         return false;

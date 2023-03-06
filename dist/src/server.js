@@ -155,7 +155,7 @@ app.post("/repo/:repoId/checkout/branch/:branch", (0, cors_1.default)(corsOption
 app.post("/repo/:repoId/checkout/commit/:sha", (0, cors_1.default)(corsOptionsDelegate), async (req, res) => {
     const repoId = req.params["repoId"];
     const sha = req.params["sha"];
-    const state = await (0, repoapi_1.switchRepoBranch)(datasource, repoId, sha);
+    const state = await (0, repoapi_1.checkoutSha)(datasource, repoId, sha);
     if (!state) {
         res.sendStatus(400);
         return;
