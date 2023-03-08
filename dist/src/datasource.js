@@ -464,6 +464,16 @@ const saveBranchesMetaState = async (repoId, branchesMetaState) => {
         return null;
     }
 };
+const checkBinary = async (binaryId) => {
+    try {
+        const binDir = path_1.default.join(filestructure_1.vBinariesPath, binaryId.substring(0, 2));
+        const binPath = path_1.default.join(binDir, binaryId);
+        return await (0, filestructure_1.existsAsync)(binaryId);
+    }
+    catch (e) {
+        return null;
+    }
+};
 const makeDataSource = (datasource = {}) => {
     const defaultDataSource = {
         readRepos: exports.readRepos,
@@ -490,6 +500,7 @@ const makeDataSource = (datasource = {}) => {
         saveStash,
         readBranchesMetaState,
         saveBranchesMetaState,
+        checkBinary
     };
     return {
         ...defaultDataSource,
@@ -698,6 +709,17 @@ const makeMemoizedDataSource = (dataSourceOverride = {}) => {
         branchesMetaStateMemo[repoId] = result;
         return result;
     };
+    const seenBinaries = new Set();
+    const _checkBinary = async (binaryId) => {
+        if (seenBinaries.has(binaryId)) {
+            return true;
+        }
+        const exists = await dataSource.checkBinary(binaryId);
+        if (exists) {
+            seenBinaries.add(binaryId);
+        }
+        return exists;
+    };
     const defaultDataSource = {
         repoExists: _repoExists,
         pluginManifestExists: _pluginManifestExists,
@@ -720,6 +742,7 @@ const makeMemoizedDataSource = (dataSourceOverride = {}) => {
         saveRenderedState: _saveRenderedState,
         readBranchesMetaState: _readBranchesMetaState,
         saveBranchesMetaState: _saveBranchesMetaState,
+        checkBinary: _checkBinary
     };
     return {
         ...dataSource,

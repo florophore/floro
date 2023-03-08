@@ -2003,6 +2003,15 @@ describe("plugins", () => {
             type: "set",
             values: "typeA",
           },
+          files: {
+            type: "set",
+            values: {
+              file: {
+                type: "file",
+                isKey: true
+              }
+            }
+          }
         },
       };
 
@@ -2031,6 +2040,14 @@ describe("plugins", () => {
               ]
             },
           ],
+          files: [
+            {
+              file: "A"
+            },
+            {
+              file: "B"
+            },
+          ]
         },
       };
 
@@ -2044,14 +2061,21 @@ describe("plugins", () => {
         schemaMap,
         A_PLUGIN_MANIFEST.name,
         invalidStateMap
-      )
+      );
       const invalidStates = await getPluginInvalidStateIndices(
-        datasource,
+        {...datasource,
+          checkBinary: async (binaryId) => {
+            if (binaryId == "A") {
+              return true;
+            }
+            return false;
+          }
+        },
         schemaMap,
         kvs,
         A_PLUGIN_MANIFEST.name,
       );
-      expect(invalidStates).toEqual([2, 4]);
+      expect(invalidStates).toEqual([2, 4, 6]);
     });
 
     test("returns false when state is invalid", async () => {

@@ -165,21 +165,21 @@ interface StaticPointer {
 interface StateMapPointer {
     parentSetPath: Array<string | {
         key: string;
-        value: "string";
+        value: string;
     }>;
     setPath: Array<string | {
         key: string;
-        value: "string";
+        value: string;
     }>;
     refPath: Array<string | {
         key: string;
-        value: "string";
+        value: string;
     }>;
     ownerObject: unknown;
     refKey: string;
     ref: string;
     onDelete: "delete" | "nullify";
-    refType: "string";
+    refType: string;
 }
 export declare const compileStatePointers: (staticPointers: Array<StaticPointer>, stateMap: {
     [key: string]: object;

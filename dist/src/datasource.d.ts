@@ -26,6 +26,7 @@ export interface DataSource {
     saveStash?(repoId: string, sha: string | null, stashState: Array<ApplicationKVState>): Promise<Array<ApplicationKVState>>;
     readBranchesMetaState?(repoId: string): Promise<BranchesMetaState>;
     saveBranchesMetaState?(repoId: string, branchesMetaState: BranchesMetaState): Promise<BranchesMetaState>;
+    checkBinary?(binaryId: string): Promise<boolean>;
 }
 /**
  * We need to export readDevPluginManifest for the daemon server
@@ -61,6 +62,7 @@ export declare const makeDataSource: (datasource?: DataSource) => {
     saveStash?: (repoId: string, sha: string | null, stashState: Array<ApplicationKVState>) => Promise<Array<ApplicationKVState>>;
     readBranchesMetaState?: (repoId: string) => Promise<BranchesMetaState>;
     saveBranchesMetaState?: (repoId: string, branchesMetaState: BranchesMetaState) => Promise<BranchesMetaState>;
+    checkBinary?: (binaryId: string) => Promise<boolean>;
 };
 export declare const makeMemoizedDataSource: (dataSourceOverride?: DataSource) => {
     getPluginManifest?: (pluginName: string, pluginVersion: string) => Promise<Manifest>;
@@ -87,4 +89,5 @@ export declare const makeMemoizedDataSource: (dataSourceOverride?: DataSource) =
     saveStash?: (repoId: string, sha: string | null, stashState: Array<ApplicationKVState>) => Promise<Array<ApplicationKVState>>;
     readBranchesMetaState?: (repoId: string) => Promise<BranchesMetaState>;
     saveBranchesMetaState?: (repoId: string, branchesMetaState: BranchesMetaState) => Promise<BranchesMetaState>;
+    checkBinary?: (binaryId: string) => Promise<boolean>;
 };

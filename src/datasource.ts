@@ -5,6 +5,7 @@ import {
   getPluginsJsonAsync,
   getRemoteHostAsync,
   getUserSessionAsync,
+  vBinariesPath,
   vDEVPath,
   vPluginsPath,
   vReposPath,
@@ -105,6 +106,10 @@ export interface DataSource {
     repoId: string,
     branchesMetaState: BranchesMetaState
   ): Promise<BranchesMetaState>;
+
+  checkBinary?(
+    binaryId: string,
+  ): Promise<boolean>;
 }
 
 /* PLUGINS */
@@ -689,6 +694,18 @@ const saveBranchesMetaState = async (
   }
 };
 
+const checkBinary = async (
+  binaryId: string,
+): Promise<boolean> => {
+  try {
+    const binDir = path.join(vBinariesPath, binaryId.substring(0, 2));
+    const binPath = path.join(binDir, binaryId);
+    return await existsAsync(binaryId);
+  } catch (e) {
+    return null;
+  }
+};
+
 export const makeDataSource = (datasource: DataSource = {}) => {
   const defaultDataSource: DataSource = {
     readRepos,
@@ -715,6 +732,7 @@ export const makeDataSource = (datasource: DataSource = {}) => {
     saveStash,
     readBranchesMetaState,
     saveBranchesMetaState,
+    checkBinary
   };
   return {
     ...defaultDataSource,
@@ -1006,6 +1024,20 @@ export const makeMemoizedDataSource = (dataSourceOverride: DataSource = {}) => {
     return result;
   };
 
+  const seenBinaries = new Set();
+  const _checkBinary = async (
+    binaryId: string
+  ): Promise<boolean> => {
+    if (seenBinaries.has(binaryId)) {
+      return true;
+    }
+    const exists = await dataSource.checkBinary(binaryId);
+    if (exists) {
+      seenBinaries.add(binaryId);
+    }
+    return exists;
+  };
+
   const defaultDataSource: DataSource = {
     repoExists: _repoExists,
     pluginManifestExists: _pluginManifestExists,
@@ -1028,6 +1060,7 @@ export const makeMemoizedDataSource = (dataSourceOverride: DataSource = {}) => {
     saveRenderedState: _saveRenderedState,
     readBranchesMetaState: _readBranchesMetaState,
     saveBranchesMetaState: _saveBranchesMetaState,
+    checkBinary: _checkBinary
   };
   return {
     ...dataSource,

@@ -10,7 +10,7 @@ const semver_1 = __importDefault(require("semver"));
 axios_1.default.defaults.validateStatus = function () {
     return true;
 };
-const primitives = new Set(["int", "float", "boolean", "string"]);
+const primitives = new Set(["int", "float", "boolean", "string", "file"]);
 const pluginManifestsAreCompatibleForUpdate = async (datasource, oldManifest, newManifest) => {
     const oldSchemaMap = await (0, exports.getSchemaMapForManifest)(datasource, oldManifest);
     const newSchemaMap = await (0, exports.getSchemaMapForManifest)(datasource, newManifest);
@@ -790,7 +790,7 @@ const sanitizePrimitivesWithSchema = (struct, state) => {
             continue;
         }
         if ((struct[prop]?.type == "set" || struct[prop]?.type == "array") &&
-            struct[prop].values == "string") {
+            (struct[prop].values == "string" || struct[prop].values == "file")) {
             const list = state?.[prop]
                 ?.map((v) => {
                 if (typeof v == "string") {
@@ -836,6 +836,14 @@ const sanitizePrimitivesWithSchema = (struct, state) => {
             continue;
         }
         if (struct[prop]?.type == "string") {
+            if (typeof state[prop] == "string") {
+                out[prop] = state[prop];
+                continue;
+            }
+            out[prop] = null;
+            continue;
+        }
+        if (struct[prop]?.type == "file") {
             if (typeof state[prop] == "string") {
                 out[prop] = state[prop];
                 continue;
@@ -1960,6 +1968,12 @@ const validatePluginState = async (datasource, schemaMap, stateMap, pluginName) 
                 value[prop] == null) {
                 return false;
             }
+            if (subSchema[prop]?.type == "file") {
+                const exists = await datasource.checkBinary(value[prop]);
+                if (!exists) {
+                    return false;
+                }
+            }
         }
     }
     return true;
@@ -1985,6 +1999,14 @@ const getPluginInvalidStateIndices = async (datasource, schemaMap, kvs, pluginNa
                 (!subSchema[prop]?.nullable || subSchema[prop]?.isKey) &&
                 value[prop] == null) {
                 out.push(i);
+                continue;
+            }
+            if (subSchema[prop]?.type == "file") {
+                const exists = await datasource.checkBinary(value[prop]);
+                if (!exists) {
+                    out.push(i);
+                    continue;
+                }
             }
         }
     }
@@ -2539,6 +2561,9 @@ const buildPointerArgsMap = (referenceReturnTypeMap) => {
                 if (arg.value == "int" || arg.value == "float") {
                     return ["number"];
                 }
+                if (arg.value == "file") {
+                    return ["string"];
+                }
                 return [arg.value];
             }
             const { value: argValue } = extractKeyValueFromRefString(arg.value);
@@ -2726,7 +2751,9 @@ const drawTypestruct = (typeStruct, referenceReturnTypeMap, indentation = "", se
                 : `['${prop}']`;
             const type = typeStruct[prop]?.type == "int" || typeStruct[prop]?.type == "float"
                 ? "number"
-                : typeStruct[prop]?.type;
+                : typeStruct[prop]?.type == "file"
+                    ? "string"
+                    : typeStruct[prop]?.type;
             code += `  ${indentation}${propName}: ${type};\n`;
             continue;
         }
@@ -2751,7 +2778,9 @@ const drawTypestruct = (typeStruct, referenceReturnTypeMap, indentation = "", se
             primitives.has(typeStruct[prop]?.values)) {
             const type = typeStruct[prop]?.values == "int" || typeStruct[prop]?.values == "float"
                 ? "number"
-                : typeStruct[prop]?.type;
+                : typeStruct[prop]?.values == "file"
+                    ? "string"
+                    : typeStruct[prop]?.type;
             const propName = `['${prop}']`;
             code += `  ${indentation}${propName}: Array<${type}>;\n`;
             continue;

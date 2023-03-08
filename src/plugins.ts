@@ -54,7 +54,7 @@ export interface Manifest {
   store: TypeStruct;
 }
 
-const primitives = new Set(["int", "float", "boolean", "string"]);
+const primitives = new Set(["int", "float", "boolean", "string", "file"]);
 
 export const pluginManifestsAreCompatibleForUpdate = async (
   datasource: DataSource,
@@ -1116,7 +1116,7 @@ const sanitizePrimitivesWithSchema = (struct: TypeStruct, state: object) => {
 
     if (
       (struct[prop]?.type == "set" || struct[prop]?.type == "array") &&
-      struct[prop].values == "string"
+      (struct[prop].values == "string" || struct[prop].values == "file")
     ) {
       const list =
         state?.[prop]
@@ -1173,6 +1173,15 @@ const sanitizePrimitivesWithSchema = (struct: TypeStruct, state: object) => {
     }
 
     if (struct[prop]?.type == "string") {
+      if (typeof state[prop] == "string") {
+        out[prop] = state[prop];
+        continue;
+      }
+      out[prop] = null;
+      continue;
+    }
+
+    if (struct[prop]?.type == "file") {
       if (typeof state[prop] == "string") {
         out[prop] = state[prop];
         continue;
@@ -2284,14 +2293,14 @@ const traverseSchemaMapForStaticPointerPaths = (
 };
 
 interface StateMapPointer {
-  parentSetPath: Array<string | { key: string; value: "string" }>;
-  setPath: Array<string | { key: string; value: "string" }>;
-  refPath: Array<string | { key: string; value: "string" }>;
+  parentSetPath: Array<string | { key: string; value: string }>;
+  setPath: Array<string | { key: string; value: string }>;
+  refPath: Array<string | { key: string; value: string }>;
   ownerObject: unknown;
   refKey: string;
   ref: string;
   onDelete: "delete" | "nullify";
-  refType: "string";
+  refType: string;
 }
 
 const getPointersAtPath = (
@@ -2731,6 +2740,12 @@ export const validatePluginState = async (
       ) {
         return false;
       }
+      if (subSchema[prop]?.type == "file") {
+        const exists = await datasource.checkBinary(value[prop]);
+        if (!exists) {
+          return false;
+        }
+      }
     }
   }
   return true;
@@ -2763,6 +2778,15 @@ export const getPluginInvalidStateIndices = async (
         value[prop] == null
       ) {
         out.push(i);
+        continue;
+      }
+
+      if (subSchema[prop]?.type == "file") {
+        const exists = await datasource.checkBinary(value[prop]);
+        if (!exists) {
+          out.push(i);
+          continue;
+        }
       }
     }
   }
@@ -3570,6 +3594,9 @@ export const buildPointerArgsMap = (referenceReturnTypeMap: {
         if (arg.value == "int" || arg.value == "float") {
           return ["number"];
         }
+        if (arg.value == "file") {
+          return ["string"]
+        }
         return [arg.value];
       }
       const { value: argValue } = extractKeyValueFromRefString(arg.value);
@@ -3819,6 +3846,8 @@ const drawTypestruct = (
       const type =
         typeStruct[prop]?.type == "int" || typeStruct[prop]?.type == "float"
           ? "number"
+          : typeStruct[prop]?.type == "file"
+          ? "string"
           : typeStruct[prop]?.type;
       code += `  ${indentation}${propName}: ${type};\n`;
       continue;
@@ -3853,6 +3882,8 @@ const drawTypestruct = (
       const type =
         typeStruct[prop]?.values == "int" || typeStruct[prop]?.values == "float"
           ? "number"
+          : typeStruct[prop]?.values == "file"
+          ? "string"
           : typeStruct[prop]?.type;
       const propName = `['${prop}']`;
       code += `  ${indentation}${propName}: Array<${type}>;\n`;
