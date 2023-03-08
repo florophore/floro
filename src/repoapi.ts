@@ -53,6 +53,7 @@ import {
   cascadePluginState,
   nullifyMissingFileRefs,
   collectFileRefs,
+  manifestListToSchemaMap,
 } from "./plugins";
 import { LicenseCodes } from "./licensecodes";
 import { DataSource } from "./datasource";
@@ -847,9 +848,6 @@ export const updatePlugins = async (
       });
     }
 
-    const rootDependencies = updatedManifests.filter(
-      (m) => Object.keys(m.imports).length == 0
-    );
     const currentRenderedState = await datasource.readRenderedState(repoId);
     const lexicallyOrderedPlugins = updatedPlugins.sort((a, b) => {
       if (a.key == b.key) return 0;
@@ -861,13 +859,10 @@ export const updatePlugins = async (
         store[key] = {};
       }
     }
-    let binaries = currentRenderedState.binaries;
-    for (const rootManifest of rootDependencies) {
-      const schemaMap = await getSchemaMapForManifest(datasource, rootManifest);
-      store = await cascadePluginState(datasource, schemaMap, store);
-      store = await nullifyMissingFileRefs(datasource, schemaMap, store);
-      binaries = await collectFileRefs(datasource, schemaMap, store);
-    }
+    const schemaMap = manifestListToSchemaMap(updatedManifests)
+    store = await cascadePluginState(datasource, schemaMap, store);
+    store = await nullifyMissingFileRefs(datasource, schemaMap, store);
+    const binaries = await collectFileRefs(datasource, schemaMap, store);
     currentRenderedState.store = store;
     currentRenderedState.plugins = sortedUpdatedPlugins;
     currentRenderedState.binaries = uniqueStrings(binaries);
