@@ -14,6 +14,7 @@ import {
   removeUser,
   vReposPath,
   vDEVPath,
+  vBinariesPath,
 } from "./filestructure";
 import { Server } from "socket.io";
 import { createProxyMiddleware } from "http-proxy-middleware";
@@ -50,6 +51,8 @@ import {
   //deleteBranch,
 } from "./repoapi";
 import { makeMemoizedDataSource, readDevPluginManifest } from "./datasource";
+import busboy from 'connect-busboy';
+import { hashBinary } from "./versioncontrol";
 
 const remoteHost = getRemoteHostSync();
 
@@ -116,6 +119,8 @@ io.on("connection", (socket) => {
     });
   }
 });
+
+app.use(busboy());
 
 app.use(express.json());
 
@@ -544,6 +549,101 @@ app.post("/complete_signup", cors(remoteHostCors), async (req, res) => {
   } else {
     res.send({ message: "error" });
   }
+});
+
+app.use("/binary/upload", busboy({
+  limits: {
+    fileSize: 1024 * 1024 * 1024, //1GB limit
+  }
+}));
+
+app.post("/binary/upload", cors(remoteHostCors), async (req, res) => {
+  let numFiles = 0;
+  let didCancel = false;
+  let fileRef = null;
+  if (req.busboy) {
+    req.pipe(req.busboy);
+    req.busboy.on('file', (_, file, info) => {
+      const extension = mime.extension(info.mimeType);
+      if (!extension) {
+        didCancel = true;
+        res.sendStatus(400);
+        return;
+      }
+      if (!didCancel) {
+        numFiles++;
+        if (numFiles > 1) {
+          didCancel = true;
+          res.sendStatus(400);
+          return;
+        }
+      }
+      let fileData = null;
+      file.on('data', (data, err) => {
+        if (err) {
+          didCancel = true;
+          res.sendStatus(400);
+          return;
+        }
+        if (!didCancel) {
+          if (fileData == null) {
+            fileData = data
+          } else {
+            fileData = Buffer.concat([fileData, data]);
+          }
+        }
+      });
+      file.on('end', async (err) => {
+        try {
+          if (didCancel) {
+            return;
+          }
+          if (err) {
+            didCancel = true;
+            res.sendStatus(400);
+            return;
+          }
+          const sha = hashBinary(fileData);
+          const filename = `${sha}.${extension}`;
+          const binSubDir = path.join(vBinariesPath, sha.substring(0, 2));
+          const existsBinSubDir = await existsAsync(binSubDir)
+          if (!existsBinSubDir) {
+            fs.promises.mkdir(binSubDir, {recursive: true});
+          }
+          const fullPath = path.join(binSubDir, filename);
+          const exists = await existsAsync(fullPath)
+          if (!exists) {
+            await fs.promises.writeFile(fullPath, fileData, 'utf8');
+          }
+          fileRef = filename;
+          res.send({
+            fileRef
+          })
+        } catch (e) {
+          didCancel = true;
+          res.sendStatus(400);
+          return;
+        }
+      })
+    });
+  }
+});
+
+app.get("/binary/:binaryRef", async (req, res) => {
+  const binaryRef = req?.params?.["binaryRef"];
+  const binSubDir = path.join(vBinariesPath, binaryRef.substring(0, 2));
+  const existsBinSubDir = await existsAsync(binSubDir);
+  if (!existsBinSubDir) {
+    res.sendStatus(404);
+    return;
+  }
+  const fullPath = path.join(binSubDir, binaryRef);
+  const exists = await existsAsync(fullPath);
+  if (!exists) {
+    res.sendStatus(404);
+    return;
+  }
+  fs.createReadStream(fullPath).pipe(res);
 });
 
 app.get("/plugins/:pluginName/dev@*", async (req, res) => {

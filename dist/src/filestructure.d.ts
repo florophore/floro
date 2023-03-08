@@ -7,6 +7,7 @@ export declare const vReposPath: string;
 export declare const vPluginsPath: string;
 export declare const vTMPPath: string;
 export declare const vDEVPath: string;
+export declare const vBinariesPath: string;
 export declare const vConfigCORSPath: string;
 export declare const vConfigRemotePath: string;
 export declare const vConfigPluginsPath: string;

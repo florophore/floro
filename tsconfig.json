@@ -11,7 +11,8 @@
     "experimentalDecorators": true,
     "removeComments": false,
     "noImplicitAny": false,
-    "outDir": "dist"
+    "outDir": "dist",
+    "types": ["node", "jest", "express"]
   },
   "exclude": [
     "node_modules",

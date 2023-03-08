@@ -39,14 +39,20 @@ export interface CommitData {
   message: string;
 }
 
-
-const fastHash = (str: string) => {
+const fastHash = (str) => {
   let hash = 0;
+  let hash2 = 0;
   for (let i = 0; i < str.length; i++) {
-    hash = (hash << 5) - hash + str.charCodeAt(i);
+    hash = hash * hash2 ^ ((hash << 5) - hash + str.charCodeAt(i));
+    hash2 = (hash2 << 5) - hash + str.charCodeAt(i);
     hash |= 0;
+    hash2 |= 0;
   }
-  return hash.toString(36).padEnd(6, "0");
+  return hash.toString(36).padEnd(6) + hash2.toString(36).padEnd(6)
+};
+
+export const hashBinary = (bin: BinaryData) => {
+  return Crypto.SHA256(bin);
 };
 
 export const hashString = (str: string) => {

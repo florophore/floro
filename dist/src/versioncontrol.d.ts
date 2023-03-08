@@ -32,6 +32,7 @@ export interface CommitData {
     idx: number;
     message: string;
 }
+export declare const hashBinary: (bin: BinaryData) => any;
 export declare const hashString: (str: string) => string;
 export declare const getKVHashes: (obj: {
     key: string;

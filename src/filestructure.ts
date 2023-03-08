@@ -21,6 +21,8 @@ export const vPluginsPath = path.join(homePath, "plugins");
 export const vTMPPath = path.join(homePath, "tmp");
 // ~/.floro/dev
 export const vDEVPath = path.join(homePath, "dev");
+// ~/.floro/binaries
+export const vBinariesPath = path.join(homePath, "binaries");
 
 // FILES
 // CONFIG
@@ -92,6 +94,13 @@ export const buildFloroFilestructure = (): void => {
     fs.mkdirSync(vUserPath);
     if (NODE_ENV != "test") {
       fs.chmodSync(vUserPath, 0o755);
+    }
+  }
+
+  if (!fs.existsSync(vBinariesPath)) {
+    fs.mkdirSync(vBinariesPath);
+    if (NODE_ENV != "test") {
+      fs.chmodSync(vBinariesPath, 0o755);
     }
   }
 

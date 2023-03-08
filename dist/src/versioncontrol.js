@@ -3,17 +3,24 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.canAutoMerge = exports.getMergeSequence = exports.applyDiff = exports.getTextDiff = exports.splitTextForDiff = exports.getDiff = exports.getLCS = exports.getDiffHash = exports.getRowHash = exports.getKVHash = exports.getKVHashes = exports.hashString = void 0;
+exports.canAutoMerge = exports.getMergeSequence = exports.applyDiff = exports.getTextDiff = exports.splitTextForDiff = exports.getDiff = exports.getLCS = exports.getDiffHash = exports.getRowHash = exports.getKVHash = exports.getKVHashes = exports.hashString = exports.hashBinary = void 0;
 const cryptojs_1 = require("cryptojs");
 const mdiff_1 = __importDefault(require("mdiff"));
 const fastHash = (str) => {
     let hash = 0;
+    let hash2 = 0;
     for (let i = 0; i < str.length; i++) {
-        hash = (hash << 5) - hash + str.charCodeAt(i);
+        hash = hash * hash2 ^ ((hash << 5) - hash + str.charCodeAt(i));
+        hash2 = (hash2 << 5) - hash + str.charCodeAt(i);
         hash |= 0;
+        hash2 |= 0;
     }
-    return hash.toString(36).padEnd(6, "0");
+    return hash.toString(36).padEnd(6) + hash2.toString(36).padEnd(6);
 };
+const hashBinary = (bin) => {
+    return cryptojs_1.Crypto.SHA256(bin);
+};
+exports.hashBinary = hashBinary;
 const hashString = (str) => {
     return fastHash(str);
 };

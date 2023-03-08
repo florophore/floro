@@ -43,6 +43,8 @@ const enc_hex_1 = __importDefault(require("crypto-js/enc-hex"));
 const repo_1 = require("./repo");
 const repoapi_1 = require("./repoapi");
 const datasource_1 = require("./datasource");
+const connect_busboy_1 = __importDefault(require("connect-busboy"));
+const versioncontrol_1 = require("./versioncontrol");
 const remoteHost = (0, filestructure_1.getRemoteHostSync)();
 const app = (0, express_1.default)();
 const server = http_1.default.createServer(app);
@@ -94,6 +96,7 @@ io.on("connection", (socket) => {
         });
     }
 });
+app.use((0, connect_busboy_1.default)());
 app.use(express_1.default.json());
 app.use(function (_req, res, next) {
     res.header("Access-Control-Allow-Origin", remoteHost);
@@ -394,6 +397,100 @@ app.post("/complete_signup", (0, cors_1.default)(remoteHostCors), async (req, re
     else {
         res.send({ message: "error" });
     }
+});
+app.use("/binary/upload", (0, connect_busboy_1.default)({
+    limits: {
+        fileSize: 1024 * 1024 * 1024, //1GB limit
+    }
+}));
+app.post("/binary/upload", (0, cors_1.default)(remoteHostCors), async (req, res) => {
+    let numFiles = 0;
+    let didCancel = false;
+    let fileRef = null;
+    if (req.busboy) {
+        req.pipe(req.busboy);
+        req.busboy.on('file', (_, file, info) => {
+            const extension = mime_types_1.default.extension(info.mimeType);
+            if (!extension) {
+                didCancel = true;
+                res.sendStatus(400);
+                return;
+            }
+            if (!didCancel) {
+                numFiles++;
+                if (numFiles > 1) {
+                    didCancel = true;
+                    res.sendStatus(400);
+                    return;
+                }
+            }
+            let fileData = null;
+            file.on('data', (data, err) => {
+                if (err) {
+                    didCancel = true;
+                    res.sendStatus(400);
+                    return;
+                }
+                if (!didCancel) {
+                    if (fileData == null) {
+                        fileData = data;
+                    }
+                    else {
+                        fileData = Buffer.concat([fileData, data]);
+                    }
+                }
+            });
+            file.on('end', async (err) => {
+                try {
+                    if (didCancel) {
+                        return;
+                    }
+                    if (err) {
+                        didCancel = true;
+                        res.sendStatus(400);
+                        return;
+                    }
+                    const sha = (0, versioncontrol_1.hashBinary)(fileData);
+                    const filename = `${sha}.${extension}`;
+                    const binSubDir = path_1.default.join(filestructure_1.vBinariesPath, sha.substring(0, 2));
+                    const existsBinSubDir = await (0, filestructure_1.existsAsync)(binSubDir);
+                    if (!existsBinSubDir) {
+                        fs_1.default.promises.mkdir(binSubDir, { recursive: true });
+                    }
+                    const fullPath = path_1.default.join(binSubDir, filename);
+                    const exists = await (0, filestructure_1.existsAsync)(fullPath);
+                    if (!exists) {
+                        await fs_1.default.promises.writeFile(fullPath, fileData, 'utf8');
+                    }
+                    fileRef = filename;
+                    res.send({
+                        fileRef
+                    });
+                }
+                catch (e) {
+                    didCancel = true;
+                    res.sendStatus(400);
+                    return;
+                }
+            });
+        });
+    }
+});
+app.get("/binary/:binaryRef", async (req, res) => {
+    const binaryRef = req?.params?.["binaryRef"];
+    const binSubDir = path_1.default.join(filestructure_1.vBinariesPath, binaryRef.substring(0, 2));
+    const existsBinSubDir = await (0, filestructure_1.existsAsync)(binSubDir);
+    if (!existsBinSubDir) {
+        res.sendStatus(404);
+        return;
+    }
+    const fullPath = path_1.default.join(binSubDir, binaryRef);
+    const exists = await (0, filestructure_1.existsAsync)(fullPath);
+    if (!exists) {
+        res.sendStatus(404);
+        return;
+    }
+    fs_1.default.createReadStream(fullPath).pipe(res);
 });
 app.get("/plugins/:pluginName/dev@*", async (req, res) => {
     const pluginName = req?.params?.['pluginName'];

@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getRemoteHostAsync = exports.getRemoteHostSync = exports.writePluginsJsonAsync = exports.getPluginsJsonAsync = exports.getPluginsJson = exports.copyDirectory = exports.existsAsync = exports.getUserAsync = exports.getUser = exports.removeUser = exports.writeUser = exports.getUserSessionAsync = exports.getUserSession = exports.removeUserSession = exports.writeUserSession = exports.reset = exports.clean = exports.buildFloroFilestructure = exports.userPath = exports.userSessionPath = exports.vConfigPluginsPath = exports.vConfigRemotePath = exports.vConfigCORSPath = exports.vDEVPath = exports.vTMPPath = exports.vPluginsPath = exports.vReposPath = exports.vUserPath = exports.vCachePath = exports.vConfigPath = exports.homePath = exports.userHome = void 0;
+exports.getRemoteHostAsync = exports.getRemoteHostSync = exports.writePluginsJsonAsync = exports.getPluginsJsonAsync = exports.getPluginsJson = exports.copyDirectory = exports.existsAsync = exports.getUserAsync = exports.getUser = exports.removeUser = exports.writeUser = exports.getUserSessionAsync = exports.getUserSession = exports.removeUserSession = exports.writeUserSession = exports.reset = exports.clean = exports.buildFloroFilestructure = exports.userPath = exports.userSessionPath = exports.vConfigPluginsPath = exports.vConfigRemotePath = exports.vConfigCORSPath = exports.vBinariesPath = exports.vDEVPath = exports.vTMPPath = exports.vPluginsPath = exports.vReposPath = exports.vUserPath = exports.vCachePath = exports.vConfigPath = exports.homePath = exports.userHome = void 0;
 const path_1 = __importDefault(require("path"));
 const os_1 = __importDefault(require("os"));
 const fs_1 = __importDefault(require("fs"));
@@ -26,6 +26,8 @@ exports.vPluginsPath = path_1.default.join(exports.homePath, "plugins");
 exports.vTMPPath = path_1.default.join(exports.homePath, "tmp");
 // ~/.floro/dev
 exports.vDEVPath = path_1.default.join(exports.homePath, "dev");
+// ~/.floro/binaries
+exports.vBinariesPath = path_1.default.join(exports.homePath, "binaries");
 // FILES
 // CONFIG
 // ~/.floro/config/cors.txt
@@ -88,6 +90,12 @@ const buildFloroFilestructure = () => {
         fs_1.default.mkdirSync(exports.vUserPath);
         if (NODE_ENV != "test") {
             fs_1.default.chmodSync(exports.vUserPath, 0o755);
+        }
+    }
+    if (!fs_1.default.existsSync(exports.vBinariesPath)) {
+        fs_1.default.mkdirSync(exports.vBinariesPath);
+        if (NODE_ENV != "test") {
+            fs_1.default.chmodSync(exports.vBinariesPath, 0o755);
         }
     }
     if (!fs_1.default.existsSync(exports.vReposPath)) {
