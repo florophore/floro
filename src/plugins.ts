@@ -2706,6 +2706,147 @@ export const reIndexSchemaArrays = (kvs: Array<DiffElement>): Array<string> => {
   return out;
 };
 
+const mutateStateMapWithMissingFileRefs = async (
+  datasource: DataSource,
+  typestruct: TypeStruct,
+  state: object
+): Promise<void> => {
+  for (const prop in typestruct) {
+    if (
+      (typestruct[prop]?.type == "set" || typestruct[prop]?.type == "array") &&
+      typeof typestruct[prop].values == "object"
+    ) {
+      await Promise.all((state[prop] as Array<object>).map(async (element) => {
+        await mutateStateMapWithMissingFileRefs(datasource, typestruct[prop].values as TypeStruct, element);
+      }))
+      continue;
+    }
+
+    if (
+      (typestruct[prop]?.type == "set" || typestruct[prop]?.type == "array") &&
+      typestruct[prop].values == "file"
+    ) {
+      const files = await Promise.all((state[prop] as Array<string>).map(async (file) => {
+        if (file && await datasource.checkBinary(file)) {
+          return file;
+        }
+        return null;
+      }));
+      state[prop] = files.filter(v => v != null);
+      continue;
+    }
+
+    if (
+      !typestruct[prop]?.type &&
+      typeof typestruct[prop] == "object"
+    ) {
+      await mutateStateMapWithMissingFileRefs(datasource, typestruct[prop] as TypeStruct, state[prop]);
+      continue;
+    }
+
+    if (typestruct[prop]?.type == "file") {
+      const exists = !!state[prop] ? await datasource.checkBinary(state[prop]) : null;
+      if (!exists) {
+        state[prop] = null;
+      }
+      continue;
+    }
+  }
+}
+
+// WARNING: MUTATES!
+// this has to be really fast because it is run on
+// every update.
+export const nullifyMissingFileRefs = async (
+  datasource: DataSource,
+  schemaMap: { [key: string]: Manifest },
+  stateMap: { [key: string]: object },
+): Promise<{ [key: string]: object }> => {
+  const rootSchemaMap = (await getRootSchemaMap(datasource, schemaMap)) ?? {};
+  const promises = []
+  for (const pluginName in rootSchemaMap) {
+    const typestruct = rootSchemaMap[pluginName] as TypeStruct;
+    promises.push(mutateStateMapWithMissingFileRefs(
+      datasource,
+      typestruct,
+      stateMap[pluginName]
+    ));
+  }
+  await Promise.all(promises);
+  return stateMap;
+}
+
+const collectFileRefsInStateMap = (
+  typestruct: TypeStruct,
+  state: object
+): Array<string> => {
+  const refs = [];
+  for (const prop in typestruct) {
+    if (
+      (typestruct[prop]?.type == "set" || typestruct[prop]?.type == "array") &&
+      typeof typestruct[prop].values == "object"
+    ) {
+      const subRefs = (state[prop] as Array<object>).flatMap((element) => {
+        return collectFileRefsInStateMap(typestruct[prop].values as TypeStruct, element);
+      });
+      refs.push(...subRefs)
+      continue;
+    }
+
+    if (
+      (typestruct[prop]?.type == "set" || typestruct[prop]?.type == "array") &&
+      typestruct[prop].values == "file"
+    ) {
+      const files = (state[prop] as Array<string>).filter((file) => {
+        if (file) {
+          return true;
+        }
+        return false;
+      });
+      refs.push(...files);
+      continue;
+    }
+
+    if (
+      !typestruct[prop]?.type &&
+      typeof typestruct[prop] == "object"
+    ) {
+      const subRefs = collectFileRefsInStateMap(typestruct[prop] as TypeStruct, state[prop]);
+      refs.push(...subRefs)
+      continue;
+    }
+
+    if (typestruct[prop]?.type == "file") {
+      if (!!state[prop]) {
+        refs.push(state[prop]);
+      }
+      continue;
+    }
+  }
+  return refs;
+}
+
+export const collectFileRefs = async (
+  datasource: DataSource,
+  schemaMap: { [key: string]: Manifest },
+  stateMap: { [key: string]: object },
+): Promise<Array<string>> => {
+  const rootSchemaMap = (await getRootSchemaMap(datasource, schemaMap)) ?? {};
+  const fileRefs = []
+  for (const pluginName in rootSchemaMap) {
+    const typestruct = rootSchemaMap[pluginName] as TypeStruct;
+    fileRefs.push(...collectFileRefsInStateMap(typestruct, stateMap[pluginName]))
+  }
+  const visited = new Set();
+  const out = [];
+  for (const file of fileRefs) {
+    if (!visited.has(file)) {
+      out.push(file);
+      visited.add(file);
+    }
+  }
+  return out.sort();
+}
 
 export const validatePluginState = async (
   datasource: DataSource,

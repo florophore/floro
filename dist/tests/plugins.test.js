@@ -1036,6 +1036,74 @@ describe("plugins", () => {
             expect(isSubset).toBe(false);
         });
     });
+    describe("nullify missing file refs", () => {
+        test("nullifies missing file refs", async () => {
+            const A_PLUGIN_MANIFEST = {
+                version: "0.0.0",
+                name: "a-plugin",
+                displayName: "A",
+                icon: {
+                    light: "./palette-plugin-icon.svg",
+                    dark: "./palette-plugin-icon.svg",
+                },
+                imports: {},
+                types: {
+                    typeA: {
+                        name: {
+                            type: "int",
+                            isKey: true,
+                        },
+                        file: {
+                            type: "file",
+                        },
+                        nestedProp: {
+                            nestedFile: {
+                                type: "file"
+                            },
+                            nestedFiles: {
+                                type: "array",
+                                values: "file"
+                            }
+                        }
+                    },
+                },
+                store: {
+                    aObjects: {
+                        type: "set",
+                        values: "typeA",
+                    },
+                },
+            };
+            const schemaMap = {
+                "a-plugin": A_PLUGIN_MANIFEST,
+            };
+            const stateMap = {
+                [A_PLUGIN_MANIFEST.name]: {
+                    aObjects: [
+                        {
+                            name: 1,
+                            file: "A",
+                            nestedProp: {
+                                nestedFile: "B",
+                                nestedFiles: ["A", "B", "A"]
+                            }
+                        },
+                        {
+                            name: 3,
+                            file: "B",
+                            nestedProp: {
+                                nestedFile: "B",
+                                nestedFiles: ["B", "A", "B", "B"]
+                            }
+                        },
+                    ],
+                },
+            };
+            const a = await (0, plugins_1.nullifyMissingFileRefs)({
+                ...datasource
+            }, schemaMap, stateMap);
+        });
+    });
     describe("cascading", () => {
         test("cascades deletions down plugin chain", async () => {
             const A_PLUGIN_MANIFEST = {

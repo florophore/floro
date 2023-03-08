@@ -224,6 +224,11 @@ export declare const cascadePluginStateDeprecated: (datasource: DataSource, sche
     [key: string]: object;
 }>;
 export declare const reIndexSchemaArrays: (kvs: Array<DiffElement>) => Array<string>;
+export declare const nullifyMissingFileRefs: (datasource: DataSource, schemaMap: {
+    [key: string]: Manifest;
+}, stateMap: {
+    [key: string]: object;
+}) => Promise<void>;
 export declare const validatePluginState: (datasource: DataSource, schemaMap: {
     [key: string]: Manifest;
 }, stateMap: {

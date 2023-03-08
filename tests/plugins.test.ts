@@ -11,6 +11,8 @@ import {
   isTopologicalSubsetValid,
   reIndexSchemaArrays,
   getPluginInvalidStateIndices,
+  nullifyMissingFileRefs,
+  collectFileRefs,
 } from "../src/plugins";
 import { makeSignedInUser, makeTestPlugin } from "./helpers/fsmocks";
 import { SIMPLE_PLUGIN_MANIFEST } from "./helpers/pluginmocks";
@@ -1162,6 +1164,140 @@ describe("plugins", () => {
     });
   });
 
+  describe("nullify missing file refs", () => {
+    test("nullifies missing file refs", async () => {
+      const A_PLUGIN_MANIFEST = {
+        version: "0.0.0",
+        name: "a-plugin",
+        displayName: "A",
+        icon: {
+          light: "./palette-plugin-icon.svg",
+          dark: "./palette-plugin-icon.svg",
+        },
+        imports: {},
+        types: {
+          typeA: {
+            name: {
+              type: "int",
+              isKey: true,
+            },
+            file: {
+              type: "file",
+            },
+            nestedProp: {
+              nestedFile: {
+                type: "file",
+              },
+              nestedFiles: {
+                type: "array",
+                values: "file",
+              },
+            },
+          },
+        },
+        store: {
+          aObjects: {
+            type: "set",
+            values: "typeA",
+          },
+        },
+      };
+
+      const schemaMap = {
+        "a-plugin": A_PLUGIN_MANIFEST,
+      };
+
+      const stateMap = {
+        [A_PLUGIN_MANIFEST.name]: {
+          aObjects: [
+            {
+              name: 1,
+              file: "A",
+              nestedProp: {
+                nestedFile: "B",
+                nestedFiles: ["A", "B", "A"],
+              },
+            },
+            {
+              name: 3,
+              file: "B",
+              nestedProp: {
+                nestedFile: "B",
+                nestedFiles: ["B", "A", "B", "B"],
+              },
+            },
+          ],
+        },
+      };
+      const beforeFiles = await collectFileRefs(
+        {
+          ...datasource,
+          checkBinary: async (binaryId) => {
+            if (binaryId == "B") {
+              return true;
+            }
+            return false;
+          },
+        },
+        schemaMap,
+        stateMap
+      );
+
+      expect(beforeFiles).toEqual(['A', 'B']);
+      const result = await nullifyMissingFileRefs(
+        {
+          ...datasource,
+          checkBinary: async (binaryId) => {
+            if (binaryId == "B") {
+              return true;
+            }
+            return false;
+          },
+        },
+        schemaMap,
+        stateMap
+      );
+
+      const afterFiles = await collectFileRefs(
+        {
+          ...datasource,
+          checkBinary: async (binaryId) => {
+            if (binaryId == "B") {
+              return true;
+            }
+            return false;
+          },
+        },
+        schemaMap,
+        stateMap
+      );
+
+      expect(afterFiles).toEqual(['B']);
+      expect(result).toEqual({
+        "a-plugin": {
+          aObjects: [
+            {
+              name: 1,
+              file: null,
+              nestedProp: {
+                nestedFile: "B",
+                nestedFiles: ["B"],
+              },
+            },
+            {
+              name: 3,
+              file: "B",
+              nestedProp: {
+                nestedFile: "B",
+                nestedFiles: ["B", "B", "B"],
+              },
+            },
+          ],
+        },
+      });
+    });
+  });
+
   describe("cascading", () => {
     test("cascades deletions down plugin chain", async () => {
       const A_PLUGIN_MANIFEST = {
@@ -1992,10 +2128,10 @@ describe("plugins", () => {
               type: "array",
               values: {
                 someProp: {
-                  type: "string"
-                }
-              }
-            }
+                  type: "string",
+                },
+              },
+            },
           },
         },
         store: {
@@ -2008,10 +2144,10 @@ describe("plugins", () => {
             values: {
               file: {
                 type: "file",
-                isKey: true
-              }
-            }
-          }
+                isKey: true,
+              },
+            },
+          },
         },
       };
 
@@ -2029,25 +2165,25 @@ describe("plugins", () => {
               list: ["ok", "1"],
               subList: [
                 {
-                  someProp: 1
+                  someProp: 1,
                 },
                 {
-                  someProp: "abc"
+                  someProp: "abc",
                 },
                 {
-                  someProp: 3
+                  someProp: 3,
                 },
-              ]
+              ],
             },
           ],
           files: [
             {
-              file: "A"
+              file: "A",
             },
             {
-              file: "B"
+              file: "B",
             },
-          ]
+          ],
         },
       };
 
@@ -2063,17 +2199,18 @@ describe("plugins", () => {
         invalidStateMap
       );
       const invalidStates = await getPluginInvalidStateIndices(
-        {...datasource,
+        {
+          ...datasource,
           checkBinary: async (binaryId) => {
             if (binaryId == "A") {
               return true;
             }
             return false;
-          }
+          },
         },
         schemaMap,
         kvs,
-        A_PLUGIN_MANIFEST.name,
+        A_PLUGIN_MANIFEST.name
       );
       expect(invalidStates).toEqual([2, 4, 6]);
     });
