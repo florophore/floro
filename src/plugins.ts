@@ -2716,9 +2716,9 @@ const mutateStateMapWithMissingFileRefs = async (
       (typestruct[prop]?.type == "set" || typestruct[prop]?.type == "array") &&
       typeof typestruct[prop].values == "object"
     ) {
-      await Promise.all((state[prop] as Array<object>).map(async (element) => {
+      await Promise.all((state[prop] as Array<object>)?.map?.(async (element) => {
         await mutateStateMapWithMissingFileRefs(datasource, typestruct[prop].values as TypeStruct, element);
-      }))
+      }) ?? [])
       continue;
     }
 
@@ -2726,12 +2726,12 @@ const mutateStateMapWithMissingFileRefs = async (
       (typestruct[prop]?.type == "set" || typestruct[prop]?.type == "array") &&
       typestruct[prop].values == "file"
     ) {
-      const files = await Promise.all((state[prop] as Array<string>).map(async (file) => {
+      const files = await Promise.all((state[prop] as Array<string>)?.map?.(async (file) => {
         if (file && await datasource.checkBinary(file)) {
           return file;
         }
         return null;
-      }));
+      }) ?? []);
       state[prop] = files.filter(v => v != null);
       continue;
     }
@@ -2786,9 +2786,9 @@ const collectFileRefsInStateMap = (
       (typestruct[prop]?.type == "set" || typestruct[prop]?.type == "array") &&
       typeof typestruct[prop].values == "object"
     ) {
-      const subRefs = (state[prop] as Array<object>).flatMap((element) => {
+      const subRefs = (state[prop] as Array<object>)?.flatMap?.((element) => {
         return collectFileRefsInStateMap(typestruct[prop].values as TypeStruct, element);
-      });
+      }) ?? [];
       refs.push(...subRefs)
       continue;
     }
@@ -2797,7 +2797,7 @@ const collectFileRefsInStateMap = (
       (typestruct[prop]?.type == "set" || typestruct[prop]?.type == "array") &&
       typestruct[prop].values == "file"
     ) {
-      const files = (state[prop] as Array<string>).filter((file) => {
+      const files = (state[prop] as Array<string>)?.filter?.((file) => {
         if (file) {
           return true;
         }

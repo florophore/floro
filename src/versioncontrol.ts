@@ -16,7 +16,7 @@ export type Diff = {
   };
 };
 
-export type TextDiff = {
+export type StringDiff = {
   add: {
     [key: number]: string;
   };
@@ -190,9 +190,7 @@ export const splitTextForDiff = (str: string): Array<string> => {
   return sentences;
 };
 
-export const getTextDiff = (before: string, after: string): TextDiff => {
-  const past = splitTextForDiff(before);
-  const present = splitTextForDiff(after);
+export const getArrayStringDiff = (past: Array<string>, present: Array<string>): StringDiff => {
   const longestSequence = getLCS(past, present);
 
   let diff = {
@@ -218,8 +216,14 @@ export const getTextDiff = (before: string, after: string): TextDiff => {
   return diff;
 };
 
+export const getTextDiff = (before: string, after: string): StringDiff => {
+  const past = splitTextForDiff(before);
+  const present = splitTextForDiff(after);
+  return getArrayStringDiff(past, present);
+};
+
 export const applyDiff = <T extends DiffElement | string>(
-  diffset: Diff | TextDiff,
+  diffset: Diff | StringDiff,
   state: Array<T>
 ): Array<T> => {
   let assets = [...(state ?? [])];

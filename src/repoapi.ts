@@ -31,6 +31,7 @@ import {
   getBranchIdFromName,
   BRANCH_NAME_REGEX,
   updateCurrentBranch,
+  uniqueStrings,
 } from "./repo";
 import {
   CommitData,
@@ -50,6 +51,8 @@ import {
   topSortManifests,
   manifestListToPluginList,
   cascadePluginState,
+  nullifyMissingFileRefs,
+  collectFileRefs,
 } from "./plugins";
 import { LicenseCodes } from "./licensecodes";
 import { DataSource } from "./datasource";
@@ -858,12 +861,16 @@ export const updatePlugins = async (
         store[key] = {};
       }
     }
+    let binaries = currentRenderedState.binaries;
     for (const rootManifest of rootDependencies) {
       const schemaMap = await getSchemaMapForManifest(datasource, rootManifest);
       store = await cascadePluginState(datasource, schemaMap, store);
+      store = await nullifyMissingFileRefs(datasource, schemaMap, store);
+      binaries = await collectFileRefs(datasource, schemaMap, store);
     }
     currentRenderedState.store = store;
     currentRenderedState.plugins = sortedUpdatedPlugins;
+    currentRenderedState.binaries = uniqueStrings(binaries);
     await datasource.saveRenderedState(repoId, currentRenderedState);
     return currentRenderedState;
   } catch (e) {
@@ -913,6 +920,8 @@ export const updatePluginState = async (
       schemaMap,
       stateStore
     );
+    renderedState.store = await nullifyMissingFileRefs(datasource, schemaMap, renderedState.store);
+    renderedState.binaries = uniqueStrings(await collectFileRefs(datasource, schemaMap, renderedState.store));
     await datasource.saveRenderedState(repoId, renderedState);
     return renderedState;
   } catch (e) {

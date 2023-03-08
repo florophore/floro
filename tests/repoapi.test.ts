@@ -1,8 +1,5 @@
 import { fs, vol } from "memfs";
-import {
-  DataSource,
-  makeMemoizedDataSource,
-} from "../src/datasource";
+import { DataSource, makeMemoizedDataSource } from "../src/datasource";
 import { buildFloroFilestructure, userHome } from "../src/filestructure";
 import { Manifest, PluginElement } from "../src/plugins";
 import {
@@ -381,6 +378,117 @@ describe("repoapi", () => {
         binaries: [],
       });
     });
+
+    test("saves files to binary list", async () => {
+      const PLUGIN_A_0_MANIFEST: Manifest = {
+        name: "A",
+        version: "0.0.0",
+        displayName: "A",
+        icon: "",
+        imports: {},
+        types: {},
+        store: {
+          aSet: {
+            type: "set",
+            values: {
+              mainKey: {
+                isKey: true,
+                type: "string",
+              },
+              someProp: {
+                type: "int",
+              },
+              someFile: {
+                type: "file",
+              },
+            },
+          },
+        },
+      };
+      makeTestPlugin(PLUGIN_A_0_MANIFEST);
+      const state = {
+        aSet: [
+          {
+            mainKey: "key1",
+            someProp: 1,
+            someFile: "Z",
+          },
+          {
+            mainKey: "key2",
+            someProp: 2,
+            someFile: "B",
+          },
+          {
+            mainKey: "key3",
+            someProp: 3,
+            someFile: "A",
+          },
+          {
+            mainKey: "key4",
+            someProp: 4,
+            someFile: "A",
+          },
+        ],
+      };
+      let plugins: PluginElement[] = [
+        {
+          key: "A",
+          value: "0.0.0",
+        },
+      ];
+      await updatePlugins(datasource, "abc", plugins);
+      const result = await updatePluginState(
+        {
+          ...datasource,
+          checkBinary: async (binaryId) => {
+            if (binaryId == "B") {
+              return false;
+            }
+            return true;
+          },
+        },
+        "abc",
+        "A",
+        state
+      );
+      expect(result).toEqual({
+        description: [],
+        licenses: [],
+        plugins: [
+          {
+            key: "A",
+            value: "0.0.0",
+          },
+        ],
+        store: {
+          A: {
+            aSet: [
+              {
+                mainKey: "key1",
+                someProp: 1,
+                someFile: "Z",
+              },
+              {
+                mainKey: "key2",
+                someProp: 2,
+                someFile: null,
+              },
+              {
+                mainKey: "key3",
+                someProp: 3,
+                someFile: "A",
+              },
+              {
+                mainKey: "key4",
+                someProp: 4,
+                someFile: "A",
+              },
+            ],
+          },
+        },
+        binaries: ["A", "Z"],
+      });
+    });
   });
 
   describe("commits", () => {
@@ -744,7 +852,7 @@ describe("repoapi", () => {
       await updatePluginState(datasource, "abc", "A", state2);
       const commitB = await writeRepoCommit(datasource, "abc", "B");
       await checkoutSha(datasource, "abc", commitA.sha);
-      await createRepoBranch(datasource, "abc", "feature-branch")
+      await createRepoBranch(datasource, "abc", "feature-branch");
       await switchRepoBranch(datasource, "abc", "feature-branch");
 
       const state3 = {
@@ -1015,7 +1123,7 @@ describe("repoapi", () => {
       await updatePluginState(datasource, "abc", "A", state2);
       const commitB = await writeRepoCommit(datasource, "abc", "B");
       await checkoutSha(datasource, "abc", commitA.sha);
-      await createRepoBranch(datasource, "abc", "feature-branch")
+      await createRepoBranch(datasource, "abc", "feature-branch");
       await switchRepoBranch(datasource, "abc", "feature-branch");
 
       const state3 = {

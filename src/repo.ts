@@ -14,10 +14,12 @@ import {
 import { broadcastAllDevices } from "./multiplexer";
 import {
   cascadePluginState,
+  collectFileRefs,
   getKVStateForPlugin,
   getPluginManifests,
   getSchemaMapForManifest,
   getStateFromKVForPlugin,
+  nullifyMissingFileRefs,
   PluginElement,
   pluginListToMap,
 } from "./plugins";
@@ -25,13 +27,13 @@ import {
   applyDiff,
   CommitData,
   Diff,
+  getArrayStringDiff,
   getDiff,
   getDiffHash,
   getKVHash,
   getMergeSequence,
-  getTextDiff,
   hashString,
-  TextDiff,
+  StringDiff,
 } from "./versioncontrol";
 
 export interface RepoSetting {
@@ -47,7 +49,7 @@ export interface ApplicationKVState {
   licenses: Array<{ key: string; value: string }>;
   plugins: Array<{ key: string; value: string }>;
   store: RawStore;
-  binaries: Array<{ key: string; value: string }>;
+  binaries: Array<string>;
 }
 
 export interface RenderedApplicationState {
@@ -55,7 +57,7 @@ export interface RenderedApplicationState {
   licenses: Array<{ key: string; value: string }>;
   plugins: Array<{ key: string; value: string }>;
   store: { [key: string]: object };
-  binaries: Array<{ key: string; value: string }>;
+  binaries: Array<string>;
 }
 
 export interface TokenizedState {
@@ -72,10 +74,10 @@ export interface StoreStateDiff {
 
 export interface StateDiff {
   plugins: Diff;
-  binaries: Diff;
+  binaries: StringDiff;
   store: StoreStateDiff;
   licenses: Diff;
-  description: TextDiff;
+  description: StringDiff;
 }
 
 export interface RepoState {
@@ -803,7 +805,7 @@ export const tokenizeCommitState = (
   }, []);
 
   const binaries = appKVState.binaries.reduce((acc, value) => {
-    const hash = getKVHash(value);
+    const hash = hashString(value);
     tokenStore[hash] = value;
     return [...acc, hash];
   }, []);
@@ -849,7 +851,7 @@ export const detokenizeStore = (
 
   const binaries = tokenizedState.binaries.map((token) => {
     return tokenStore[token];
-  }) as Array<{ key: string; value: string }>;
+  }) as Array<string>;
 
   const store = Object.keys(tokenizedState.store).reduce((acc, pluginName) => {
     return {
@@ -892,6 +894,20 @@ export const uniqueKV = (
   return out;
 };
 
+export const uniqueStrings = (
+  strings: Array<string>
+): Array<string> => {
+  let out: Array<string> = [];
+  let seen = new Set();
+  for (let str of strings) {
+    if (!seen.has(str)) {
+      seen.add(str);
+      out.push(str);
+    }
+  }
+  return out.sort();
+};
+
 export const getStateDiffFromCommitStates = (
   beforeKVState: ApplicationKVState,
   afterKVState: ApplicationKVState
@@ -930,12 +946,12 @@ export const getStateDiffFromCommitStates = (
       }
       continue;
     }
-    if (prop == "description") {
-      const diff = getTextDiff(
-        (beforeKVState?.[prop] ?? []).join(""),
-        (afterKVState?.[prop] ?? [])?.join("")
+    if (prop == "description" || prop == "binaries") {
+      const diff = getArrayStringDiff(
+        (beforeKVState?.[prop] ?? []) as Array<string>,
+        (afterKVState?.[prop] ?? []) as Array<string>
       );
-      stateDiff.description = diff;
+      stateDiff[prop] = diff;
       continue;
     }
 
@@ -1073,7 +1089,6 @@ export const getMergedCommitState = async (
 
     const mergeState = detokenizeStore(tokenizedState, tokenStore);
     mergeState.plugins = uniqueKV(mergeState.plugins);
-    mergeState.binaries = uniqueKV(mergeState.binaries);
     mergeState.licenses = uniqueKV(mergeState.licenses);
 
     let stateStore = await buildStateStore(datasource, mergeState);
@@ -1083,9 +1098,13 @@ export const getMergedCommitState = async (
       (m) => Object.keys(m.imports).length === 0
     );
 
+    let binaries = uniqueStrings(mergeState.binaries);
+
     for (const manifest of rootManifests) {
       const schemaMap = await getSchemaMapForManifest(datasource, manifest);
       stateStore = await cascadePluginState(datasource, schemaMap, stateStore);
+      stateStore = await nullifyMissingFileRefs(datasource, schemaMap, stateStore);
+      binaries = await collectFileRefs(datasource, schemaMap, stateStore);
     }
 
     mergeState.store = await convertStateStoreToKV(
@@ -1093,6 +1112,8 @@ export const getMergedCommitState = async (
       mergeState,
       stateStore
     );
+    mergeState.binaries = binaries;
+
     return mergeState;
   } catch (e) {
     return null;
