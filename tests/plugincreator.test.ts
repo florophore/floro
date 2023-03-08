@@ -1017,6 +1017,9 @@ describe("plugincreator", () => {
                 type: "string",
                 isKey: true,
               },
+              attachedFile: {
+                type: "file"
+              },
               aRef: {
                 type: "ref<A.typeA>",
               },

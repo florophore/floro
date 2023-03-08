@@ -1,5 +1,7 @@
 import { useMemo } from 'react';
 
+export type FileRef = `${string}.${'3dmf'|'3dm'|'avi'|'ai'|'bin'|'bin'|'bmp'|'cab'|'c'|'c++'|'class'|'css'|'csv'|'cdr'|'doc'|'dot'|'docx'|'dwg'|'eps'|'exe'|'gif'|'gz'|'gtar'|'flv'|'fh4'|'fh5'|'fhc'|'help'|'hlp'|'html'|'htm'|'ico'|'imap'|'inf'|'jpe'|'jpeg'|'jpg'|'js'|'java'|'latex'|'log'|'m3u'|'midi'|'mid'|'mov'|'mp3'|'mpeg'|'mpg'|'mp2'|'ogg'|'phtml'|'php'|'pdf'|'pgp'|'png'|'pps'|'ppt'|'ppz'|'pot'|'ps'|'qt'|'qd3d'|'qd3'|'qxd'|'rar'|'ra'|'ram'|'rm'|'rtf'|'spr'|'sprite'|'stream'|'swf'|'svg'|'sgml'|'sgm'|'tar'|'tiff'|'tif'|'tgz'|'tex'|'txt'|'vob'|'wav'|'wrl'|'wrl'|'xla'|'xls'|'xls'|'xlc'|'xml'|'zip'|'zip'}`;
+
 export type QueryTypes = {
   ['$(A).aObjects.aKey<?>']: `$(A).aObjects.aKey<${number}>`;
   ['$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>']: `$(A).aObjects.aKey<${number}>.nestedValue.nestedSet.nestedSetKey<${QueryTypes['$(A).aObjects.aKey<?>']}>`;
@@ -58,6 +60,7 @@ export type SchemaRoot = {
     ['bObjects']: Array<{
       ['aConstrainedRef']: QueryTypes['$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>'];
       ['aRef']: QueryTypes['$(A).aObjects.aKey<?>'];
+      ['attachedFile']: FileRef;
       ['mainKey']: string;
     }>;
   };
@@ -84,6 +87,7 @@ export type RefReturnTypes = {
   ['$(B).bObjects.mainKey<?>']:   {
     ['aConstrainedRef']: QueryTypes['$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>'];
     ['aRef']: QueryTypes['$(A).aObjects.aKey<?>'];
+    ['attachedFile']: FileRef;
     ['mainKey']: string;
   };
 
@@ -150,10 +154,10 @@ const splitPath = (str: string): Array<string> => {
 
 const decodeSchemaPathWithArrays = (
   pathString: string
-): Array<DiffElement | string | number> => {
+): Array<{key: string, value: string} | string | number> => {
   return splitPath(pathString).map((part) => {
     if (/^[(d+)]$/.test(part)) {
-      return parseInt(/^[(d+)]$/.exec(part)[1]);
+      return parseInt(((/^[(d+)]$/.exec(part) as Array<string>)[1]));
     }
     if (/^(.+)<(.+)>$/.test(part) && getCounterArrowBalanance(part) == 0) {
       const { key, value } = extractKeyValueFromRefString(part);
@@ -184,7 +188,7 @@ const getObjectInStateMap = (
     if (typeof part == "number") {
       current = current[part];
     } else if (typeof part != "string") {
-      const { key, value } = part as DiffElement;
+      const { key, value } = part as {key: string, value: string};
       if (Array.isArray(current)) {
         const element = current?.find?.((v) => v?.[key] == value);
         current = element;

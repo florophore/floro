@@ -694,6 +694,7 @@ export const generateTypeScriptAPI = async (
   const referenceArgsMap = buildPointerArgsMap(referenceReturnTypeMap);
 
   let code = useReact ? "import { useMemo } from 'react';\n\n" : "";
+  code += "export type FileRef = `${string}.${'3dmf'|'3dm'|'avi'|'ai'|'bin'|'bin'|'bmp'|'cab'|'c'|'c++'|'class'|'css'|'csv'|'cdr'|'doc'|'dot'|'docx'|'dwg'|'eps'|'exe'|'gif'|'gz'|'gtar'|'flv'|'fh4'|'fh5'|'fhc'|'help'|'hlp'|'html'|'htm'|'ico'|'imap'|'inf'|'jpe'|'jpeg'|'jpg'|'js'|'java'|'latex'|'log'|'m3u'|'midi'|'mid'|'mov'|'mp3'|'mpeg'|'mpg'|'mp2'|'ogg'|'phtml'|'php'|'pdf'|'pgp'|'png'|'pps'|'ppt'|'ppz'|'pot'|'ps'|'qt'|'qd3d'|'qd3'|'qxd'|'rar'|'ra'|'ram'|'rm'|'rtf'|'spr'|'sprite'|'stream'|'swf'|'svg'|'sgml'|'sgm'|'tar'|'tiff'|'tif'|'tgz'|'tex'|'txt'|'vob'|'wav'|'wrl'|'wrl'|'xla'|'xls'|'xls'|'xlc'|'xml'|'zip'|'zip'}`;\n\n"
   const queryTypesCode = drawMakeQueryRef(referenceArgsMap, useReact);
   code += queryTypesCode + "\n\n";
   const schemaRootCode = drawSchemaRoot(rootSchemaMap, referenceReturnTypeMap);

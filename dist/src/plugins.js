@@ -2562,7 +2562,7 @@ const buildPointerArgsMap = (referenceReturnTypeMap) => {
                     return ["number"];
                 }
                 if (arg.value == "file") {
-                    return ["string"];
+                    return ["FileRef"];
                 }
                 return [arg.value];
             }
@@ -2752,7 +2752,7 @@ const drawTypestruct = (typeStruct, referenceReturnTypeMap, indentation = "", se
             const type = typeStruct[prop]?.type == "int" || typeStruct[prop]?.type == "float"
                 ? "number"
                 : typeStruct[prop]?.type == "file"
-                    ? "string"
+                    ? "FileRef"
                     : typeStruct[prop]?.type;
             code += `  ${indentation}${propName}: ${type};\n`;
             continue;
@@ -2779,7 +2779,7 @@ const drawTypestruct = (typeStruct, referenceReturnTypeMap, indentation = "", se
             const type = typeStruct[prop]?.values == "int" || typeStruct[prop]?.values == "float"
                 ? "number"
                 : typeStruct[prop]?.values == "file"
-                    ? "string"
+                    ? "FileRef"
                     : typeStruct[prop]?.type;
             const propName = `['${prop}']`;
             code += `  ${indentation}${propName}: Array<${type}>;\n`;
@@ -2865,10 +2865,10 @@ const splitPath = (str: string): Array<string> => {
 
 const decodeSchemaPathWithArrays = (
   pathString: string
-): Array<DiffElement | string | number> => {
+): Array<{key: string, value: string} | string | number> => {
   return splitPath(pathString).map((part) => {
-    if (/^\[(\d+)\]$/.test(part)) {
-      return parseInt(/^\[(\d+)\]$/.exec(part)[1]);
+    if (/^[(d+)]$/.test(part)) {
+      return parseInt(((/^[(d+)]$/.exec(part) as Array<string>)[1]));
     }
     if (/^(.+)<(.+)>$/.test(part) && getCounterArrowBalanance(part) == 0) {
       const { key, value } = extractKeyValueFromRefString(part);
@@ -2887,7 +2887,7 @@ const getObjectInStateMap = (
 ): object | null => {
   let current: null | object = null;
   const [pluginWrapper, ...decodedPath] = decodeSchemaPathWithArrays(path);
-  const pluginName = /^\$\((.+)\)$/.exec(pluginWrapper as string)?.[1] ?? null;
+  const pluginName = /^$((.+))$/.exec(pluginWrapper as string)?.[1] ?? null;
   if (pluginName == null) {
     return null;
   }
@@ -2899,7 +2899,7 @@ const getObjectInStateMap = (
     if (typeof part == "number") {
       current = current[part];
     } else if (typeof part != "string") {
-      const { key, value } = part as DiffElement;
+      const { key, value } = part as {key: string, value: string};
       if (Array.isArray(current)) {
         const element = current?.find?.((v) => v?.[key] == value);
         current = element;
