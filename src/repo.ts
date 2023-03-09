@@ -16,12 +16,16 @@ import {
   cascadePluginState,
   collectFileRefs,
   getKVStateForPlugin,
+  getPluginInvalidStateIndices,
   getPluginManifests,
   getSchemaMapForManifest,
   getStateFromKVForPlugin,
+  Manifest,
+  manifestListToSchemaMap,
   nullifyMissingFileRefs,
   PluginElement,
   pluginListToMap,
+  reIndexSchemaArrays,
 } from "./plugins";
 import {
   applyDiff,
@@ -90,6 +94,12 @@ export interface RepoState {
     originSha: string;
     direction: "yours" | "theirs";
   };
+  commandMode: "view" | "edit" | "compare";
+  comparison: null | {
+    against: "last"|"branch"|"sha"|"merge";
+    branch: string | null;
+    commit: string | null;
+  };
 }
 
 export interface Branch {
@@ -123,6 +133,31 @@ export interface CommitHistory {
 
 export interface CheckpointMap {
   [sha: string]: ApplicationKVState;
+}
+
+export interface ApiDiff {
+  description: {
+    added: Array<number>;
+    removed: Array<number>;
+  };
+  licenses: {
+    added: Array<number>;
+    removed: Array<number>;
+  };
+  plugins: {
+    added: Array<number>;
+    removed: Array<number>;
+  };
+  store: {
+    [key: string]: {
+      added: Array<string>;
+      removed: Array<string>;
+    }
+  };
+}
+
+export interface ApiStoreValidity {
+  [key: string]: Array<string>;
 }
 
 export const EMPTY_COMMIT_STATE: ApplicationKVState = {
@@ -313,6 +348,9 @@ export const canCommit = async (
     // ensure safe
   }
   const currentState = await datasource.readCurrentRepoState(repoId);
+  if (currentState.commandMode != "view") {
+    return false;
+  }
   if (!currentState) {
     return false;
   }
@@ -710,6 +748,59 @@ export const getPluginsToRunUpdatesOn = (
   });
 };
 
+export const changeCommandModeToView = async (datasource: DataSource, repoId: string) => {
+  try {
+    const currentRepoState = await datasource.readCurrentRepoState(repoId);
+    const nextRepoState: RepoState = {
+      ...currentRepoState,
+      commandMode: "view",
+    };
+    await datasource.saveCurrentRepoState(repoId, nextRepoState);
+    return nextRepoState;
+  } catch (e) {
+    return null;
+  }
+}
+
+export const changeCommandModeToEdit = async (datasource: DataSource, repoId: string) => {
+  try {
+    const currentRepoState = await datasource.readCurrentRepoState(repoId);
+    const nextRepoState: RepoState = {
+      ...currentRepoState,
+      commandMode: "edit",
+    };
+    await datasource.saveCurrentRepoState(repoId, nextRepoState);
+    return nextRepoState;
+  } catch (e) {
+    return null;
+  }
+}
+
+export const changeCommandModeToCompare = async (
+  datasource: DataSource,
+  repoId: string,
+  against: "last"|"branch"|"sha"|"merge" = null,
+  branch: null|string = null,
+  commit: null|string = null
+  ) => {
+  try {
+    const currentRepoState = await datasource.readCurrentRepoState(repoId);
+    const nextRepoState: RepoState = {
+      ...currentRepoState,
+      commandMode: "compare",
+      comparison: {
+        against,
+        branch,
+        commit
+      }
+    };
+    await datasource.saveCurrentRepoState(repoId, nextRepoState);
+    return nextRepoState;
+  } catch (e) {
+    return null;
+  }
+}
+
 export const buildStateStore = async (
   datasource: DataSource,
   appKvState: ApplicationKVState
@@ -1094,25 +1185,18 @@ export const getMergedCommitState = async (
     let stateStore = await buildStateStore(datasource, mergeState);
 
     const manifests = await getPluginManifests(datasource, mergeState.plugins);
-    const rootManifests = manifests.filter(
-      (m) => Object.keys(m.imports).length === 0
-    );
 
-    let binaries = uniqueStrings(mergeState.binaries);
-
-    for (const manifest of rootManifests) {
-      const schemaMap = await getSchemaMapForManifest(datasource, manifest);
-      stateStore = await cascadePluginState(datasource, schemaMap, stateStore);
-      stateStore = await nullifyMissingFileRefs(datasource, schemaMap, stateStore);
-      binaries = await collectFileRefs(datasource, schemaMap, stateStore);
-    }
+    const schemaMap = manifestListToSchemaMap(manifests)
+    stateStore = await cascadePluginState(datasource, schemaMap, stateStore);
+    stateStore = await nullifyMissingFileRefs(datasource, schemaMap, stateStore);
+    const binaries = await collectFileRefs(datasource, schemaMap, stateStore);
 
     mergeState.store = await convertStateStoreToKV(
       datasource,
       mergeState,
       stateStore
     );
-    mergeState.binaries = binaries;
+    mergeState.binaries = uniqueStrings(binaries);
 
     return mergeState;
   } catch (e) {
@@ -1149,3 +1233,103 @@ export const canAutoMergeOnTopCurrentState = async (
     return null;
   }
 };
+
+export const getApiDiff = (
+  beforeState: ApplicationKVState,
+  afterState: ApplicationKVState,
+  stateDiff: StateDiff
+): ApiDiff => {
+  const description = {
+    added: Object.keys(stateDiff.description.add).map((v) => parseInt(v)),
+    removed: Object.keys(stateDiff.description.remove).map((v) => parseInt(v)),
+  };
+
+  const licenses = {
+    added: Object.keys(stateDiff.licenses.add).map((v) => parseInt(v)),
+    removed: Object.keys(stateDiff.licenses.remove).map((v) => parseInt(v)),
+  };
+
+  const plugins = {
+    added: Object.keys(stateDiff.plugins.add).map((v) => parseInt(v)),
+    removed: Object.keys(stateDiff.plugins.remove).map((v) => parseInt(v)),
+  };
+  let store = {};
+
+  for (const pluginName in (stateDiff?.store ?? {})) {
+    if (!beforeState?.store?.[pluginName]) {
+      // show only added state
+      const afterIndexedKvs = reIndexSchemaArrays(
+        afterState?.store?.[pluginName] ?? []
+      );
+      const added = Object.keys(stateDiff?.store?.[pluginName]?.add ?? {})
+        .map((v) => parseInt(v))
+        .map((i) => afterIndexedKvs[i]);
+      store[pluginName] = {
+        added,
+        removed: [],
+      };
+      continue;
+    }
+
+    if (!afterState?.store?.[pluginName]) {
+      const beforeIndexedKvs = reIndexSchemaArrays(
+        beforeState?.store?.[pluginName] ?? []
+      );
+      const removed = Object.keys(stateDiff?.store?.[pluginName]?.remove ?? {})
+        .map((v) => parseInt(v))
+        .map((i) => beforeIndexedKvs[i]);
+      store[pluginName] = {
+        added: [],
+        removed,
+      };
+
+      continue;
+    }
+
+    const afterIndexedKvs = reIndexSchemaArrays(
+      afterState?.store?.[pluginName] ?? []
+    );
+    const added = Object.keys(stateDiff?.store?.[pluginName]?.add ?? {})
+      .map((v) => parseInt(v))
+      .map((i) => afterIndexedKvs[i]);
+    const beforeIndexedKvs = reIndexSchemaArrays(
+      beforeState?.store?.[pluginName] ?? []
+    );
+    const removed = Object.keys(stateDiff?.store?.[pluginName]?.remove ?? {})
+      .map((v) => parseInt(v))
+      .map((i) => beforeIndexedKvs[i]);
+
+    store[pluginName] = {
+      added,
+      removed,
+    };
+  }
+  return {
+    description,
+    licenses,
+    plugins,
+    store,
+  };
+};
+
+export const getStateInvalidity = async (
+  datasource: DataSource,
+  appKvState: ApplicationKVState
+): Promise<ApiStoreValidity> => {
+  const manifests = await getPluginManifests(datasource, appKvState.plugins);
+  const schemaMap = manifestListToSchemaMap(manifests)
+  const store = {};
+  for (let pluginName in appKvState.store) {
+    const invalidStateIndices = await getPluginInvalidStateIndices(
+      datasource,
+      schemaMap,
+      appKvState.store[pluginName],
+      pluginName
+    );
+    const indexedKvs = reIndexSchemaArrays(
+      appKvState?.store?.[pluginName] ?? []
+    );
+    store[pluginName] = invalidStateIndices.map(i => indexedKvs[i]);
+  }
+  return store;
+}

@@ -589,6 +589,10 @@ export const writeRepoCommit = async (
     if (!user.id) {
       return null;
     }
+    const currentState = await datasource.readCurrentRepoState(repoId);
+    if (currentState.commandMode != "view") {
+      return null;
+    }
     const currentRenderedState = await datasource.readRenderedState(repoId);
     const currentKVState = await convertRenderedCommitStateToKv(
       datasource,
@@ -607,7 +611,6 @@ export const writeRepoCommit = async (
       return null;
     }
 
-    const currentState = await datasource.readCurrentRepoState(repoId);
     const currentSha = await getCurrentCommitSha(datasource, repoId);
     const parent = currentSha
       ? await datasource.readCommit(repoId, currentSha)
@@ -1258,6 +1261,12 @@ export const mergeCommit = async (
           intoSha: currentRepoState.commit,
           direction,
         },
+        commandMode: "compare",
+        comparison: {
+          against: "merge",
+          branch: null,
+          commit: null,
+        }
       };
       await datasource.saveCurrentRepoState(repoId, updated);
       const renderedState = await convertCommitStateToRenderedState(

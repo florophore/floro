@@ -58,7 +58,9 @@ const REPO_CURRENT = `
     "branch": "main",
     "commit": null,
     "isInMergeConflict": false,
-    "merge": null
+    "merge": null,
+    "commandMode": "view",
+    "comparison": null
   }
 `;
 
