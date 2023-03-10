@@ -24,6 +24,7 @@ import { CommitData } from "./versioncontrol";
 import axios from "axios";
 import { broadcastAllDevices } from "./multiplexer";
 import tar from "tar";
+import { SourceCommitNode } from "./sourcegraph";
 
 axios.defaults.validateStatus = function () {
   return true;
@@ -66,6 +67,8 @@ export interface DataSource {
   readCommit?: (repoId: string, sha: string) => Promise<CommitData>;
   readCheckpoint?(repoId: string, sha: string): Promise<ApplicationKVState>;
 
+  readCommits?: (repoId: string) => Promise<Array<SourceCommitNode>>;
+
   saveCheckpoint?(
     repoId: string,
     sha: string,
@@ -107,9 +110,7 @@ export interface DataSource {
     branchesMetaState: BranchesMetaState
   ): Promise<BranchesMetaState>;
 
-  checkBinary?(
-    binaryId: string,
-  ): Promise<boolean>;
+  checkBinary?(binaryId: string): Promise<boolean>;
 }
 
 /* PLUGINS */
@@ -513,6 +514,55 @@ const readCommit = async (repoId: string, sha: string): Promise<CommitData> => {
   }
 };
 
+const readCommits = async (
+  repoId: string
+): Promise<Array<SourceCommitNode>> => {
+  try {
+    const commitRoot = path.join(vReposPath, repoId, "commits");
+    const commitDirs = await fs.promises.readdir(commitRoot);
+    const commitPromises: Array<Promise<Array<CommitData>>> = [];
+    for (let commitDir of commitDirs) {
+      const commitPromise = fs.promises
+        .readdir(path.join(commitRoot, commitDir))
+        .then(async (files): Promise<Array<CommitData>> => {
+          const filePromises: Array<Promise<CommitData>> = [];
+          for (let file of files) {
+            const filePath = path.join(commitRoot, commitDir, file);
+            const filePromise = fs.promises
+              .readFile(filePath, "utf8")
+              .then((contents) => {
+                return JSON.parse(contents.toString()) as CommitData;
+              });
+            filePromises.push(filePromise);
+          }
+          const commitDatas = await Promise.all(filePromises);
+          return commitDatas;
+        });
+      commitPromises.push(commitPromise);
+    }
+    return (await Promise.all(commitPromises)).flatMap(
+      (commits: Array<CommitData>): Array<SourceCommitNode> => {
+        return commits.map((commit) => {
+          return {
+            sha: commit.sha,
+            parent: commit.parent,
+            historicalParent: commit.historicalParent,
+            userId: commit.userId,
+            authorUserId: commit.authorUserId,
+            mergeBase: commit.mergeBase,
+            idx: commit.idx,
+            message: commit.message,
+            timestamp: commit.timestamp,
+            children: [],
+          };
+        });
+      }
+    );
+  } catch (e) {
+    return null;
+  }
+};
+
 const readHotCheckpoint = async (
   repoId: string
 ): Promise<[string, ApplicationKVState]> => {
@@ -694,9 +744,7 @@ const saveBranchesMetaState = async (
   }
 };
 
-const checkBinary = async (
-  binaryId: string,
-): Promise<boolean> => {
+const checkBinary = async (binaryId: string): Promise<boolean> => {
   try {
     const binDir = path.join(vBinariesPath, binaryId.substring(0, 2));
     const binPath = path.join(binDir, binaryId);
@@ -721,6 +769,7 @@ export const makeDataSource = (datasource: DataSource = {}) => {
     saveBranch,
     saveCommit,
     readCommit,
+    readCommits,
     readCheckpoint,
     saveCheckpoint,
     readHotCheckpoint,
@@ -732,7 +781,7 @@ export const makeDataSource = (datasource: DataSource = {}) => {
     saveStash,
     readBranchesMetaState,
     saveBranchesMetaState,
-    checkBinary
+    checkBinary,
   };
   return {
     ...defaultDataSource,
@@ -1025,9 +1074,7 @@ export const makeMemoizedDataSource = (dataSourceOverride: DataSource = {}) => {
   };
 
   const seenBinaries = new Set();
-  const _checkBinary = async (
-    binaryId: string
-  ): Promise<boolean> => {
+  const _checkBinary = async (binaryId: string): Promise<boolean> => {
     if (seenBinaries.has(binaryId)) {
       return true;
     }
@@ -1060,7 +1107,7 @@ export const makeMemoizedDataSource = (dataSourceOverride: DataSource = {}) => {
     saveRenderedState: _saveRenderedState,
     readBranchesMetaState: _readBranchesMetaState,
     saveBranchesMetaState: _saveBranchesMetaState,
-    checkBinary: _checkBinary
+    checkBinary: _checkBinary,
   };
   return {
     ...dataSource,
