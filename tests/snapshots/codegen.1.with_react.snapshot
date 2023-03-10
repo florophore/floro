@@ -1,22 +1,26 @@
 import { useMemo } from 'react';
 
-export type FileRef = `${string}.${'3dmf'|'3dm'|'avi'|'ai'|'bin'|'bin'|'bmp'|'cab'|'c'|'c++'|'class'|'css'|'csv'|'cdr'|'doc'|'dot'|'docx'|'dwg'|'eps'|'exe'|'gif'|'gz'|'gtar'|'flv'|'fh4'|'fh5'|'fhc'|'help'|'hlp'|'html'|'htm'|'ico'|'imap'|'inf'|'jpe'|'jpeg'|'jpg'|'js'|'java'|'latex'|'log'|'m3u'|'midi'|'mid'|'mov'|'mp3'|'mpeg'|'mpg'|'mp2'|'ogg'|'phtml'|'php'|'pdf'|'pgp'|'png'|'pps'|'ppt'|'ppz'|'pot'|'ps'|'qt'|'qd3d'|'qd3'|'qxd'|'rar'|'ra'|'ram'|'rm'|'rtf'|'spr'|'sprite'|'stream'|'swf'|'svg'|'sgml'|'sgm'|'tar'|'tiff'|'tif'|'tgz'|'tex'|'txt'|'vob'|'wav'|'wrl'|'wrl'|'xla'|'xls'|'xls'|'xlc'|'xml'|'zip'|'zip'}`;
+export type FileRef = `${string}.${string}`;
+
+export type PartialDiffableQuery = `$(A).aObjects`|`$(A).aObjects.aKey<${FileRef}>`|`$(A).aObjects.aKey<${FileRef}>.values.nestedValue.list`|`$(A).aObjects.aKey<${FileRef}>.values.nestedValue.list.[${number}]`|`$(A).aObjects.aKey<${FileRef}>.values.nestedValue.list.[${number}].values.subList`|`$(A).aObjects.aKey<${FileRef}>.values.nestedValue.list.[${number}].values.subList.[${number}]`|`$(A).aObjects.aKey<${FileRef}>.values.nestedValue.nestedSet`|`$(A).aObjects.aKey<${FileRef}>.values.nestedValue.nestedSet.nestedSetKey<${QueryTypes['$(A).aObjects.aKey<?>']}>`|`$(B).bObjects`|`$(B).bObjects.mainKey<${string}>`;
+
+export type DiffableQuery = `$(A).aObjects.aKey<${FileRef}>`|`$(A).aObjects.aKey<${FileRef}>.values.nestedValue.list.[${number}]`|`$(A).aObjects.aKey<${FileRef}>.values.nestedValue.list.[${number}].values.subList.[${number}]`|`$(A).aObjects.aKey<${FileRef}>.values.nestedValue.nestedSet.nestedSetKey<${QueryTypes['$(A).aObjects.aKey<?>']}>`|`$(B).bObjects.mainKey<${string}>`;
 
 export type QueryTypes = {
-  ['$(A).aObjects.aKey<?>']: `$(A).aObjects.aKey<${number}>`;
-  ['$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>']: `$(A).aObjects.aKey<${number}>.nestedValue.nestedSet.nestedSetKey<${QueryTypes['$(A).aObjects.aKey<?>']}>`;
+  ['$(A).aObjects.aKey<?>']: `$(A).aObjects.aKey<${FileRef}>`;
+  ['$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>']: `$(A).aObjects.aKey<${FileRef}>.nestedValue.nestedSet.nestedSetKey<${QueryTypes['$(A).aObjects.aKey<?>']}>`;
   ['$(B).bObjects.mainKey<?>']: `$(B).bObjects.mainKey<${string}>`;
 };
 
-export function makeQueryRef(query: '$(A).aObjects.aKey<?>', arg0: number): QueryTypes['$(A).aObjects.aKey<?>'];
-export function makeQueryRef(query: '$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>', arg0: number, arg1: QueryTypes['$(A).aObjects.aKey<?>']): QueryTypes['$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>'];
+export function makeQueryRef(query: '$(A).aObjects.aKey<?>', arg0: FileRef): QueryTypes['$(A).aObjects.aKey<?>'];
+export function makeQueryRef(query: '$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>', arg0: FileRef, arg1: QueryTypes['$(A).aObjects.aKey<?>']): QueryTypes['$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>'];
 export function makeQueryRef(query: '$(B).bObjects.mainKey<?>', arg0: string): QueryTypes['$(B).bObjects.mainKey<?>'];
-export function makeQueryRef(query: '$(A).aObjects.aKey<?>'|'$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>'|'$(B).bObjects.mainKey<?>', arg0: number|string, arg1?: QueryTypes['$(A).aObjects.aKey<?>']): QueryTypes['$(A).aObjects.aKey<?>']|QueryTypes['$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>']|QueryTypes['$(B).bObjects.mainKey<?>']|null {
+export function makeQueryRef(query: '$(A).aObjects.aKey<?>'|'$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>'|'$(B).bObjects.mainKey<?>', arg0: FileRef|string, arg1?: QueryTypes['$(A).aObjects.aKey<?>']): QueryTypes['$(A).aObjects.aKey<?>']|QueryTypes['$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>']|QueryTypes['$(B).bObjects.mainKey<?>']|null {
   if (query == '$(A).aObjects.aKey<?>') {
-    return `$(A).aObjects.aKey<${arg0 as number}>`;
+    return `$(A).aObjects.aKey<${arg0 as FileRef}>`;
   }
   if (query == '$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>') {
-    return `$(A).aObjects.aKey<${arg0 as number}>.nestedValue.nestedSet.nestedSetKey<${arg1 as QueryTypes['$(A).aObjects.aKey<?>']}>`;
+    return `$(A).aObjects.aKey<${arg0 as FileRef}>.nestedValue.nestedSet.nestedSetKey<${arg1 as QueryTypes['$(A).aObjects.aKey<?>']}>`;
   }
   if (query == '$(B).bObjects.mainKey<?>') {
     return `$(B).bObjects.mainKey<${arg0 as string}>`;
@@ -24,16 +28,16 @@ export function makeQueryRef(query: '$(A).aObjects.aKey<?>'|'$(A).aObjects.aKey<
   return null;
 };
 
-export function useQueryRef(query: '$(A).aObjects.aKey<?>', arg0: number): QueryTypes['$(A).aObjects.aKey<?>'];
-export function useQueryRef(query: '$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>', arg0: number, arg1: QueryTypes['$(A).aObjects.aKey<?>']): QueryTypes['$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>'];
+export function useQueryRef(query: '$(A).aObjects.aKey<?>', arg0: FileRef): QueryTypes['$(A).aObjects.aKey<?>'];
+export function useQueryRef(query: '$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>', arg0: FileRef, arg1: QueryTypes['$(A).aObjects.aKey<?>']): QueryTypes['$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>'];
 export function useQueryRef(query: '$(B).bObjects.mainKey<?>', arg0: string): QueryTypes['$(B).bObjects.mainKey<?>'];
-export function useQueryRef(query: '$(A).aObjects.aKey<?>'|'$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>'|'$(B).bObjects.mainKey<?>', arg0: number|string, arg1?: QueryTypes['$(A).aObjects.aKey<?>']): QueryTypes['$(A).aObjects.aKey<?>']|QueryTypes['$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>']|QueryTypes['$(B).bObjects.mainKey<?>']|null {
+export function useQueryRef(query: '$(A).aObjects.aKey<?>'|'$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>'|'$(B).bObjects.mainKey<?>', arg0: FileRef|string, arg1?: QueryTypes['$(A).aObjects.aKey<?>']): QueryTypes['$(A).aObjects.aKey<?>']|QueryTypes['$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>']|QueryTypes['$(B).bObjects.mainKey<?>']|null {
   return useMemo(() => {
     if (query == '$(A).aObjects.aKey<?>') {
-      return makeQueryRef(query, arg0 as number);
+      return makeQueryRef(query, arg0 as FileRef);
     }
     if (query == '$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>') {
-      return makeQueryRef(query, arg0 as number, arg1 as QueryTypes['$(A).aObjects.aKey<?>']);
+      return makeQueryRef(query, arg0 as FileRef, arg1 as QueryTypes['$(A).aObjects.aKey<?>']);
     }
     if (query == '$(B).bObjects.mainKey<?>') {
       return makeQueryRef(query, arg0 as string);
@@ -45,8 +49,14 @@ export function useQueryRef(query: '$(A).aObjects.aKey<?>'|'$(A).aObjects.aKey<?
 export type SchemaRoot = {
   ['A']: {
     ['aObjects']: Array<{
-      ['aKey']: number;
+      ['aKey']: FileRef;
       ['nestedValue']: {
+        ['list']: Array<{
+          ['someProp']: string;
+          ['subList']: Array<{
+            ['subProp']: number;
+          }>;
+        }>;
         ['nestedSet']: Array<{
           ['nestedSetKey']: QueryTypes['$(A).aObjects.aKey<?>'];
         }>;
@@ -69,8 +79,14 @@ export type SchemaRoot = {
 
 export type RefReturnTypes = {
   ['$(A).aObjects.aKey<?>']:   {
-    ['aKey']: number;
+    ['aKey']: FileRef;
     ['nestedValue']: {
+      ['list']: Array<{
+        ['someProp']: string;
+        ['subList']: Array<{
+          ['subProp']: number;
+        }>;
+      }>;
       ['nestedSet']: Array<{
         ['nestedSetKey']: QueryTypes['$(A).aObjects.aKey<?>'];
       }>;
@@ -214,6 +230,20 @@ export const replaceRefVarsWithWildcards = (pathString: string): string => {
     })
     .join(".");
 };
+
+export function containsDiffable(changeset: Set<string>, query: PartialDiffableQuery, fuzzy: true): boolean;
+export function containsDiffable(changeset: Set<string>, query: DiffableQuery, fuzzy: false): boolean;
+export function containsDiffable(changeset: Set<string>, query: PartialDiffableQuery|DiffableQuery, fuzzy: boolean) {
+  if (!fuzzy) {
+    return changeset.has(query);
+  }
+  for (let value of changeset) {
+    if (value.startsWith(query)) {
+      return true;
+    }
+  }
+  return false;
+}
 
 export function getReferencedObject(root: SchemaRoot, query: QueryTypes['$(A).aObjects.aKey<?>']): RefReturnTypes['$(A).aObjects.aKey<?>'];
 export function getReferencedObject(root: SchemaRoot, query: QueryTypes['$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>']): RefReturnTypes['$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>'];

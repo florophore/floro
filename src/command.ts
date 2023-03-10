@@ -207,10 +207,6 @@ yargs
             });
           },
           handler: async (options) => {
-            const readFunction = await getLocalManifestReadFunction(process.cwd());
-            if (!readFunction) {
-              return;
-            }
             if (!options.dependency) {
               console.log(
                 clc.redBright.bgBlack.underline("No dependency specified")
@@ -235,8 +231,7 @@ yargs
             }
             const updatedManifest = await installDependency(
               process.cwd(),
-              options.dependency,
-              readFunction
+              options.dependency
             );
             if (!updatedManifest) {
               console.log(clc.redBright.bgBlack.underline("Install failed"));
@@ -286,23 +281,20 @@ yargs
             })
           },
           handler: async (options) => {
-            const readFunction = await getLocalManifestReadFunction(process.cwd());
-            if (readFunction != null) {
-              const out = await inspectLocalManifest(process.cwd(), options?.expanded ?? false);
-              if (out) {
-                console.log(
-                  render(
-                    out,
-                    {
-                      keysColor: "brightCyan",
-                      dashColor: "magenta",
-                      stringColor: "blue",
-                      multilineStringColor: "cyan",
-                    }
-                  )
-                );
-                return;
-              }
+            const out = await inspectLocalManifest(process.cwd(), options?.expanded ?? false);
+            if (out) {
+              console.log(
+                render(
+                  out,
+                  {
+                    keysColor: "brightCyan",
+                    dashColor: "magenta",
+                    stringColor: "blue",
+                    multilineStringColor: "cyan",
+                  }
+                )
+              );
+              return;
             }
             console.log(
               clc.redBright.bgBlack.underline(
@@ -314,11 +306,7 @@ yargs
         .command({
           command: "gen-api",
           describe: "Generates Typescript API from floro.manifest.json schema",
-          handler: async (options) => {
-            const readFunction = await getLocalManifestReadFunction(process.cwd());
-            if (!readFunction) {
-              return;
-            }
+          handler: async () => {
             const didSucceed = await validateLocalManifest(process.cwd());
             if (!didSucceed) {
               console.log(

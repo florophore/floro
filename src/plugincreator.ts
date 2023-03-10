@@ -29,6 +29,8 @@ import {
   pluginManifestsAreCompatibleForUpdate,
   validatePluginManifest,
   TypeStruct,
+  getDiffablesList,
+  drawDiffableQueryTypes,
 } from "./plugins";
 import clc from "cli-color";
 import semver from "semver";
@@ -352,8 +354,7 @@ export const exportPluginToDev = async (cwd: string) => {
 
 export const installDependency = async (
   cwd: string,
-  depname: string,
-  pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>
+  depname: string
 ): Promise<Manifest | null> => {
   const floroManifestPath = path.join(cwd, "floro", "floro.manifest.json");
   const floroManifestString = await fs.promises.readFile(floroManifestPath);
@@ -692,11 +693,34 @@ export const generateTypeScriptAPI = async (
     referenceKeys
   );
   const referenceArgsMap = buildPointerArgsMap(referenceReturnTypeMap);
+  const diffableListWithoutPartials = getDiffablesList(
+    rootSchemaMap,
+    referenceReturnTypeMap,
+  )
+
+  const diffableListWithPartials = getDiffablesList(
+    rootSchemaMap,
+    referenceReturnTypeMap,
+    true
+  )
 
   let code = useReact ? "import { useMemo } from 'react';\n\n" : "";
-  code += "export type FileRef = `${string}.${'3dmf'|'3dm'|'avi'|'ai'|'bin'|'bin'|'bmp'|'cab'|'c'|'c++'|'class'|'css'|'csv'|'cdr'|'doc'|'dot'|'docx'|'dwg'|'eps'|'exe'|'gif'|'gz'|'gtar'|'flv'|'fh4'|'fh5'|'fhc'|'help'|'hlp'|'html'|'htm'|'ico'|'imap'|'inf'|'jpe'|'jpeg'|'jpg'|'js'|'java'|'latex'|'log'|'m3u'|'midi'|'mid'|'mov'|'mp3'|'mpeg'|'mpg'|'mp2'|'ogg'|'phtml'|'php'|'pdf'|'pgp'|'png'|'pps'|'ppt'|'ppz'|'pot'|'ps'|'qt'|'qd3d'|'qd3'|'qxd'|'rar'|'ra'|'ram'|'rm'|'rtf'|'spr'|'sprite'|'stream'|'swf'|'svg'|'sgml'|'sgm'|'tar'|'tiff'|'tif'|'tgz'|'tex'|'txt'|'vob'|'wav'|'wrl'|'wrl'|'xla'|'xls'|'xls'|'xlc'|'xml'|'zip'|'zip'}`;\n\n"
+  code += "export type FileRef = `${string}.${string}`;\n\n";
   const queryTypesCode = drawMakeQueryRef(referenceArgsMap, useReact);
+
+  const partialDiffableQueryTypes = drawDiffableQueryTypes(
+    diffableListWithPartials,
+    true
+  )
+  code += partialDiffableQueryTypes + "\n\n";
+  const diffableQueryTypes = drawDiffableQueryTypes(
+    diffableListWithoutPartials,
+    false
+  )
+  code += diffableQueryTypes + "\n\n";
+
   code += queryTypesCode + "\n\n";
+
   const schemaRootCode = drawSchemaRoot(rootSchemaMap, referenceReturnTypeMap);
   code += schemaRootCode + "\n\n";
   const refReturnTypesCode = drawRefReturnTypes(

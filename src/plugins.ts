@@ -3658,8 +3658,8 @@ export const typestructsAreEquivalent = (
   typestructB: TypeStruct | object
 ) => {
   if (
-    Object.keys(typestructA ?? {}).length !=
-    Object.keys(typestructB ?? {}).length
+    Object.keys(typestructA ?? {}).filter(v => v != '(id)').length !=
+    Object.keys(typestructB ?? {}).filter(v => v != '(id)').length
   ) {
     return false;
   }
@@ -3702,10 +3702,11 @@ export const buildPointerReturnTypeMap = (
       staticPath
     );
     const types = Object.keys(expandedTypesWithRefs).filter((type) => {
-      return typestructsAreEquivalent(
+      const areEquivalent = typestructsAreEquivalent(
         expandedTypesWithRefs[type],
         staticSchema
       );
+      return areEquivalent;
     });
     out[key] = [staticPath, ...types];
   }
@@ -3749,6 +3750,159 @@ export const buildPointerArgsMap = (referenceReturnTypeMap: {
   return out;
 };
 
+interface DiffableElement {
+  type: 'array-index'|'set-key';
+  key?: string;
+  args?: Array<string>;
+}
+
+export const getDiffablesList = (
+  rootSchemaMap: { [key: string]: TypeStruct },
+  pointerArgsMap: { [key: string]: Array<string> },
+  includePartialPaths: boolean = false
+) => {
+  let out = [];
+  for (let pluginName in rootSchemaMap) {
+    const result = getDiffablesListForTypestruct(
+      rootSchemaMap,
+      pointerArgsMap,
+      rootSchemaMap[pluginName],
+      includePartialPaths,
+      [pluginName]
+    )
+    out.push(...result);
+  }
+  return out;
+}
+
+export const getDiffablesListForTypestruct = (
+  rootSchemaMap: { [key: string]: TypeStruct },
+  pointerArgsMap: { [key: string]: Array<string> },
+  typestruct: TypeStruct,
+  includePartialPaths: boolean,
+  path: Array<string|DiffableElement> = []
+): Array<string|DiffableElement> => {
+  let out = [];
+  for (const prop in typestruct) {
+    if (
+      (typestruct[prop]?.type == "set" || typestruct[prop]?.type == "array") &&
+      typeof typestruct[prop]?.values == "object"
+    ) {
+      if (includePartialPaths) {
+        out.push([...path, prop])
+      }
+      if (typestruct[prop]?.type == "set") {
+
+        let keyProp: string;
+        for (const subProp in typestruct[prop]?.values as TypeStruct) {
+          if (typestruct[prop]?.values[subProp]?.isKey) {
+            keyProp = subProp;
+            break;
+          }
+        }
+
+        if (typestruct[prop]?.values[keyProp].type == "ref") {
+          const refType = typestruct[prop]?.values[keyProp].refType;
+          const args = [];
+          for (let key in pointerArgsMap) {
+            if (pointerArgsMap[key].includes(refType)) {
+              args.push(replaceRefVarsWithWildcards(key));
+            }
+          }
+          out.push([
+              ...path,
+              prop,
+              {
+                type: "set-key",
+                key: keyProp,
+                args
+              },
+          ])
+          const subPaths = getDiffablesListForTypestruct(
+              rootSchemaMap,
+              pointerArgsMap,
+              typestruct[prop] as TypeStruct,
+              includePartialPaths,
+              [...path, prop, {
+                type: "set-key",
+                key: keyProp,
+                args,
+              }],
+          );
+          out.push(...subPaths);
+          continue;
+        }
+        out.push([
+            ...path,
+            prop,
+            {
+              type: "set-key",
+              key: keyProp,
+              args: [typestruct[prop]?.values[keyProp].type]
+            },
+        ])
+        const subPaths = getDiffablesListForTypestruct(
+          rootSchemaMap,
+          pointerArgsMap,
+          typestruct[prop] as TypeStruct,
+          includePartialPaths,
+          [
+            ...path,
+            prop,
+            {
+              type: "set-key",
+              key: keyProp,
+              args: [typestruct[prop]?.values[keyProp].type]
+            },
+          ]
+        );
+        out.push(...subPaths);
+        continue;
+      }
+      if (typestruct[prop]?.type == "array") {
+        out.push([
+          ...path,
+          prop,
+          {
+            type: "array-index",
+            args: ["number"],
+          },
+        ]);
+
+        const subPaths = getDiffablesListForTypestruct(
+          rootSchemaMap,
+          pointerArgsMap,
+          typestruct[prop] as TypeStruct,
+          includePartialPaths,
+          [
+            ...path,
+            prop,
+            {
+              type: "array-index",
+              args: ["number"],
+            },
+          ]
+        );
+        out.push(...subPaths);
+        continue;
+      }
+    }
+    if (!typestruct[prop]?.type && typeof typestruct[prop] == "object") {
+      const subPaths = getDiffablesListForTypestruct(
+          rootSchemaMap,
+          pointerArgsMap,
+          typestruct[prop] as TypeStruct,
+          includePartialPaths,
+          [...path, prop],
+      );
+      out.push(...subPaths);
+      continue;
+    }
+  }
+
+  return out;
+}
+
 const drawQueryTypes = (argMap: { [key: string]: Array<Array<string>> }) => {
   let code = "export type QueryTypes = {\n";
   for (const path in argMap) {
@@ -3756,6 +3910,7 @@ const drawQueryTypes = (argMap: { [key: string]: Array<Array<string>> }) => {
     const argStr = argMap[path].reduce((s, argPossibilities) => {
       if (
         argPossibilities[0] == "string" ||
+        argPossibilities[0] == "FileRef" ||
         argPossibilities[0] == "boolean" ||
         argPossibilities[0] == "number"
       ) {
@@ -3805,6 +3960,7 @@ export const drawMakeQueryRef = (
         .map((possibleArg) => {
           if (
             possibleArg == "string" ||
+            possibleArg == "FileRef" ||
             possibleArg == "boolean" ||
             possibleArg == "number"
           ) {
@@ -3828,6 +3984,7 @@ export const drawMakeQueryRef = (
       .map((possibleArg) => {
         if (
           possibleArg == "string" ||
+          possibleArg == "FileRef" ||
           possibleArg == "boolean" ||
           possibleArg == "number"
         ) {
@@ -3849,6 +4006,7 @@ export const drawMakeQueryRef = (
     const returnType = args.reduce((s, argType, i) => {
       if (
         argType[0] == "string" ||
+        argType[0] == "FileRef" ||
         argType[0] == "boolean" ||
         argType[0] == "number"
       ) {
@@ -3877,6 +4035,7 @@ export const drawMakeQueryRef = (
           .map((possibleArg) => {
             if (
               possibleArg == "string" ||
+              possibleArg == "FileRef" ||
               possibleArg == "boolean" ||
               possibleArg == "number"
             ) {
@@ -3904,6 +4063,7 @@ export const drawMakeQueryRef = (
         .map((argType, i) => {
           if (
             argType[0] == "string" ||
+            argType[0] == "FileRef" ||
             argType[0] == "boolean" ||
             argType[0] == "number"
           ) {
@@ -4191,6 +4351,20 @@ export const replaceRefVarsWithWildcards = (pathString: string): string => {
     })
     .join(".");
 };
+
+export function containsDiffable(changeset: Set<string>, query: PartialDiffableQuery, fuzzy: true): boolean;
+export function containsDiffable(changeset: Set<string>, query: DiffableQuery, fuzzy: false): boolean;
+export function containsDiffable(changeset: Set<string>, query: PartialDiffableQuery|DiffableQuery, fuzzy: boolean) {
+  if (!fuzzy) {
+    return changeset.has(query);
+  }
+  for (let value of changeset) {
+    if (value.startsWith(query)) {
+      return true;
+    }
+  }
+  return false;
+}
 `;
 
 export const drawGetReferencedObject = (
@@ -4272,3 +4446,58 @@ export const drawGetPluginStore = (
   }
   return code;
 };
+
+export const drawDiffableQueryTypes = (
+  diffables: Array<Array<string|DiffableElement>>,
+  includePartialPaths: boolean = false
+) => {
+  const diffableValue = diffables.map(diffable => {
+    return `\`${renderDiffable(diffable)}\``
+  }).join("|");
+  if (includePartialPaths) {
+    return `export type PartialDiffableQuery = ${diffableValue};`;
+  }
+  return `export type DiffableQuery = ${diffableValue};`;
+}
+
+export const renderDiffable = (
+  diffable: Array<string|DiffableElement>
+): string => {
+  const [pluginName, ...res] = diffable;
+  const subTypes = res.map((element: string|DiffableElement) => {
+    if (typeof element == "string") {
+      return element;
+    }
+    if (element.type == "array-index") {
+      return "[${number}]";
+    }
+    if (
+      element.args[0] == "boolean"
+    ) {
+      return `${element.key}<\${boolean}>`
+    }
+    if (
+      element.args[0] == "string"
+    ) {
+      return `${element.key}<\${string}>`
+    }
+    if (
+      element.args[0] == "file"
+    ) {
+      return `${element.key}<\${FileRef}>`
+    }
+
+    if (
+      element.args[0] == "int" ||
+      element.args[0] == "float"
+    ) {
+      return `${element.key}<\${number}>`
+    }
+
+    const refs = element.args.map(element => {
+      return `QueryTypes['${element}']`;
+    })
+    return `${element.key}<\${${refs.join("|")}}>`
+  });
+  return [`$(${pluginName})`, ...subTypes].join(".");
+}

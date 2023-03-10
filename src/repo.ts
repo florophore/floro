@@ -20,7 +20,6 @@ import {
   getPluginManifests,
   getSchemaMapForManifest,
   getStateFromKVForPlugin,
-  Manifest,
   manifestListToSchemaMap,
   nullifyMissingFileRefs,
   PluginElement,
@@ -156,7 +155,7 @@ export interface ApiDiff {
   };
 }
 
-export interface ApiStoreValidity {
+export interface ApiStoreInvalidity {
   [key: string]: Array<string>;
 }
 
@@ -1272,6 +1271,7 @@ export const getApiDiff = (
     }
 
     if (!afterState?.store?.[pluginName]) {
+      // show only removed state
       const beforeIndexedKvs = reIndexSchemaArrays(
         beforeState?.store?.[pluginName] ?? []
       );
@@ -1312,10 +1312,10 @@ export const getApiDiff = (
   };
 };
 
-export const getStateInvalidity = async (
+export const getInvalidStates = async (
   datasource: DataSource,
   appKvState: ApplicationKVState
-): Promise<ApiStoreValidity> => {
+): Promise<ApiStoreInvalidity> => {
   const manifests = await getPluginManifests(datasource, appKvState.plugins);
   const schemaMap = manifestListToSchemaMap(manifests)
   const store = {};
