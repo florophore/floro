@@ -34,7 +34,8 @@ export interface DataSource {
   /* PLUGINS */
   getPluginManifest?: (
     pluginName: string,
-    pluginVersion: string
+    pluginVersion: string,
+    disableDownloads?: boolean
   ) => Promise<Manifest>;
   pluginManifestExists?: (
     pluginName: string,
@@ -229,6 +230,27 @@ const pullPluginTar = async (
   return null;
 };
 
+export const fetchRemoteManifest = async (
+  pluginName: string,
+  pluginVersion: string
+): Promise<Manifest | null> => {
+  const remote = await getRemoteHostAsync();
+  const session = await getUserSessionAsync();
+
+  //
+  //@Get("/api/plugin/:name/:version/manifest")
+  const request = await axios.get(
+    `${remote}/api/plugin/${pluginName}/${pluginVersion}/manifest`,
+    {
+      headers: {
+        ["session_key"]: session?.clientKey,
+      },
+    }
+  );
+  return request.data;
+
+}
+
 export const downloadPlugin = async (
   pluginName: string,
   pluginVersion: string
@@ -284,7 +306,8 @@ export const downloadPlugin = async (
 
 export const getPluginManifest = async (
   pluginName: string,
-  pluginValue: string
+  pluginValue: string,
+  disableDownloads = false
 ): Promise<Manifest> => {
   if (pluginValue.startsWith("dev")) {
     return await readDevPluginManifest(pluginName, pluginValue);
@@ -304,7 +327,10 @@ export const getPluginManifest = async (
     const manifestString = await fs.promises.readFile(pluginManifestPath);
     return JSON.parse(manifestString.toString());
   }
-  return await downloadPlugin(pluginName, pluginValue);
+  if (!disableDownloads) {
+    return await downloadPlugin(pluginName, pluginValue);
+  }
+  return await fetchRemoteManifest(pluginName, pluginValue);
 };
 
 const pluginManifestExists = async (

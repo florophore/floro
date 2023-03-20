@@ -1,7 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.LicenseCodes = void 0;
-exports.LicenseCodes = [
+exports.LicenseCodes = exports.LicenseCodesList = void 0;
+exports.LicenseCodesList = [
     {
         value: "apache_2",
         label: "Apache License 2.0",
@@ -54,5 +54,6 @@ exports.LicenseCodes = [
         value: "unlicense",
         label: "The Unlicense",
     },
-].reduce((acc, { value, label }) => ({ ...acc, [value]: label }), {});
+];
+exports.LicenseCodes = exports.LicenseCodesList.reduce((acc, { value, label }) => ({ ...acc, [value]: label }), {});
 //# sourceMappingURL=licensecodes.js.map

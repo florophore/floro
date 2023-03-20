@@ -12,7 +12,7 @@ export declare const inspectLocalManifest: (cwd: string, expand?: boolean) => Pr
 }>;
 export declare const pullLocalDeps: (cwd: string, pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>) => Promise<boolean>;
 export declare const exportPluginToDev: (cwd: string) => Promise<boolean>;
-export declare const installDependency: (cwd: string, depname: string, pluginFetch: (pluginName: string, version: string) => Promise<Manifest | null>) => Promise<Manifest | null>;
+export declare const installDependency: (cwd: string, depname: string) => Promise<Manifest | null>;
 export declare const tarCreationPlugin: (cwd: string) => Promise<null | string>;
 export declare const uploadPluginTar: (tarPath: string) => Promise<boolean>;
 export interface DepFetch {

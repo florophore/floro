@@ -14,7 +14,7 @@ const writeRepoDescription = async (datasource, repoId, description) => {
     if (!repoId) {
         return null;
     }
-    if (!description) {
+    if (typeof description != "string") {
         return null;
     }
     const exists = await datasource.repoExists(repoId);
@@ -468,6 +468,10 @@ const writeRepoCommit = async (datasource, repoId, message) => {
         if (!user.id) {
             return null;
         }
+        const currentState = await datasource.readCurrentRepoState(repoId);
+        if (currentState.commandMode != "view") {
+            return null;
+        }
         const currentRenderedState = await datasource.readRenderedState(repoId);
         const currentKVState = await (0, repo_1.convertRenderedCommitStateToKv)(datasource, currentRenderedState);
         const unstagedState = await (0, repo_1.getUnstagedCommitState)(datasource, repoId);
@@ -476,7 +480,6 @@ const writeRepoCommit = async (datasource, repoId, message) => {
         if (!commitIsValid) {
             return null;
         }
-        const currentState = await datasource.readCurrentRepoState(repoId);
         const currentSha = await (0, repo_1.getCurrentCommitSha)(datasource, repoId);
         const parent = currentSha
             ? await datasource.readCommit(repoId, currentSha)
@@ -657,7 +660,6 @@ const updatePlugins = async (datasource, repoId, plugins) => {
                 },
             });
         }
-        const rootDependencies = updatedManifests.filter((m) => Object.keys(m.imports).length == 0);
         const currentRenderedState = await datasource.readRenderedState(repoId);
         const lexicallyOrderedPlugins = updatedPlugins.sort((a, b) => {
             if (a.key == b.key)
@@ -670,12 +672,13 @@ const updatePlugins = async (datasource, repoId, plugins) => {
                 store[key] = {};
             }
         }
-        for (const rootManifest of rootDependencies) {
-            const schemaMap = await (0, plugins_1.getSchemaMapForManifest)(datasource, rootManifest);
-            store = await (0, plugins_1.cascadePluginState)(datasource, schemaMap, store);
-        }
+        const schemaMap = (0, plugins_1.manifestListToSchemaMap)(updatedManifests);
+        store = await (0, plugins_1.cascadePluginState)(datasource, schemaMap, store);
+        store = await (0, plugins_1.nullifyMissingFileRefs)(datasource, schemaMap, store);
+        const binaries = await (0, plugins_1.collectFileRefs)(datasource, schemaMap, store);
         currentRenderedState.store = store;
         currentRenderedState.plugins = sortedUpdatedPlugins;
+        currentRenderedState.binaries = (0, repo_1.uniqueStrings)(binaries);
         await datasource.saveRenderedState(repoId, currentRenderedState);
         return currentRenderedState;
     }
@@ -714,6 +717,8 @@ const updatePluginState = async (datasource, repoId, pluginName, updatedState) =
         const stateStore = renderedState.store;
         stateStore[pluginName] = updatedState;
         renderedState.store = await (0, plugins_1.cascadePluginState)(datasource, schemaMap, stateStore);
+        renderedState.store = await (0, plugins_1.nullifyMissingFileRefs)(datasource, schemaMap, renderedState.store);
+        renderedState.binaries = (0, repo_1.uniqueStrings)(await (0, plugins_1.collectFileRefs)(datasource, schemaMap, renderedState.store));
         await datasource.saveRenderedState(repoId, renderedState);
         return renderedState;
     }
@@ -917,6 +922,12 @@ const mergeCommit = async (datasource, repoId, fromSha) => {
                     intoSha: currentRepoState.commit,
                     direction,
                 },
+                commandMode: "compare",
+                comparison: {
+                    against: "merge",
+                    branch: null,
+                    commit: null,
+                }
             };
             await datasource.saveCurrentRepoState(repoId, updated);
             const renderedState = await (0, repo_1.convertCommitStateToRenderedState)(datasource, mergeState);

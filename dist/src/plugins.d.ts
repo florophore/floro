@@ -46,7 +46,7 @@ export declare const schemaMapsAreCompatible: (datasource: DataSource, oldSchema
     [key: string]: Manifest;
 }) => Promise<boolean | null>;
 export declare const topSortManifests: (manifests: Array<Manifest>) => Manifest[];
-export declare const getPluginManifests: (datasource: DataSource, pluginList: Array<PluginElement>) => Promise<Array<Manifest>>;
+export declare const getPluginManifests: (datasource: DataSource, pluginList: Array<PluginElement>, disableDownloads?: boolean) => Promise<Array<Manifest>>;
 export declare const getManifestMapFromManifestList: (manifests: Array<Manifest>) => {};
 export declare const pluginListToMap: (pluginList: Array<PluginElement>) => {
     [pluginName: string]: string;
@@ -65,7 +65,7 @@ export interface DepFetch {
     reason?: string;
     deps?: Array<Manifest>;
 }
-export declare const getDependenciesForManifest: (datasource: DataSource, manifest: Manifest, seen?: {}) => Promise<DepFetch>;
+export declare const getDependenciesForManifest: (datasource: DataSource, manifest: Manifest, disableDownloads?: boolean, seen?: {}) => Promise<DepFetch>;
 export declare const getUpstreamDependencyManifests: (datasource: DataSource, manifest: Manifest, memo?: {
     [key: string]: Manifest[];
 }) => Promise<Array<Manifest> | null>;
@@ -204,31 +204,19 @@ export declare const cascadePluginState: (datasource: DataSource, schemaMap: {
 }) => Promise<{
     [key: string]: object;
 }>;
-/***
- * cascading is heavy but infrequent. It only needs to be
- * called when updating state. Not called when applying diffs
- * @deprecated because it is not scalable at all and couples
- * kv state to plugin transformations
- */
-export declare const cascadePluginStateDeprecated: (datasource: DataSource, schemaMap: {
-    [key: string]: Manifest;
-}, stateMap: {
-    [key: string]: object;
-}, pluginName: string, rootSchemaMap?: {
-    [key: string]: TypeStruct;
-}, memo?: {
-    [key: string]: {
-        [key: string]: object;
-    };
-}) => Promise<{
-    [key: string]: object;
-}>;
 export declare const reIndexSchemaArrays: (kvs: Array<DiffElement>) => Array<string>;
 export declare const nullifyMissingFileRefs: (datasource: DataSource, schemaMap: {
     [key: string]: Manifest;
 }, stateMap: {
     [key: string]: object;
-}) => Promise<void>;
+}) => Promise<{
+    [key: string]: object;
+}>;
+export declare const collectFileRefs: (datasource: DataSource, schemaMap: {
+    [key: string]: Manifest;
+}, stateMap: {
+    [key: string]: object;
+}) => Promise<Array<string>>;
 export declare const validatePluginState: (datasource: DataSource, schemaMap: {
     [key: string]: Manifest;
 }, stateMap: {
@@ -289,6 +277,21 @@ export declare const buildPointerArgsMap: (referenceReturnTypeMap: {
 }) => {
     [key: string]: string[][];
 };
+interface DiffableElement {
+    type: 'array-index' | 'set-key';
+    key?: string;
+    args?: Array<string>;
+}
+export declare const getDiffablesList: (rootSchemaMap: {
+    [key: string]: TypeStruct;
+}, pointerArgsMap: {
+    [key: string]: string[];
+}, includePartialPaths?: boolean) => any[];
+export declare const getDiffablesListForTypestruct: (rootSchemaMap: {
+    [key: string]: TypeStruct;
+}, pointerArgsMap: {
+    [key: string]: string[];
+}, typestruct: TypeStruct, includePartialPaths: boolean, path?: Array<string | DiffableElement>) => Array<string | DiffableElement>;
 export declare const drawMakeQueryRef: (argMap: {
     [key: string]: string[][];
 }, useReact?: boolean) => string;
@@ -304,4 +307,6 @@ export declare const drawGetReferencedObject: (argMap: {
 export declare const drawGetPluginStore: (rootSchemaMap: {
     [key: string]: TypeStruct;
 }, useReact?: boolean) => string;
+export declare const drawDiffableQueryTypes: (diffables: Array<Array<string | DiffableElement>>, includePartialPaths?: boolean) => string;
+export declare const renderDiffable: (diffable: Array<string | DiffableElement>) => string;
 export {};

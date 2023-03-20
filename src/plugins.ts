@@ -143,11 +143,12 @@ export const topSortManifests = (manifests: Array<Manifest>) => {
 
 export const getPluginManifests = async (
   datasource: DataSource,
-  pluginList: Array<PluginElement>
+  pluginList: Array<PluginElement>,
+  disableDownloads = false
 ): Promise<Array<Manifest>> => {
   const manifests = await Promise.all(
     pluginList.map(({ key: pluginName, value: pluginVersion }) => {
-      return datasource.getPluginManifest(pluginName, pluginVersion);
+      return datasource.getPluginManifest(pluginName, pluginVersion, disableDownloads);
     })
   );
   return manifests?.filter((manifest: Manifest | null) => {
@@ -244,6 +245,7 @@ export interface DepFetch {
 export const getDependenciesForManifest = async (
   datasource: DataSource,
   manifest: Manifest,
+  disableDownloads = false,
   seen = {}
 ): Promise<DepFetch> => {
   const deps: Array<Manifest> = [];
@@ -268,6 +270,7 @@ export const getDependenciesForManifest = async (
       const depResult = await getDependenciesForManifest(
         datasource,
         pluginManifest,
+        disableDownloads,
         {
           ...seen,
           [manifest.name]: true,
@@ -1467,7 +1470,6 @@ export const flattenStateToSchemaPathKV = (
   }
   for (const prop of sets) {
     (state?.[prop] ?? []).forEach((element) => {
-      debugger;
       kv.push(
         ...flattenStateToSchemaPathKV(
           schemaRoot[prop].values,
@@ -2542,130 +2544,11 @@ export const cascadePluginState = async (
   }
 };
 
-/***
- * cascading is heavy but infrequent. It only needs to be
- * called when updating state. Not called when applying diffs
- * @deprecated because it is not scalable at all and couples
- * kv state to plugin transformations
- */
-export const cascadePluginStateDeprecated = async (
-  datasource: DataSource,
-  schemaMap: { [key: string]: Manifest },
-  stateMap: { [key: string]: object },
-  pluginName: string,
-  rootSchemaMap?: { [key: string]: TypeStruct },
-  memo: { [key: string]: { [key: string]: object } } = {}
-): Promise<{ [key: string]: object }> => {
-  if (!rootSchemaMap) {
-    rootSchemaMap = (await getRootSchemaMap(datasource, schemaMap)) ?? {};
-  }
-  if (!memo) {
-    memo = {};
-  }
-  const kvs = await getKVStateForPlugin(
-    datasource,
-    schemaMap,
-    pluginName,
-    stateMap
-  );
-  const removedRefs = new Set();
-  const next: Array<DiffElement> = [];
-  for (const kv of kvs) {
-    const key = kv.key;
-    const value = {
-      ...kv.value,
-    };
-    const subSchema = getSchemaAtPath(rootSchemaMap[pluginName], key) as object;
-    const containsReferences = Object.keys(subSchema).reduce(
-      (hasARef, subSchemaKey) => {
-        if (hasARef) {
-          return true;
-        }
-        return subSchema[subSchemaKey]?.type == "ref";
-      },
-      false
-    );
-    let shouldDelete = false;
-    if (containsReferences) {
-      for (const prop in subSchema) {
-        if (subSchema[prop]?.type == "ref") {
-          const referencedObject = value[prop]
-            ? getObjectInStateMap(stateMap, value[prop])
-            : null;
-          if (!referencedObject) {
-            if (subSchema[prop]?.onDelete == "nullify") {
-              value[prop] = null;
-            } else {
-              shouldDelete = true;
-              break;
-            }
-          }
-        }
-      }
-    }
-    const refs = refSetFromKey(key);
-    const containsRemovedRef = refs.reduce((containsRef, refKey) => {
-      if (containsRef) {
-        return true;
-      }
-      return removedRefs.has(refKey);
-    }, false);
-    if (!shouldDelete && !containsRemovedRef) {
-      next.push({
-        key,
-        value,
-      });
-    } else {
-      removedRefs.add(key);
-    }
-  }
-  const newPluginState = getStateFromKVForPlugin(schemaMap, next, pluginName);
-  const nextStateMap = { ...stateMap, [pluginName]: newPluginState };
-  if (next.length != kvs.length) {
-    const out = cascadePluginStateDeprecated(
-      datasource,
-      schemaMap,
-      { ...stateMap, [pluginName]: newPluginState },
-      pluginName,
-      rootSchemaMap,
-      memo
-    );
-    return out;
-  }
-  const downstreamDeps = getDownstreamDepsInSchemaMap(schemaMap, pluginName);
-  const result = await asyncReduce(
-    nextStateMap,
-    downstreamDeps,
-    async (stateMap, dependentPluginName) => {
-      if (memo[`${pluginName}:${dependentPluginName}`]) {
-        return {
-          ...stateMap,
-          ...memo[`${pluginName}:${dependentPluginName}`],
-        };
-      }
-      const result = {
-        ...stateMap,
-        ...(await cascadePluginStateDeprecated(
-          datasource,
-          schemaMap,
-          stateMap,
-          dependentPluginName,
-          rootSchemaMap,
-          memo
-        )),
-      };
-      memo[`${pluginName}:${dependentPluginName}`] = result;
-      return result;
-    }
-  );
-  return result;
-};
-
 export const reIndexSchemaArrays = (kvs: Array<DiffElement>): Array<string> => {
   const out = [];
   const listStack: Array<string> = [];
   let indexStack: Array<number> = [];
-  for (const { key, value } of kvs) {
+  for (const { key } of kvs) {
     const decodedPath = decodeSchemaPath(key);
     const lastPart = decodedPath[decodedPath.length - 1];
     if (typeof lastPart == "object" && lastPart.key == "(id)") {

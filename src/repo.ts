@@ -39,6 +39,24 @@ import {
   StringDiff,
 } from "./versioncontrol";
 
+export interface RepoState {
+  branch: string | null;
+  commit: string | null;
+  isInMergeConflict: boolean;
+  merge: null | {
+    fromSha: string;
+    intoSha: string;
+    originSha: string;
+    direction: "yours" | "theirs";
+  };
+  commandMode: "view" | "edit" | "compare";
+  comparison: null | {
+    against: "last"|"branch"|"sha"|"merge";
+    branch: string | null;
+    commit: string | null;
+  };
+}
+
 export interface RepoSetting {
   mainBranch: string;
 }
@@ -81,24 +99,6 @@ export interface StateDiff {
   store: StoreStateDiff;
   licenses: Diff;
   description: StringDiff;
-}
-
-export interface RepoState {
-  branch: string | null;
-  commit: string | null;
-  isInMergeConflict: boolean;
-  merge: null | {
-    fromSha: string;
-    intoSha: string;
-    originSha: string;
-    direction: "yours" | "theirs";
-  };
-  commandMode: "view" | "edit" | "compare";
-  comparison: null | {
-    against: "last"|"branch"|"sha"|"merge";
-    branch: string | null;
-    commit: string | null;
-  };
 }
 
 export interface Branch {
@@ -157,6 +157,14 @@ export interface ApiDiff {
 
 export interface ApiStoreInvalidity {
   [key: string]: Array<string>;
+}
+
+export interface ApiReponse {
+  repoState: RepoState;
+  applicationState: RenderedApplicationState;
+  beforeState?: RenderedApplicationState;
+  apiDiff?: ApiDiff;
+  apiStoreInvalidity?: ApiStoreInvalidity;
 }
 
 export const EMPTY_COMMIT_STATE: ApplicationKVState = {
@@ -747,51 +755,12 @@ export const getPluginsToRunUpdatesOn = (
   });
 };
 
-export const changeCommandModeToView = async (datasource: DataSource, repoId: string) => {
+export const changeCommandMode = async (datasource: DataSource, repoId: string, commandMode: "view"|"edit"|"compare") => {
   try {
     const currentRepoState = await datasource.readCurrentRepoState(repoId);
     const nextRepoState: RepoState = {
       ...currentRepoState,
-      commandMode: "view",
-    };
-    await datasource.saveCurrentRepoState(repoId, nextRepoState);
-    return nextRepoState;
-  } catch (e) {
-    return null;
-  }
-}
-
-export const changeCommandModeToEdit = async (datasource: DataSource, repoId: string) => {
-  try {
-    const currentRepoState = await datasource.readCurrentRepoState(repoId);
-    const nextRepoState: RepoState = {
-      ...currentRepoState,
-      commandMode: "edit",
-    };
-    await datasource.saveCurrentRepoState(repoId, nextRepoState);
-    return nextRepoState;
-  } catch (e) {
-    return null;
-  }
-}
-
-export const changeCommandModeToCompare = async (
-  datasource: DataSource,
-  repoId: string,
-  against: "last"|"branch"|"sha"|"merge" = null,
-  branch: null|string = null,
-  commit: null|string = null
-  ) => {
-  try {
-    const currentRepoState = await datasource.readCurrentRepoState(repoId);
-    const nextRepoState: RepoState = {
-      ...currentRepoState,
-      commandMode: "compare",
-      comparison: {
-        against,
-        branch,
-        commit
-      }
+      commandMode,
     };
     await datasource.saveCurrentRepoState(repoId, nextRepoState);
     return nextRepoState;
@@ -1332,4 +1301,33 @@ export const getInvalidStates = async (
     store[pluginName] = invalidStateIndices.map(i => indexedKvs[i]);
   }
   return store;
+}
+
+export const renderApiReponse = async (
+  datasource: DataSource,
+  renderedApplicationState: RenderedApplicationState,
+  applicationKVState: ApplicationKVState,
+  repoState: RepoState,
+): Promise<ApiReponse> => {
+  const apiStoreInvalidity = await getInvalidStates(datasource, applicationKVState);
+  if (repoState.commandMode == "edit") {
+    return {
+      apiStoreInvalidity,
+      repoState,
+      applicationState: renderedApplicationState
+    }
+  }
+
+  if (repoState.commandMode == "view") {
+    return {
+      apiStoreInvalidity,
+      repoState,
+      applicationState: renderedApplicationState
+    }
+  }
+  if (repoState.commandMode == "compare") {
+
+  }
+  return null;
+
 }

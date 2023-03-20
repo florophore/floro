@@ -160,10 +160,6 @@ yargs_1.default
                 });
             },
             handler: async (options) => {
-                const readFunction = await (0, plugincreator_1.getLocalManifestReadFunction)(process.cwd());
-                if (!readFunction) {
-                    return;
-                }
                 if (!options.dependency) {
                     console.log(cli_color_1.default.redBright.bgBlack.underline("No dependency specified"));
                     return;
@@ -174,7 +170,7 @@ yargs_1.default
                     console.log(cli_color_1.default.redBright.bgBlack.underline("Please try again from your floro plugin's root directory."));
                     return;
                 }
-                const updatedManifest = await (0, plugincreator_1.installDependency)(process.cwd(), options.dependency, readFunction);
+                const updatedManifest = await (0, plugincreator_1.installDependency)(process.cwd(), options.dependency);
                 if (!updatedManifest) {
                     console.log(cli_color_1.default.redBright.bgBlack.underline("Install failed"));
                     return;
@@ -211,18 +207,15 @@ yargs_1.default
                 });
             },
             handler: async (options) => {
-                const readFunction = await (0, plugincreator_1.getLocalManifestReadFunction)(process.cwd());
-                if (readFunction != null) {
-                    const out = await (0, plugincreator_1.inspectLocalManifest)(process.cwd(), options?.expanded ?? false);
-                    if (out) {
-                        console.log((0, prettyjson_1.render)(out, {
-                            keysColor: "brightCyan",
-                            dashColor: "magenta",
-                            stringColor: "blue",
-                            multilineStringColor: "cyan",
-                        }));
-                        return;
-                    }
+                const out = await (0, plugincreator_1.inspectLocalManifest)(process.cwd(), options?.expanded ?? false);
+                if (out) {
+                    console.log((0, prettyjson_1.render)(out, {
+                        keysColor: "brightCyan",
+                        dashColor: "magenta",
+                        stringColor: "blue",
+                        multilineStringColor: "cyan",
+                    }));
+                    return;
                 }
                 console.log(cli_color_1.default.redBright.bgBlack.underline("Manifest inspect failed."));
             },
@@ -230,11 +223,7 @@ yargs_1.default
             .command({
             command: "gen-api",
             describe: "Generates Typescript API from floro.manifest.json schema",
-            handler: async (options) => {
-                const readFunction = await (0, plugincreator_1.getLocalManifestReadFunction)(process.cwd());
-                if (!readFunction) {
-                    return;
-                }
+            handler: async () => {
                 const didSucceed = await (0, plugincreator_1.validateLocalManifest)(process.cwd());
                 if (!didSucceed) {
                     console.log(cli_color_1.default.cyanBright.bgBlack.underline("Manifest is invalid."));

@@ -3,8 +3,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.collectKeyRefs = exports.invalidSchemaPropsCheck = exports.isSchemaValid = exports.isTopologicalSubsetValid = exports.isTopologicalSubset = exports.pluginManifestIsSubsetOfManifest = exports.getPluginInvalidStateIndices = exports.validatePluginState = exports.nullifyMissingFileRefs = exports.reIndexSchemaArrays = exports.cascadePluginStateDeprecated = exports.cascadePluginState = exports.recursivelyCheckIfReferenceExists = exports.compileStatePointers = exports.getDownstreamDepsInSchemaMap = exports.getUpstreamDepsInSchemaMap = exports.getKVStateForPlugin = exports.getRootSchemaMap = exports.getRootSchemaForPlugin = exports.getExpandedTypesForPlugin = exports.getStateFromKVForPlugin = exports.buildObjectsAtPath = exports.indexArrayDuplicates = exports.flattenStateToSchemaPathKV = exports.getStateId = exports.decodeSchemaPathWithArrays = exports.decodeSchemaPath = exports.writePathStringWithArrays = exports.writePathString = exports.defaultVoidedState = exports.validatePluginManifest = exports.containsCyclicTypes = exports.schemaHasInvalidTypeSytax = exports.schemaManifestHasInvalidSyntax = exports.getSchemaMapForManifest = exports.verifyPluginDependencyCompatability = exports.coalesceDependencyVersions = exports.getUpstreamDependencyManifests = exports.getDependenciesForManifest = exports.hasPluginManifest = exports.hasPlugin = exports.manifestListToPluginList = exports.manifestListToSchemaMap = exports.pluginMapToList = exports.pluginListToMap = exports.getManifestMapFromManifestList = exports.getPluginManifests = exports.topSortManifests = exports.schemaMapsAreCompatible = exports.pluginManifestsAreCompatibleForUpdate = void 0;
-exports.drawGetPluginStore = exports.drawGetReferencedObject = exports.drawRefReturnTypes = exports.drawSchemaRoot = exports.drawMakeQueryRef = exports.buildPointerArgsMap = exports.buildPointerReturnTypeMap = exports.typestructsAreEquivalent = exports.replaceRawRefsInExpandedType = exports.replaceRefVarsWithWildcards = void 0;
+exports.collectKeyRefs = exports.invalidSchemaPropsCheck = exports.isSchemaValid = exports.isTopologicalSubsetValid = exports.isTopologicalSubset = exports.pluginManifestIsSubsetOfManifest = exports.getPluginInvalidStateIndices = exports.validatePluginState = exports.collectFileRefs = exports.nullifyMissingFileRefs = exports.reIndexSchemaArrays = exports.cascadePluginState = exports.recursivelyCheckIfReferenceExists = exports.compileStatePointers = exports.getDownstreamDepsInSchemaMap = exports.getUpstreamDepsInSchemaMap = exports.getKVStateForPlugin = exports.getRootSchemaMap = exports.getRootSchemaForPlugin = exports.getExpandedTypesForPlugin = exports.getStateFromKVForPlugin = exports.buildObjectsAtPath = exports.indexArrayDuplicates = exports.flattenStateToSchemaPathKV = exports.getStateId = exports.decodeSchemaPathWithArrays = exports.decodeSchemaPath = exports.writePathStringWithArrays = exports.writePathString = exports.defaultVoidedState = exports.validatePluginManifest = exports.containsCyclicTypes = exports.schemaHasInvalidTypeSytax = exports.schemaManifestHasInvalidSyntax = exports.getSchemaMapForManifest = exports.verifyPluginDependencyCompatability = exports.coalesceDependencyVersions = exports.getUpstreamDependencyManifests = exports.getDependenciesForManifest = exports.hasPluginManifest = exports.hasPlugin = exports.manifestListToPluginList = exports.manifestListToSchemaMap = exports.pluginMapToList = exports.pluginListToMap = exports.getManifestMapFromManifestList = exports.getPluginManifests = exports.topSortManifests = exports.schemaMapsAreCompatible = exports.pluginManifestsAreCompatibleForUpdate = void 0;
+exports.renderDiffable = exports.drawDiffableQueryTypes = exports.drawGetPluginStore = exports.drawGetReferencedObject = exports.drawRefReturnTypes = exports.drawSchemaRoot = exports.drawMakeQueryRef = exports.getDiffablesListForTypestruct = exports.getDiffablesList = exports.buildPointerArgsMap = exports.buildPointerReturnTypeMap = exports.typestructsAreEquivalent = exports.replaceRawRefsInExpandedType = exports.replaceRefVarsWithWildcards = void 0;
 const axios_1 = __importDefault(require("axios"));
 const semver_1 = __importDefault(require("semver"));
 axios_1.default.defaults.validateStatus = function () {
@@ -69,9 +69,9 @@ const topSortManifests = (manifests) => {
     return out;
 };
 exports.topSortManifests = topSortManifests;
-const getPluginManifests = async (datasource, pluginList) => {
+const getPluginManifests = async (datasource, pluginList, disableDownloads = false) => {
     const manifests = await Promise.all(pluginList.map(({ key: pluginName, value: pluginVersion }) => {
-        return datasource.getPluginManifest(pluginName, pluginVersion);
+        return datasource.getPluginManifest(pluginName, pluginVersion, disableDownloads);
     }));
     return manifests?.filter((manifest) => {
         if (manifest == null) {
@@ -144,7 +144,7 @@ const hasPluginManifest = (manifest, manifests) => {
     return false;
 };
 exports.hasPluginManifest = hasPluginManifest;
-const getDependenciesForManifest = async (datasource, manifest, seen = {}) => {
+const getDependenciesForManifest = async (datasource, manifest, disableDownloads = false, seen = {}) => {
     const deps = [];
     for (const pluginName in manifest.imports) {
         if (seen[pluginName]) {
@@ -161,7 +161,7 @@ const getDependenciesForManifest = async (datasource, manifest, seen = {}) => {
                     reason: `cannot fetch manifest for ${pluginName}`,
                 };
             }
-            const depResult = await (0, exports.getDependenciesForManifest)(datasource, pluginManifest, {
+            const depResult = await (0, exports.getDependenciesForManifest)(datasource, pluginManifest, disableDownloads, {
                 ...seen,
                 [manifest.name]: true,
             });
@@ -1079,7 +1079,6 @@ const flattenStateToSchemaPathKV = (schemaRoot, state, traversalPath) => {
     }
     for (const prop of sets) {
         (state?.[prop] ?? []).forEach((element) => {
-            debugger;
             kv.push(...(0, exports.flattenStateToSchemaPathKV)(schemaRoot[prop].values, element, [
                 ...traversalPath,
                 ...(primaryKey ? [primaryKey] : []),
@@ -1813,99 +1812,11 @@ const cascadePluginState = async (datasource, schemaMap, stateMap) => {
     }
 };
 exports.cascadePluginState = cascadePluginState;
-/***
- * cascading is heavy but infrequent. It only needs to be
- * called when updating state. Not called when applying diffs
- * @deprecated because it is not scalable at all and couples
- * kv state to plugin transformations
- */
-const cascadePluginStateDeprecated = async (datasource, schemaMap, stateMap, pluginName, rootSchemaMap, memo = {}) => {
-    if (!rootSchemaMap) {
-        rootSchemaMap = (await (0, exports.getRootSchemaMap)(datasource, schemaMap)) ?? {};
-    }
-    if (!memo) {
-        memo = {};
-    }
-    const kvs = await (0, exports.getKVStateForPlugin)(datasource, schemaMap, pluginName, stateMap);
-    const removedRefs = new Set();
-    const next = [];
-    for (const kv of kvs) {
-        const key = kv.key;
-        const value = {
-            ...kv.value,
-        };
-        const subSchema = getSchemaAtPath(rootSchemaMap[pluginName], key);
-        const containsReferences = Object.keys(subSchema).reduce((hasARef, subSchemaKey) => {
-            if (hasARef) {
-                return true;
-            }
-            return subSchema[subSchemaKey]?.type == "ref";
-        }, false);
-        let shouldDelete = false;
-        if (containsReferences) {
-            for (const prop in subSchema) {
-                if (subSchema[prop]?.type == "ref") {
-                    const referencedObject = value[prop]
-                        ? getObjectInStateMap(stateMap, value[prop])
-                        : null;
-                    if (!referencedObject) {
-                        if (subSchema[prop]?.onDelete == "nullify") {
-                            value[prop] = null;
-                        }
-                        else {
-                            shouldDelete = true;
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-        const refs = refSetFromKey(key);
-        const containsRemovedRef = refs.reduce((containsRef, refKey) => {
-            if (containsRef) {
-                return true;
-            }
-            return removedRefs.has(refKey);
-        }, false);
-        if (!shouldDelete && !containsRemovedRef) {
-            next.push({
-                key,
-                value,
-            });
-        }
-        else {
-            removedRefs.add(key);
-        }
-    }
-    const newPluginState = (0, exports.getStateFromKVForPlugin)(schemaMap, next, pluginName);
-    const nextStateMap = { ...stateMap, [pluginName]: newPluginState };
-    if (next.length != kvs.length) {
-        const out = (0, exports.cascadePluginStateDeprecated)(datasource, schemaMap, { ...stateMap, [pluginName]: newPluginState }, pluginName, rootSchemaMap, memo);
-        return out;
-    }
-    const downstreamDeps = (0, exports.getDownstreamDepsInSchemaMap)(schemaMap, pluginName);
-    const result = await asyncReduce(nextStateMap, downstreamDeps, async (stateMap, dependentPluginName) => {
-        if (memo[`${pluginName}:${dependentPluginName}`]) {
-            return {
-                ...stateMap,
-                ...memo[`${pluginName}:${dependentPluginName}`],
-            };
-        }
-        const result = {
-            ...stateMap,
-            ...(await (0, exports.cascadePluginStateDeprecated)(datasource, schemaMap, stateMap, dependentPluginName, rootSchemaMap, memo)),
-        };
-        memo[`${pluginName}:${dependentPluginName}`] = result;
-        return result;
-    });
-    return result;
-};
-exports.cascadePluginStateDeprecated = cascadePluginStateDeprecated;
 const reIndexSchemaArrays = (kvs) => {
     const out = [];
     const listStack = [];
     let indexStack = [];
-    for (const { key, value } of kvs) {
+    for (const { key } of kvs) {
         const decodedPath = (0, exports.decodeSchemaPath)(key);
         const lastPart = decodedPath[decodedPath.length - 1];
         if (typeof lastPart == "object" && lastPart.key == "(id)") {
@@ -1947,12 +1858,109 @@ const reIndexSchemaArrays = (kvs) => {
     return out;
 };
 exports.reIndexSchemaArrays = reIndexSchemaArrays;
+const mutateStateMapWithMissingFileRefs = async (datasource, typestruct, state) => {
+    for (const prop in typestruct) {
+        if ((typestruct[prop]?.type == "set" || typestruct[prop]?.type == "array") &&
+            typeof typestruct[prop].values == "object") {
+            await Promise.all(state[prop]?.map?.(async (element) => {
+                await mutateStateMapWithMissingFileRefs(datasource, typestruct[prop].values, element);
+            }) ?? []);
+            continue;
+        }
+        if ((typestruct[prop]?.type == "set" || typestruct[prop]?.type == "array") &&
+            typestruct[prop].values == "file") {
+            const files = await Promise.all(state[prop]?.map?.(async (file) => {
+                if (file && await datasource.checkBinary(file)) {
+                    return file;
+                }
+                return null;
+            }) ?? []);
+            state[prop] = files.filter(v => v != null);
+            continue;
+        }
+        if (!typestruct[prop]?.type &&
+            typeof typestruct[prop] == "object") {
+            await mutateStateMapWithMissingFileRefs(datasource, typestruct[prop], state[prop]);
+            continue;
+        }
+        if (typestruct[prop]?.type == "file") {
+            const exists = !!state[prop] ? await datasource.checkBinary(state[prop]) : null;
+            if (!exists) {
+                state[prop] = null;
+            }
+            continue;
+        }
+    }
+};
+// WARNING: MUTATES!
+// this has to be really fast because it is run on
+// every update.
 const nullifyMissingFileRefs = async (datasource, schemaMap, stateMap) => {
     const rootSchemaMap = (await (0, exports.getRootSchemaMap)(datasource, schemaMap)) ?? {};
-    console.log("ROOT SCHEMA MAP", JSON.stringify(rootSchemaMap, null, 2));
-    console.log("STATE MAP", JSON.stringify(stateMap, null, 2));
+    const promises = [];
+    for (const pluginName in rootSchemaMap) {
+        const typestruct = rootSchemaMap[pluginName];
+        promises.push(mutateStateMapWithMissingFileRefs(datasource, typestruct, stateMap[pluginName]));
+    }
+    await Promise.all(promises);
+    return stateMap;
 };
 exports.nullifyMissingFileRefs = nullifyMissingFileRefs;
+const collectFileRefsInStateMap = (typestruct, state) => {
+    const refs = [];
+    for (const prop in typestruct) {
+        if ((typestruct[prop]?.type == "set" || typestruct[prop]?.type == "array") &&
+            typeof typestruct[prop].values == "object") {
+            const subRefs = state[prop]?.flatMap?.((element) => {
+                return collectFileRefsInStateMap(typestruct[prop].values, element);
+            }) ?? [];
+            refs.push(...subRefs);
+            continue;
+        }
+        if ((typestruct[prop]?.type == "set" || typestruct[prop]?.type == "array") &&
+            typestruct[prop].values == "file") {
+            const files = state[prop]?.filter?.((file) => {
+                if (file) {
+                    return true;
+                }
+                return false;
+            });
+            refs.push(...files);
+            continue;
+        }
+        if (!typestruct[prop]?.type &&
+            typeof typestruct[prop] == "object") {
+            const subRefs = collectFileRefsInStateMap(typestruct[prop], state[prop]);
+            refs.push(...subRefs);
+            continue;
+        }
+        if (typestruct[prop]?.type == "file") {
+            if (!!state[prop]) {
+                refs.push(state[prop]);
+            }
+            continue;
+        }
+    }
+    return refs;
+};
+const collectFileRefs = async (datasource, schemaMap, stateMap) => {
+    const rootSchemaMap = (await (0, exports.getRootSchemaMap)(datasource, schemaMap)) ?? {};
+    const fileRefs = [];
+    for (const pluginName in rootSchemaMap) {
+        const typestruct = rootSchemaMap[pluginName];
+        fileRefs.push(...collectFileRefsInStateMap(typestruct, stateMap[pluginName]));
+    }
+    const visited = new Set();
+    const out = [];
+    for (const file of fileRefs) {
+        if (!visited.has(file)) {
+            out.push(file);
+            visited.add(file);
+        }
+    }
+    return out.sort();
+};
+exports.collectFileRefs = collectFileRefs;
 const validatePluginState = async (datasource, schemaMap, stateMap, pluginName) => {
     const rootSchemaMap = (await (0, exports.getRootSchemaMap)(datasource, schemaMap)) ?? {};
     // ignore $(store)
@@ -2518,8 +2526,8 @@ const replaceRawRefsInExpandedType = (typeStruct, expandedTypes, rootSchemaMap) 
 };
 exports.replaceRawRefsInExpandedType = replaceRawRefsInExpandedType;
 const typestructsAreEquivalent = (typestructA, typestructB) => {
-    if (Object.keys(typestructA ?? {}).length !=
-        Object.keys(typestructB ?? {}).length) {
+    if (Object.keys(typestructA ?? {}).filter(v => v != '(id)').length !=
+        Object.keys(typestructB ?? {}).filter(v => v != '(id)').length) {
         return false;
     }
     for (const prop in typestructA) {
@@ -2545,7 +2553,8 @@ const buildPointerReturnTypeMap = (rootSchemaMap, expandedTypes, referenceKeys) 
         const staticPath = replaceRefVarsWithValues(key);
         const staticSchema = getStaticSchemaAtPath(rootSchemaMap[pluginName], staticPath);
         const types = Object.keys(expandedTypesWithRefs).filter((type) => {
-            return (0, exports.typestructsAreEquivalent)(expandedTypesWithRefs[type], staticSchema);
+            const areEquivalent = (0, exports.typestructsAreEquivalent)(expandedTypesWithRefs[type], staticSchema);
+            return areEquivalent;
         });
         out[key] = [staticPath, ...types];
     }
@@ -2581,12 +2590,114 @@ const buildPointerArgsMap = (referenceReturnTypeMap) => {
     return out;
 };
 exports.buildPointerArgsMap = buildPointerArgsMap;
+const getDiffablesList = (rootSchemaMap, pointerArgsMap, includePartialPaths = false) => {
+    let out = [];
+    for (let pluginName in rootSchemaMap) {
+        const result = (0, exports.getDiffablesListForTypestruct)(rootSchemaMap, pointerArgsMap, rootSchemaMap[pluginName], includePartialPaths, [pluginName]);
+        out.push(...result);
+    }
+    return out;
+};
+exports.getDiffablesList = getDiffablesList;
+const getDiffablesListForTypestruct = (rootSchemaMap, pointerArgsMap, typestruct, includePartialPaths, path = []) => {
+    let out = [];
+    for (const prop in typestruct) {
+        if ((typestruct[prop]?.type == "set" || typestruct[prop]?.type == "array") &&
+            typeof typestruct[prop]?.values == "object") {
+            if (includePartialPaths) {
+                out.push([...path, prop]);
+            }
+            if (typestruct[prop]?.type == "set") {
+                let keyProp;
+                for (const subProp in typestruct[prop]?.values) {
+                    if (typestruct[prop]?.values[subProp]?.isKey) {
+                        keyProp = subProp;
+                        break;
+                    }
+                }
+                if (typestruct[prop]?.values[keyProp].type == "ref") {
+                    const refType = typestruct[prop]?.values[keyProp].refType;
+                    const args = [];
+                    for (let key in pointerArgsMap) {
+                        if (pointerArgsMap[key].includes(refType)) {
+                            args.push((0, exports.replaceRefVarsWithWildcards)(key));
+                        }
+                    }
+                    out.push([
+                        ...path,
+                        prop,
+                        {
+                            type: "set-key",
+                            key: keyProp,
+                            args
+                        },
+                    ]);
+                    const subPaths = (0, exports.getDiffablesListForTypestruct)(rootSchemaMap, pointerArgsMap, typestruct[prop], includePartialPaths, [...path, prop, {
+                            type: "set-key",
+                            key: keyProp,
+                            args,
+                        }]);
+                    out.push(...subPaths);
+                    continue;
+                }
+                out.push([
+                    ...path,
+                    prop,
+                    {
+                        type: "set-key",
+                        key: keyProp,
+                        args: [typestruct[prop]?.values[keyProp].type]
+                    },
+                ]);
+                const subPaths = (0, exports.getDiffablesListForTypestruct)(rootSchemaMap, pointerArgsMap, typestruct[prop], includePartialPaths, [
+                    ...path,
+                    prop,
+                    {
+                        type: "set-key",
+                        key: keyProp,
+                        args: [typestruct[prop]?.values[keyProp].type]
+                    },
+                ]);
+                out.push(...subPaths);
+                continue;
+            }
+            if (typestruct[prop]?.type == "array") {
+                out.push([
+                    ...path,
+                    prop,
+                    {
+                        type: "array-index",
+                        args: ["number"],
+                    },
+                ]);
+                const subPaths = (0, exports.getDiffablesListForTypestruct)(rootSchemaMap, pointerArgsMap, typestruct[prop], includePartialPaths, [
+                    ...path,
+                    prop,
+                    {
+                        type: "array-index",
+                        args: ["number"],
+                    },
+                ]);
+                out.push(...subPaths);
+                continue;
+            }
+        }
+        if (!typestruct[prop]?.type && typeof typestruct[prop] == "object") {
+            const subPaths = (0, exports.getDiffablesListForTypestruct)(rootSchemaMap, pointerArgsMap, typestruct[prop], includePartialPaths, [...path, prop]);
+            out.push(...subPaths);
+            continue;
+        }
+    }
+    return out;
+};
+exports.getDiffablesListForTypestruct = getDiffablesListForTypestruct;
 const drawQueryTypes = (argMap) => {
     let code = "export type QueryTypes = {\n";
     for (const path in argMap) {
         const wildcard = (0, exports.replaceRefVarsWithWildcards)(path);
         const argStr = argMap[path].reduce((s, argPossibilities) => {
             if (argPossibilities[0] == "string" ||
+                argPossibilities[0] == "FileRef" ||
                 argPossibilities[0] == "boolean" ||
                 argPossibilities[0] == "number") {
                 return s.replace("<?>", `<$\{${argPossibilities[0]}}>`);
@@ -2629,6 +2740,7 @@ const drawMakeQueryRef = (argMap, useReact = false) => {
             const argType = possibleArgs
                 .map((possibleArg) => {
                 if (possibleArg == "string" ||
+                    possibleArg == "FileRef" ||
                     possibleArg == "boolean" ||
                     possibleArg == "number") {
                     return possibleArg;
@@ -2647,6 +2759,7 @@ const drawMakeQueryRef = (argMap, useReact = false) => {
         const argType = args
             .map((possibleArg) => {
             if (possibleArg == "string" ||
+                possibleArg == "FileRef" ||
                 possibleArg == "boolean" ||
                 possibleArg == "number") {
                 return possibleArg;
@@ -2662,6 +2775,7 @@ const drawMakeQueryRef = (argMap, useReact = false) => {
         const args = argMap[query];
         const returnType = args.reduce((s, argType, i) => {
             if (argType[0] == "string" ||
+                argType[0] == "FileRef" ||
                 argType[0] == "boolean" ||
                 argType[0] == "number") {
                 return s.replace("<?>", `<$\{arg${i} as ${argType[0]}}>`);
@@ -2685,6 +2799,7 @@ const drawMakeQueryRef = (argMap, useReact = false) => {
                 const argType = possibleArgs
                     .map((possibleArg) => {
                     if (possibleArg == "string" ||
+                        possibleArg == "FileRef" ||
                         possibleArg == "boolean" ||
                         possibleArg == "number") {
                         return possibleArg;
@@ -2703,6 +2818,7 @@ const drawMakeQueryRef = (argMap, useReact = false) => {
             const argsCasts = args
                 .map((argType, i) => {
                 if (argType[0] == "string" ||
+                    argType[0] == "FileRef" ||
                     argType[0] == "boolean" ||
                     argType[0] == "number") {
                     return `arg${i} as ${argType[0]}`;
@@ -2931,6 +3047,20 @@ export const replaceRefVarsWithWildcards = (pathString: string): string => {
     })
     .join(".");
 };
+
+export function containsDiffable(changeset: Set<string>, query: PartialDiffableQuery, fuzzy: true): boolean;
+export function containsDiffable(changeset: Set<string>, query: DiffableQuery, fuzzy: false): boolean;
+export function containsDiffable(changeset: Set<string>, query: PartialDiffableQuery|DiffableQuery, fuzzy: boolean) {
+  if (!fuzzy) {
+    return changeset.has(query);
+  }
+  for (let value of changeset) {
+    if (value.startsWith(query)) {
+      return true;
+    }
+  }
+  return false;
+}
 `;
 const drawGetReferencedObject = (argMap, useReact = false) => {
     const wildcards = Object.keys(argMap).map(exports.replaceRefVarsWithWildcards);
@@ -3005,4 +3135,44 @@ const drawGetPluginStore = (rootSchemaMap, useReact = false) => {
     return code;
 };
 exports.drawGetPluginStore = drawGetPluginStore;
+const drawDiffableQueryTypes = (diffables, includePartialPaths = false) => {
+    const diffableValue = diffables.map(diffable => {
+        return `\`${(0, exports.renderDiffable)(diffable)}\``;
+    }).join("|");
+    if (includePartialPaths) {
+        return `export type PartialDiffableQuery = ${diffableValue};`;
+    }
+    return `export type DiffableQuery = ${diffableValue};`;
+};
+exports.drawDiffableQueryTypes = drawDiffableQueryTypes;
+const renderDiffable = (diffable) => {
+    const [pluginName, ...res] = diffable;
+    const subTypes = res.map((element) => {
+        if (typeof element == "string") {
+            return element;
+        }
+        if (element.type == "array-index") {
+            return "[${number}]";
+        }
+        if (element.args[0] == "boolean") {
+            return `${element.key}<\${boolean}>`;
+        }
+        if (element.args[0] == "string") {
+            return `${element.key}<\${string}>`;
+        }
+        if (element.args[0] == "file") {
+            return `${element.key}<\${FileRef}>`;
+        }
+        if (element.args[0] == "int" ||
+            element.args[0] == "float") {
+            return `${element.key}<\${number}>`;
+        }
+        const refs = element.args.map(element => {
+            return `QueryTypes['${element}']`;
+        });
+        return `${element.key}<\${${refs.join("|")}}>`;
+    });
+    return [`$(${pluginName})`, ...subTypes].join(".");
+};
+exports.renderDiffable = renderDiffable;
 //# sourceMappingURL=plugins.js.map

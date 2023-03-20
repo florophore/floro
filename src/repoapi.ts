@@ -66,7 +66,7 @@ export const writeRepoDescription = async (
   if (!repoId) {
     return null;
   }
-  if (!description) {
+  if (typeof description != "string") {
     return null;
   }
   const exists = await datasource.repoExists(repoId);
@@ -728,8 +728,10 @@ export const updatePlugins = async (
     );
     const newManifests = await getPluginManifests(datasource, plugins);
 
+
     const oldManifestMap = getManifestMapFromManifestList(oldManifests);
     const newManifestMap = getManifestMapFromManifestList(newManifests);
+
     for (const removedManifest of removedPlugins) {
       const downstreamDeps = getDownstreamDepsInSchemaMap(
         oldManifestMap,

@@ -45,6 +45,8 @@ const repoapi_1 = require("./repoapi");
 const datasource_1 = require("./datasource");
 const connect_busboy_1 = __importDefault(require("connect-busboy"));
 const versioncontrol_1 = require("./versioncontrol");
+const licensecodes_1 = require("./licensecodes");
+const plugins_1 = require("./plugins");
 const remoteHost = (0, filestructure_1.getRemoteHostSync)();
 const app = (0, express_1.default)();
 const server = http_1.default.createServer(app);
@@ -112,10 +114,40 @@ app.get("/repos", (0, cors_1.default)(corsOptionsDelegate), async (_req, res) =>
         repos,
     });
 });
+app.get("/licenses", (0, cors_1.default)(corsOptionsDelegate), async (_req, res) => {
+    res.send(licensecodes_1.LicenseCodesList);
+});
 app.get("/repo/:repoId/exists", (0, cors_1.default)(corsOptionsDelegate), async (req, res) => {
     const repoId = req.params["repoId"];
     const exists = await datasource.repoExists(repoId);
     res.send({ exists });
+});
+app.get("/repo/:repoId/current", (0, cors_1.default)(corsOptionsDelegate), async (req, res) => {
+    const repoId = req.params["repoId"];
+    // will iterate on this
+    const [repoState, renderedState] = await Promise.all([
+        datasource.readCurrentRepoState(repoId),
+        (0, repo_1.getApplicationState)(datasource, repoId),
+    ]);
+    const applicationState = await (0, repo_1.convertRenderedCommitStateToKv)(datasource, renderedState);
+    const apiResponse = await (0, repo_1.renderApiReponse)(datasource, renderedState, applicationState, repoState);
+    if (!apiResponse) {
+        res.sendStatus(404);
+        return;
+    }
+    res.send(apiResponse);
+});
+app.post("/repo/:repoId/command", (0, cors_1.default)(corsOptionsDelegate), async (req, res) => {
+    const repoId = req.params["repoId"];
+    const repoState = await (0, repo_1.changeCommandMode)(datasource, repoId, req.body.commandMode);
+    const renderedState = await (0, repo_1.getApplicationState)(datasource, repoId);
+    const applicationState = await (0, repo_1.convertRenderedCommitStateToKv)(datasource, renderedState);
+    const apiResponse = await (0, repo_1.renderApiReponse)(datasource, renderedState, applicationState, repoState);
+    if (!apiResponse) {
+        res.sendStatus(404);
+        return;
+    }
+    res.send(apiResponse);
 });
 app.get("/repo/:repoId/branch", (0, cors_1.default)(corsOptionsDelegate), async (req, res) => {
     const repoId = req.params["repoId"];
@@ -190,30 +222,253 @@ app.get("/repo/:repoId/branches", (0, cors_1.default)(corsOptionsDelegate), asyn
 //);
 app.post("/repo/:repoId/description", (0, cors_1.default)(corsOptionsDelegate), async (req, res) => {
     const repoId = req.params["repoId"];
-    const description = await (0, repoapi_1.writeRepoDescription)(datasource, repoId, req.body?.["description"] ?? "");
-    if (!description) {
-        res.sendStatus(400);
+    const renderedState = await (0, repoapi_1.writeRepoDescription)(datasource, repoId, req.body?.["description"] ?? "");
+    const [repoState, applicationState] = await Promise.all([
+        datasource.readCurrentRepoState(repoId),
+        (0, repo_1.convertRenderedCommitStateToKv)(datasource, renderedState),
+    ]);
+    const apiResponse = await (0, repo_1.renderApiReponse)(datasource, renderedState, applicationState, repoState);
+    if (!apiResponse) {
+        res.sendStatus(404);
         return;
     }
-    res.send(description);
+    res.send(apiResponse);
 });
-app.get("/repo/:repoId/description", (0, cors_1.default)(corsOptionsDelegate), async (req, res) => {
-    const repoId = req.params["repoId"];
-    const description = await (0, repoapi_1.readRepoDescription)(datasource, repoId);
-    if (!description) {
-        res.sendStatus(400);
-        return;
-    }
-    res.send(description);
-});
+//app.get(
+//  "/repo/:repoId/description",
+//  cors(corsOptionsDelegate),
+//  async (req, res): Promise<void> => {
+//    const repoId = req.params["repoId"];
+//    const description = await readRepoDescription(datasource, repoId);
+//    if (!description) {
+//      res.sendStatus(400);
+//      return;
+//    }
+//    res.send(description);
+//  }
+//);
 app.post("/repo/:repoId/licenses", (0, cors_1.default)(corsOptionsDelegate), async (req, res) => {
     const repoId = req.params["repoId"];
-    const licenses = await (0, repoapi_1.writeRepoLicenses)(datasource, repoId, req.body?.["licenses"]);
-    if (!licenses) {
-        res.sendStatus(400);
+    const renderedState = await (0, repoapi_1.writeRepoLicenses)(datasource, repoId, req.body?.["licenses"] ?? []);
+    const [repoState, applicationState] = await Promise.all([
+        datasource.readCurrentRepoState(repoId),
+        (0, repo_1.convertRenderedCommitStateToKv)(datasource, renderedState),
+    ]);
+    const apiResponse = await (0, repo_1.renderApiReponse)(datasource, renderedState, applicationState, repoState);
+    if (!apiResponse) {
+        res.sendStatus(404);
         return;
     }
-    res.send(licenses);
+    res.send(apiResponse);
+});
+app.get("/repo/:repoId/plugin/:pluginName/:version/compatability", (0, cors_1.default)(corsOptionsDelegate), async (req, res) => {
+    const repoId = req.params["repoId"];
+    if (!repoId) {
+        res.sendStatus(404);
+        return null;
+    }
+    const pluginName = req.params?.["pluginName"];
+    const pluginVersion = req.params?.["version"];
+    const renderedState = await datasource.readRenderedState(repoId);
+    if (!renderedState) {
+        res.sendStatus(400);
+        return null;
+    }
+    if (!pluginName || !pluginVersion) {
+        res.sendStatus(400);
+        return null;
+    }
+    const manifest = await datasource.getPluginManifest(pluginName, pluginVersion, true);
+    if (!manifest) {
+        res.sendStatus(400);
+        return null;
+    }
+    const depFetch = await (0, plugins_1.getDependenciesForManifest)(datasource, manifest, true);
+    if (depFetch.status == "error") {
+        return null;
+    }
+    const fetchedDeps = depFetch.deps.filter(depManifest => {
+        return manifest.imports[depManifest.name] == depManifest.version;
+    });
+    const proposedSchemaMap = (0, plugins_1.manifestListToSchemaMap)([manifest, ...depFetch.deps]);
+    const currentManifests = await (0, plugins_1.getPluginManifests)(datasource, renderedState.plugins, true);
+    const currentSchemaMap = (0, plugins_1.manifestListToSchemaMap)(currentManifests);
+    const isCompatible = await (0, plugins_1.pluginManifestIsSubsetOfManifest)(datasource, currentSchemaMap, {
+        ...currentSchemaMap,
+        ...proposedSchemaMap
+    });
+    if (isCompatible) {
+        const dependencies = fetchedDeps.map(manifest => {
+            return {
+                pluginName: manifest.name,
+                pluginVersion: manifest.version,
+                isCompatible: true
+            };
+        });
+        res.send({
+            pluginName,
+            pluginVersion,
+            isCompatible,
+            dependencies
+        });
+        return;
+    }
+    const dependencies = [];
+    for (const depManifest of fetchedDeps) {
+        const depFetch = await (0, plugins_1.getDependenciesForManifest)(datasource, depManifest, true);
+        const proposedSchemaMap = (0, plugins_1.manifestListToSchemaMap)([depManifest, ...depFetch.deps]);
+        const isCompatible = await (0, plugins_1.pluginManifestIsSubsetOfManifest)(datasource, currentSchemaMap, {
+            ...currentSchemaMap,
+            ...proposedSchemaMap
+        });
+        dependencies.push({
+            pluginName: depManifest.name,
+            pluginVersion: depManifest.version,
+            isCompatible
+        });
+    }
+    res.send({
+        pluginName,
+        pluginVersion,
+        isCompatible,
+        dependencies
+    });
+});
+app.get("/repo/:repoId/plugin/:pluginName/:version/canuninstall", (0, cors_1.default)(corsOptionsDelegate), async (req, res) => {
+    const repoId = req.params["repoId"];
+    if (!repoId) {
+        res.sendStatus(404);
+        return null;
+    }
+    const pluginName = req.params?.["pluginName"];
+    const pluginVersion = req.params?.["version"];
+    const renderedState = await datasource.readRenderedState(repoId);
+    if (!renderedState) {
+        res.sendStatus(400);
+        return null;
+    }
+    if (!pluginName || !pluginVersion) {
+        res.sendStatus(400);
+        return null;
+    }
+    const currentManifests = await (0, plugins_1.getPluginManifests)(datasource, renderedState.plugins);
+    const currentSchemaMap = (0, plugins_1.manifestListToSchemaMap)(currentManifests);
+    const downstreamDeps = (0, plugins_1.getDownstreamDepsInSchemaMap)(currentSchemaMap, pluginName);
+    res.send({
+        canUninstall: downstreamDeps.length == 0,
+        downstreamDeps,
+        manifestList: currentManifests
+    });
+});
+app.post("/repo/:repoId/plugin/:pluginName/canupdate", (0, cors_1.default)(corsOptionsDelegate), async (req, res) => {
+    const repoId = req.params["repoId"];
+    if (!repoId) {
+        res.sendStatus(404);
+        return null;
+    }
+    const pluginName = req.params?.["pluginName"];
+    const versions = req.body?.["versions"];
+    if (!pluginName) {
+        res.sendStatus(400);
+        return null;
+    }
+    const renderedState = await datasource.readRenderedState(repoId);
+    if (!renderedState) {
+        res.sendStatus(400);
+        return null;
+    }
+    const currentManifests = await (0, plugins_1.getPluginManifests)(datasource, renderedState.plugins);
+    const currentSchemaMap = (0, plugins_1.manifestListToSchemaMap)(currentManifests);
+    for (let version of versions) {
+        const manifest = await datasource.getPluginManifest(pluginName, version, true);
+        if (!manifest) {
+            continue;
+        }
+        const depFetch = await (0, plugins_1.getDependenciesForManifest)(datasource, manifest, true);
+        if (depFetch.status == "error") {
+            continue;
+        }
+        const proposedSchemaMap = (0, plugins_1.manifestListToSchemaMap)([manifest, ...depFetch.deps]);
+        const isCompatible = await (0, plugins_1.pluginManifestIsSubsetOfManifest)(datasource, currentSchemaMap, {
+            ...currentSchemaMap,
+            ...proposedSchemaMap
+        });
+        if (isCompatible) {
+            res.send({
+                canUpdate: true
+            });
+            return;
+        }
+    }
+    res.send({
+        canUpdate: false
+    });
+});
+app.get("/repo/:repoId/manifestlist", (0, cors_1.default)(corsOptionsDelegate), async (req, res) => {
+    const repoId = req.params["repoId"];
+    if (!repoId) {
+        res.sendStatus(404);
+        return null;
+    }
+    const renderedState = await datasource.readRenderedState(repoId);
+    if (!renderedState) {
+        res.sendStatus(400);
+        return null;
+    }
+    const currentManifests = await (0, plugins_1.getPluginManifests)(datasource, renderedState.plugins);
+    for (let manifest of currentManifests) {
+        const upstreamDeps = await (0, plugins_1.getUpstreamDependencyManifests)(datasource, manifest);
+        for (const upstreamDep of upstreamDeps) {
+            const seen = !!currentManifests?.find((m) => m.name == upstreamDep.name && m.version == upstreamDep.version);
+            if (!seen) {
+                currentManifests.push(upstreamDep);
+            }
+        }
+    }
+    res.send(currentManifests);
+});
+app.get("/repo/:repoId/plugin/:pluginName/:version/manifestlist", (0, cors_1.default)(corsOptionsDelegate), async (req, res) => {
+    const repoId = req.params["repoId"];
+    if (!repoId) {
+        res.sendStatus(404);
+        return null;
+    }
+    const pluginName = req.params?.["pluginName"];
+    const pluginVersion = req.params?.["version"];
+    const renderedState = await datasource.readRenderedState(repoId);
+    if (!renderedState) {
+        res.sendStatus(400);
+        return null;
+    }
+    if (!pluginName || !pluginVersion) {
+        res.sendStatus(400);
+        return null;
+    }
+    const currentManifests = await (0, plugins_1.getPluginManifests)(datasource, renderedState.plugins);
+    const manifest = await datasource.getPluginManifest(pluginName, pluginVersion);
+    const upstreamDeps = await (0, plugins_1.getUpstreamDependencyManifests)(datasource, manifest);
+    const manifestList = currentManifests;
+    for (const upstreamDep of upstreamDeps) {
+        const seen = !!manifestList?.find((m) => m.name == upstreamDep.name && m.version == upstreamDep.version);
+        if (!seen) {
+            manifestList.push(upstreamDep);
+        }
+    }
+    res.send(manifestList);
+});
+app.post("/repo/:repoId/plugins", (0, cors_1.default)(corsOptionsDelegate), async (req, res) => {
+    const repoId = req.params["repoId"];
+    const renderedState = await (0, repoapi_1.updatePlugins)(datasource, repoId, req.body?.["plugins"] ?? []);
+    const [repoState, applicationState] = await Promise.all([
+        datasource.readCurrentRepoState(repoId),
+        (0, repo_1.convertRenderedCommitStateToKv)(datasource, renderedState),
+    ]);
+    const apiResponse = await (0, repo_1.renderApiReponse)(datasource, renderedState, applicationState, repoState);
+    if (!apiResponse) {
+        res.sendStatus(404);
+        return;
+    }
+    res.send(apiResponse);
 });
 app.get("/repo/:repoId/licenses", (0, cors_1.default)(corsOptionsDelegate), async (req, res) => {
     const repoId = req.params["repoId"];
@@ -546,11 +801,39 @@ for (let plugin in pluginsJSON.plugins) {
 app.get("/plugins/:pluginName/:pluginVersion*", async (req, res) => {
     const pluginName = req?.params?.['pluginName'];
     const pluginVersion = req?.params?.['pluginVersion'];
-    console.log("PN", pluginName);
-    console.log("V", pluginVersion);
-    console.log("path", req.path);
-    // finsish this
-    res.send({ ok: true });
+    if (!pluginVersion) {
+        res.sendStatus(404);
+        return;
+    }
+    const manifest = await datasource.getPluginManifest(pluginName, pluginVersion);
+    if (!manifest) {
+        res.sendStatus(404);
+        return;
+    }
+    const basePath = `/plugins/${pluginName}/${pluginVersion}`;
+    const pathRemainer = req.path.substring(basePath.length)?.split('?')[0];
+    if (!pathRemainer || pathRemainer == "/" || pathRemainer == "/write" || pathRemainer == "/write/") {
+        const filePath = path_1.default.join(filestructure_1.vPluginsPath, pluginName, pluginVersion, 'index.html');
+        const exists = await (0, filestructure_1.existsAsync)(filePath);
+        if (!exists) {
+            res.sendStatus(404);
+            return;
+        }
+        const indexHtml = await fs_1.default.promises.readFile(filePath);
+        res.type('html');
+        res.send(indexHtml.toString().replaceAll(basePath, basePath));
+        return;
+    }
+    const filePath = path_1.default.join(filestructure_1.vPluginsPath, pluginName, pluginVersion, ...pathRemainer.split("/"));
+    const exists = await (0, filestructure_1.existsAsync)(filePath);
+    if (!exists) {
+        res.sendStatus(404);
+        return;
+    }
+    const file = await fs_1.default.promises.readFile(filePath);
+    const contentType = mime_types_1.default.contentType(path_1.default.extname(filePath));
+    res.setHeader('content-type', contentType);
+    res.send(file.toString());
 });
 server.listen(port, host, () => console.log("floro server started on " + host + ":" + port));
 (0, cron_1.startSessionJob)();

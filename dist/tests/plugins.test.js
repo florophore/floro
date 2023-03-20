@@ -1058,13 +1058,13 @@ describe("plugins", () => {
                         },
                         nestedProp: {
                             nestedFile: {
-                                type: "file"
+                                type: "file",
                             },
                             nestedFiles: {
                                 type: "array",
-                                values: "file"
-                            }
-                        }
+                                values: "file",
+                            },
+                        },
                     },
                 },
                 store: {
@@ -1085,23 +1085,71 @@ describe("plugins", () => {
                             file: "A",
                             nestedProp: {
                                 nestedFile: "B",
-                                nestedFiles: ["A", "B", "A"]
-                            }
+                                nestedFiles: ["A", "B", "A"],
+                            },
                         },
                         {
                             name: 3,
                             file: "B",
                             nestedProp: {
                                 nestedFile: "B",
-                                nestedFiles: ["B", "A", "B", "B"]
-                            }
+                                nestedFiles: ["B", "A", "B", "B"],
+                            },
                         },
                     ],
                 },
             };
-            const a = await (0, plugins_1.nullifyMissingFileRefs)({
-                ...datasource
+            const beforeFiles = await (0, plugins_1.collectFileRefs)({
+                ...datasource,
+                checkBinary: async (binaryId) => {
+                    if (binaryId == "B") {
+                        return true;
+                    }
+                    return false;
+                },
             }, schemaMap, stateMap);
+            expect(beforeFiles).toEqual(['A', 'B']);
+            const result = await (0, plugins_1.nullifyMissingFileRefs)({
+                ...datasource,
+                checkBinary: async (binaryId) => {
+                    if (binaryId == "B") {
+                        return true;
+                    }
+                    return false;
+                },
+            }, schemaMap, stateMap);
+            const afterFiles = await (0, plugins_1.collectFileRefs)({
+                ...datasource,
+                checkBinary: async (binaryId) => {
+                    if (binaryId == "B") {
+                        return true;
+                    }
+                    return false;
+                },
+            }, schemaMap, stateMap);
+            expect(afterFiles).toEqual(['B']);
+            expect(result).toEqual({
+                "a-plugin": {
+                    aObjects: [
+                        {
+                            name: 1,
+                            file: null,
+                            nestedProp: {
+                                nestedFile: "B",
+                                nestedFiles: ["B"],
+                            },
+                        },
+                        {
+                            name: 3,
+                            file: "B",
+                            nestedProp: {
+                                nestedFile: "B",
+                                nestedFiles: ["B", "B", "B"],
+                            },
+                        },
+                    ],
+                },
+            });
         });
     });
     describe("cascading", () => {
@@ -1861,10 +1909,10 @@ describe("plugins", () => {
                             type: "array",
                             values: {
                                 someProp: {
-                                    type: "string"
-                                }
-                            }
-                        }
+                                    type: "string",
+                                },
+                            },
+                        },
                     },
                 },
                 store: {
@@ -1877,10 +1925,10 @@ describe("plugins", () => {
                         values: {
                             file: {
                                 type: "file",
-                                isKey: true
-                            }
-                        }
-                    }
+                                isKey: true,
+                            },
+                        },
+                    },
                 },
             };
             const schemaMap = {
@@ -1896,25 +1944,25 @@ describe("plugins", () => {
                             list: ["ok", "1"],
                             subList: [
                                 {
-                                    someProp: 1
+                                    someProp: 1,
                                 },
                                 {
-                                    someProp: "abc"
+                                    someProp: "abc",
                                 },
                                 {
-                                    someProp: 3
+                                    someProp: 3,
                                 },
-                            ]
+                            ],
                         },
                     ],
                     files: [
                         {
-                            file: "A"
+                            file: "A",
                         },
                         {
-                            file: "B"
+                            file: "B",
                         },
-                    ]
+                    ],
                 },
             };
             const kvs = await (0, plugins_1.getKVStateForPlugin)({
@@ -1923,13 +1971,14 @@ describe("plugins", () => {
                     return schemaMap[pluginName];
                 },
             }, schemaMap, A_PLUGIN_MANIFEST.name, invalidStateMap);
-            const invalidStates = await (0, plugins_1.getPluginInvalidStateIndices)({ ...datasource,
+            const invalidStates = await (0, plugins_1.getPluginInvalidStateIndices)({
+                ...datasource,
                 checkBinary: async (binaryId) => {
                     if (binaryId == "A") {
                         return true;
                     }
                     return false;
-                }
+                },
             }, schemaMap, kvs, A_PLUGIN_MANIFEST.name);
             expect(invalidStates).toEqual([2, 4, 6]);
         });

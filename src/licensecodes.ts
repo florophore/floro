@@ -1,4 +1,4 @@
-export const LicenseCodes = [
+export const LicenseCodesList = [
   {
     value: "apache_2",
     label: "Apache License 2.0",
@@ -51,4 +51,9 @@ export const LicenseCodes = [
     value: "unlicense",
     label: "The Unlicense",
   },
-].reduce((acc, {value, label}) => ({...acc, [value]: label}), {});
+];
+
+export const LicenseCodes = LicenseCodesList.reduce(
+  (acc, { value, label }) => ({ ...acc, [value]: label }),
+  {}
+);

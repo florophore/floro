@@ -93,7 +93,6 @@ const MAIN_BRANCH = `
 {
     "lastCommit": null,
     "id": "main",
-    "stashes": [],
     "createdBy": "3edbc450-7e78-40db-895e-5eed8de73fcf",
     "createdAt": "Wed Dec 21 2022 15:59:50 GMT-0500 (Eastern Standard Time)",
     "name": "main"

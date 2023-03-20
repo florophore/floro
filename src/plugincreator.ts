@@ -718,7 +718,6 @@ export const generateTypeScriptAPI = async (
     false
   )
   code += diffableQueryTypes + "\n\n";
-
   code += queryTypesCode + "\n\n";
 
   const schemaRootCode = drawSchemaRoot(rootSchemaMap, referenceReturnTypeMap);

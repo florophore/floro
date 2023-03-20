@@ -26,7 +26,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.makeMemoizedDataSource = exports.makeDataSource = exports.readRepos = exports.getPluginManifest = exports.downloadPlugin = exports.readDevPluginManifest = void 0;
+exports.makeMemoizedDataSource = exports.makeDataSource = exports.readRepos = exports.getPluginManifest = exports.downloadPlugin = exports.fetchRemoteManifest = exports.readDevPluginManifest = void 0;
 const path_1 = __importDefault(require("path"));
 const fs_1 = __importStar(require("fs"));
 const filestructure_1 = require("./filestructure");
@@ -128,6 +128,19 @@ const pullPluginTar = async (name, version, link, hash) => {
     }
     return null;
 };
+const fetchRemoteManifest = async (pluginName, pluginVersion) => {
+    const remote = await (0, filestructure_1.getRemoteHostAsync)();
+    const session = await (0, filestructure_1.getUserSessionAsync)();
+    //
+    //@Get("/api/plugin/:name/:version/manifest")
+    const request = await axios_1.default.get(`${remote}/api/plugin/${pluginName}/${pluginVersion}/manifest`, {
+        headers: {
+            ["session_key"]: session?.clientKey,
+        },
+    });
+    return request.data;
+};
+exports.fetchRemoteManifest = fetchRemoteManifest;
 const downloadPlugin = async (pluginName, pluginVersion) => {
     const remote = await (0, filestructure_1.getRemoteHostAsync)();
     const session = await (0, filestructure_1.getUserSessionAsync)();
@@ -158,7 +171,7 @@ const downloadPlugin = async (pluginName, pluginVersion) => {
     return null;
 };
 exports.downloadPlugin = downloadPlugin;
-const getPluginManifest = async (pluginName, pluginValue) => {
+const getPluginManifest = async (pluginName, pluginValue, disableDownloads = false) => {
     if (pluginValue.startsWith("dev")) {
         return await (0, exports.readDevPluginManifest)(pluginName, pluginValue);
     }
@@ -171,7 +184,10 @@ const getPluginManifest = async (pluginName, pluginValue) => {
         const manifestString = await fs_1.default.promises.readFile(pluginManifestPath);
         return JSON.parse(manifestString.toString());
     }
-    return await (0, exports.downloadPlugin)(pluginName, pluginValue);
+    if (!disableDownloads) {
+        return await (0, exports.downloadPlugin)(pluginName, pluginValue);
+    }
+    return await (0, exports.fetchRemoteManifest)(pluginName, pluginValue);
 };
 exports.getPluginManifest = getPluginManifest;
 const pluginManifestExists = async (pluginName, pluginVersion) => {
@@ -324,6 +340,51 @@ const readCommit = async (repoId, sha) => {
         const commitPath = path_1.default.join(commitDir, `${sha.substring(2)}.json`);
         const commitDataString = await fs_1.default.promises.readFile(commitPath);
         return JSON.parse(commitDataString.toString());
+    }
+    catch (e) {
+        return null;
+    }
+};
+const readCommits = async (repoId) => {
+    try {
+        const commitRoot = path_1.default.join(filestructure_1.vReposPath, repoId, "commits");
+        const commitDirs = await fs_1.default.promises.readdir(commitRoot);
+        const commitPromises = [];
+        for (let commitDir of commitDirs) {
+            const commitPromise = fs_1.default.promises
+                .readdir(path_1.default.join(commitRoot, commitDir))
+                .then(async (files) => {
+                const filePromises = [];
+                for (let file of files) {
+                    const filePath = path_1.default.join(commitRoot, commitDir, file);
+                    const filePromise = fs_1.default.promises
+                        .readFile(filePath, "utf8")
+                        .then((contents) => {
+                        return JSON.parse(contents.toString());
+                    });
+                    filePromises.push(filePromise);
+                }
+                const commitDatas = await Promise.all(filePromises);
+                return commitDatas;
+            });
+            commitPromises.push(commitPromise);
+        }
+        return (await Promise.all(commitPromises)).flatMap((commits) => {
+            return commits.map((commit) => {
+                return {
+                    sha: commit.sha,
+                    parent: commit.parent,
+                    historicalParent: commit.historicalParent,
+                    userId: commit.userId,
+                    authorUserId: commit.authorUserId,
+                    mergeBase: commit.mergeBase,
+                    idx: commit.idx,
+                    message: commit.message,
+                    timestamp: commit.timestamp,
+                    children: [],
+                };
+            });
+        });
     }
     catch (e) {
         return null;
@@ -489,6 +550,7 @@ const makeDataSource = (datasource = {}) => {
         saveBranch,
         saveCommit,
         readCommit,
+        readCommits,
         readCheckpoint,
         saveCheckpoint,
         readHotCheckpoint,
@@ -500,7 +562,7 @@ const makeDataSource = (datasource = {}) => {
         saveStash,
         readBranchesMetaState,
         saveBranchesMetaState,
-        checkBinary
+        checkBinary,
     };
     return {
         ...defaultDataSource,
@@ -742,7 +804,7 @@ const makeMemoizedDataSource = (dataSourceOverride = {}) => {
         saveRenderedState: _saveRenderedState,
         readBranchesMetaState: _readBranchesMetaState,
         saveBranchesMetaState: _saveBranchesMetaState,
-        checkBinary: _checkBinary
+        checkBinary: _checkBinary,
     };
     return {
         ...dataSource,

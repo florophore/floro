@@ -1,7 +1,24 @@
 import { DataSource } from "./datasource";
 import { User } from "./filestructure";
 import { PluginElement } from "./plugins";
-import { CommitData, Diff, TextDiff } from "./versioncontrol";
+import { CommitData, Diff, StringDiff } from "./versioncontrol";
+export interface RepoState {
+    branch: string | null;
+    commit: string | null;
+    isInMergeConflict: boolean;
+    merge: null | {
+        fromSha: string;
+        intoSha: string;
+        originSha: string;
+        direction: "yours" | "theirs";
+    };
+    commandMode: "view" | "edit" | "compare";
+    comparison: null | {
+        against: "last" | "branch" | "sha" | "merge";
+        branch: string | null;
+        commit: string | null;
+    };
+}
 export interface RepoSetting {
     mainBranch: string;
 }
@@ -22,10 +39,7 @@ export interface ApplicationKVState {
         value: string;
     }>;
     store: RawStore;
-    binaries: Array<{
-        key: string;
-        value: string;
-    }>;
+    binaries: Array<string>;
 }
 export interface RenderedApplicationState {
     description: Array<string>;
@@ -40,10 +54,7 @@ export interface RenderedApplicationState {
     store: {
         [key: string]: object;
     };
-    binaries: Array<{
-        key: string;
-        value: string;
-    }>;
+    binaries: Array<string>;
 }
 export interface TokenizedState {
     description: Array<string>;
@@ -59,21 +70,10 @@ export interface StoreStateDiff {
 }
 export interface StateDiff {
     plugins: Diff;
-    binaries: Diff;
+    binaries: StringDiff;
     store: StoreStateDiff;
     licenses: Diff;
-    description: TextDiff;
-}
-export interface RepoState {
-    branch: string | null;
-    commit: string | null;
-    isInMergeConflict: boolean;
-    merge: null | {
-        fromSha: string;
-        intoSha: string;
-        originSha: string;
-        direction: "yours" | "theirs";
-    };
+    description: StringDiff;
 }
 export interface Branch {
     id: string;
@@ -102,6 +102,36 @@ export interface CommitHistory {
 }
 export interface CheckpointMap {
     [sha: string]: ApplicationKVState;
+}
+export interface ApiDiff {
+    description: {
+        added: Array<number>;
+        removed: Array<number>;
+    };
+    licenses: {
+        added: Array<number>;
+        removed: Array<number>;
+    };
+    plugins: {
+        added: Array<number>;
+        removed: Array<number>;
+    };
+    store: {
+        [key: string]: {
+            added: Array<string>;
+            removed: Array<string>;
+        };
+    };
+}
+export interface ApiStoreInvalidity {
+    [key: string]: Array<string>;
+}
+export interface ApiReponse {
+    repoState: RepoState;
+    applicationState: RenderedApplicationState;
+    beforeState?: RenderedApplicationState;
+    apiDiff?: ApiDiff;
+    apiStoreInvalidity?: ApiStoreInvalidity;
 }
 export declare const EMPTY_COMMIT_STATE: ApplicationKVState;
 export declare const EMPTY_RENDERED_APPLICATION_STATE: RenderedApplicationState;
@@ -136,6 +166,7 @@ export declare const updateCurrentWithSHA: (datasource: DataSource, repoId: stri
 export declare const updateCurrentWithNewBranch: (datasource: DataSource, repoId: string, branchId: string) => Promise<RepoState | null>;
 export declare const updateCurrentBranch: (datasource: DataSource, repoId: string, branchId: string) => Promise<RepoState | null>;
 export declare const getPluginsToRunUpdatesOn: (pastPlugins: Array<PluginElement>, nextPlugins: Array<PluginElement>) => PluginElement[];
+export declare const changeCommandMode: (datasource: DataSource, repoId: string, commandMode: "view" | "edit" | "compare") => Promise<RepoState>;
 export declare const buildStateStore: (datasource: DataSource, appKvState: ApplicationKVState) => Promise<{
     [key: string]: object;
 }>;
@@ -164,6 +195,7 @@ export declare const uniqueKV: (kvList: Array<{
     key: string;
     value: string;
 }>;
+export declare const uniqueStrings: (strings: Array<string>) => Array<string>;
 export declare const getStateDiffFromCommitStates: (beforeKVState: ApplicationKVState, afterKVState: ApplicationKVState) => StateDiff;
 export declare const getMergeCommitStates: (datasource: DataSource, repoId: string, fromSha: string, intoSha: string) => Promise<{
     fromCommitState: ApplicationKVState;
@@ -173,3 +205,6 @@ export declare const getMergeCommitStates: (datasource: DataSource, repoId: stri
 export declare const canAutoMergeCommitStates: (datasource: DataSource, fromCommitState: ApplicationKVState, intoCommitState: ApplicationKVState, originCommitState: ApplicationKVState) => Promise<boolean>;
 export declare const getMergedCommitState: (datasource: DataSource, fromState: ApplicationKVState, intoState: ApplicationKVState, originCommit: ApplicationKVState, direction?: "yours" | "theirs") => Promise<ApplicationKVState>;
 export declare const canAutoMergeOnTopCurrentState: (datasource: DataSource, repoId: string, mergeSha: string) => Promise<boolean>;
+export declare const getApiDiff: (beforeState: ApplicationKVState, afterState: ApplicationKVState, stateDiff: StateDiff) => ApiDiff;
+export declare const getInvalidStates: (datasource: DataSource, appKvState: ApplicationKVState) => Promise<ApiStoreInvalidity>;
+export declare const renderApiReponse: (datasource: DataSource, renderedApplicationState: RenderedApplicationState, applicationKVState: ApplicationKVState, repoState: RepoState) => Promise<ApiReponse>;

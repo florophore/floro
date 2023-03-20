@@ -1,8 +1,9 @@
 import { Manifest } from "./plugins";
 import { ApplicationKVState, Branch, BranchesMetaState, RenderedApplicationState, RepoSetting, RepoState } from "./repo";
 import { CommitData } from "./versioncontrol";
+import { SourceCommitNode } from "./sourcegraph";
 export interface DataSource {
-    getPluginManifest?: (pluginName: string, pluginVersion: string) => Promise<Manifest>;
+    getPluginManifest?: (pluginName: string, pluginVersion: string, disableDownloads?: boolean) => Promise<Manifest>;
     pluginManifestExists?: (pluginName: string, pluginVersion: string) => Promise<boolean>;
     readRepos?(): Promise<Array<string>>;
     repoExists?(repoId?: string): Promise<boolean>;
@@ -16,6 +17,7 @@ export interface DataSource {
     saveCommit?: (repoId: string, sha: string, commitData: CommitData) => Promise<CommitData>;
     readCommit?: (repoId: string, sha: string) => Promise<CommitData>;
     readCheckpoint?(repoId: string, sha: string): Promise<ApplicationKVState>;
+    readCommits?: (repoId: string) => Promise<Array<SourceCommitNode>>;
     saveCheckpoint?(repoId: string, sha: string, commitState: ApplicationKVState): Promise<ApplicationKVState>;
     readHotCheckpoint?(repoId: string): Promise<[string, ApplicationKVState]>;
     saveHotCheckpoint?(repoId: string, sha: string, commitState: ApplicationKVState): Promise<[string, ApplicationKVState]>;
@@ -34,11 +36,12 @@ export interface DataSource {
  * this file.
  */
 export declare const readDevPluginManifest: (pluginName: string, pluginVersion: string) => Promise<Manifest | null>;
+export declare const fetchRemoteManifest: (pluginName: string, pluginVersion: string) => Promise<Manifest | null>;
 export declare const downloadPlugin: (pluginName: string, pluginVersion: string) => Promise<Manifest | null>;
-export declare const getPluginManifest: (pluginName: string, pluginValue: string) => Promise<Manifest>;
+export declare const getPluginManifest: (pluginName: string, pluginValue: string, disableDownloads?: boolean) => Promise<Manifest>;
 export declare const readRepos: () => Promise<string[]>;
 export declare const makeDataSource: (datasource?: DataSource) => {
-    getPluginManifest?: (pluginName: string, pluginVersion: string) => Promise<Manifest>;
+    getPluginManifest?: (pluginName: string, pluginVersion: string, disableDownloads?: boolean) => Promise<Manifest>;
     pluginManifestExists?: (pluginName: string, pluginVersion: string) => Promise<boolean>;
     readRepos?: () => Promise<Array<string>>;
     repoExists?: (repoId?: string) => Promise<boolean>;
@@ -52,6 +55,7 @@ export declare const makeDataSource: (datasource?: DataSource) => {
     saveCommit?: (repoId: string, sha: string, commitData: CommitData) => Promise<CommitData>;
     readCommit?: (repoId: string, sha: string) => Promise<CommitData>;
     readCheckpoint?: (repoId: string, sha: string) => Promise<ApplicationKVState>;
+    readCommits?: (repoId: string) => Promise<Array<SourceCommitNode>>;
     saveCheckpoint?: (repoId: string, sha: string, commitState: ApplicationKVState) => Promise<ApplicationKVState>;
     readHotCheckpoint?: (repoId: string) => Promise<[string, ApplicationKVState]>;
     saveHotCheckpoint?: (repoId: string, sha: string, commitState: ApplicationKVState) => Promise<[string, ApplicationKVState]>;
@@ -65,7 +69,7 @@ export declare const makeDataSource: (datasource?: DataSource) => {
     checkBinary?: (binaryId: string) => Promise<boolean>;
 };
 export declare const makeMemoizedDataSource: (dataSourceOverride?: DataSource) => {
-    getPluginManifest?: (pluginName: string, pluginVersion: string) => Promise<Manifest>;
+    getPluginManifest?: (pluginName: string, pluginVersion: string, disableDownloads?: boolean) => Promise<Manifest>;
     pluginManifestExists?: (pluginName: string, pluginVersion: string) => Promise<boolean>;
     readRepos?: () => Promise<Array<string>>;
     repoExists?: (repoId?: string) => Promise<boolean>;
@@ -79,6 +83,7 @@ export declare const makeMemoizedDataSource: (dataSourceOverride?: DataSource) =
     saveCommit?: (repoId: string, sha: string, commitData: CommitData) => Promise<CommitData>;
     readCommit?: (repoId: string, sha: string) => Promise<CommitData>;
     readCheckpoint?: (repoId: string, sha: string) => Promise<ApplicationKVState>;
+    readCommits?: (repoId: string) => Promise<Array<SourceCommitNode>>;
     saveCheckpoint?: (repoId: string, sha: string, commitState: ApplicationKVState) => Promise<ApplicationKVState>;
     readHotCheckpoint?: (repoId: string) => Promise<[string, ApplicationKVState]>;
     saveHotCheckpoint?: (repoId: string, sha: string, commitState: ApplicationKVState) => Promise<[string, ApplicationKVState]>;

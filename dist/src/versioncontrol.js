@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.canAutoMerge = exports.getMergeSequence = exports.applyDiff = exports.getTextDiff = exports.splitTextForDiff = exports.getDiff = exports.getLCS = exports.getDiffHash = exports.getRowHash = exports.getKVHash = exports.getKVHashes = exports.hashString = exports.hashBinary = void 0;
+exports.canAutoMerge = exports.getMergeSequence = exports.applyDiff = exports.getTextDiff = exports.getArrayStringDiff = exports.splitTextForDiff = exports.getDiff = exports.getLCS = exports.getDiffHash = exports.getRowHash = exports.getKVHash = exports.getKVHashes = exports.hashString = exports.hashBinary = void 0;
 const cryptojs_1 = require("cryptojs");
 const mdiff_1 = __importDefault(require("mdiff"));
 const fastHash = (str) => {
@@ -118,9 +118,7 @@ const splitTextForDiff = (str) => {
     return sentences;
 };
 exports.splitTextForDiff = splitTextForDiff;
-const getTextDiff = (before, after) => {
-    const past = (0, exports.splitTextForDiff)(before);
-    const present = (0, exports.splitTextForDiff)(after);
+const getArrayStringDiff = (past, present) => {
     const longestSequence = (0, exports.getLCS)(past, present);
     let diff = {
         add: {},
@@ -143,6 +141,12 @@ const getTextDiff = (before, after) => {
         }
     }
     return diff;
+};
+exports.getArrayStringDiff = getArrayStringDiff;
+const getTextDiff = (before, after) => {
+    const past = (0, exports.splitTextForDiff)(before);
+    const present = (0, exports.splitTextForDiff)(after);
+    return (0, exports.getArrayStringDiff)(past, present);
 };
 exports.getTextDiff = getTextDiff;
 const applyDiff = (diffset, state) => {

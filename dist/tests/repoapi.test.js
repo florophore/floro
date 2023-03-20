@@ -330,6 +330,111 @@ describe("repoapi", () => {
                 binaries: [],
             });
         });
+        test("saves files to binary list", async () => {
+            const PLUGIN_A_0_MANIFEST = {
+                name: "A",
+                version: "0.0.0",
+                displayName: "A",
+                icon: "",
+                imports: {},
+                types: {},
+                store: {
+                    aSet: {
+                        type: "set",
+                        values: {
+                            mainKey: {
+                                isKey: true,
+                                type: "string",
+                            },
+                            someProp: {
+                                type: "int",
+                            },
+                            someFile: {
+                                type: "file",
+                            },
+                        },
+                    },
+                },
+            };
+            (0, fsmocks_1.makeTestPlugin)(PLUGIN_A_0_MANIFEST);
+            const state = {
+                aSet: [
+                    {
+                        mainKey: "key1",
+                        someProp: 1,
+                        someFile: "Z",
+                    },
+                    {
+                        mainKey: "key2",
+                        someProp: 2,
+                        someFile: "B",
+                    },
+                    {
+                        mainKey: "key3",
+                        someProp: 3,
+                        someFile: "A",
+                    },
+                    {
+                        mainKey: "key4",
+                        someProp: 4,
+                        someFile: "A",
+                    },
+                ],
+            };
+            let plugins = [
+                {
+                    key: "A",
+                    value: "0.0.0",
+                },
+            ];
+            await (0, repoapi_1.updatePlugins)(datasource, "abc", plugins);
+            const result = await (0, repoapi_1.updatePluginState)({
+                ...datasource,
+                checkBinary: async (binaryId) => {
+                    if (binaryId == "B") {
+                        return false;
+                    }
+                    return true;
+                },
+            }, "abc", "A", state);
+            expect(result).toEqual({
+                description: [],
+                licenses: [],
+                plugins: [
+                    {
+                        key: "A",
+                        value: "0.0.0",
+                    },
+                ],
+                store: {
+                    A: {
+                        aSet: [
+                            {
+                                mainKey: "key1",
+                                someProp: 1,
+                                someFile: "Z",
+                            },
+                            {
+                                mainKey: "key2",
+                                someProp: 2,
+                                someFile: null,
+                            },
+                            {
+                                mainKey: "key3",
+                                someProp: 3,
+                                someFile: "A",
+                            },
+                            {
+                                mainKey: "key4",
+                                someProp: 4,
+                                someFile: "A",
+                            },
+                        ],
+                    },
+                },
+                binaries: ["A", "Z"],
+            });
+        });
     });
     describe("commits", () => {
         test("description can commit", async () => {

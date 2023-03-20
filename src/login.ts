@@ -18,7 +18,6 @@ export const promptEmail = async () => {
       console.log("Signed in to floro as: " + loggedInUser.username);
       console.log("Please logout first. You can logout via the cli by running \"floro logout\"");
       process.exit();
-      return;
     }
   }
   const { email: untrimmedEmail } = await inquirer.prompt({

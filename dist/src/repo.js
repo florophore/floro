@@ -26,7 +26,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.canAutoMergeOnTopCurrentState = exports.getMergedCommitState = exports.canAutoMergeCommitStates = exports.getMergeCommitStates = exports.getStateDiffFromCommitStates = exports.uniqueKV = exports.mergeTokenStores = exports.detokenizeStore = exports.tokenizeCommitState = exports.convertCommitStateToRenderedState = exports.convertRenderedStateStoreToKV = exports.convertStateStoreToKV = exports.buildStateStore = exports.getPluginsToRunUpdatesOn = exports.updateCurrentBranch = exports.updateCurrentWithNewBranch = exports.updateCurrentWithSHA = exports.updateCurrentCommitSHA = exports.convertRenderedCommitStateToKv = exports.getApplicationState = exports.getUnstagedCommitState = exports.getCurrentBranch = exports.applyStateDiffToCommitState = exports.getCommitState = exports.getDivergenceOriginSha = exports.getBaseDivergenceSha = exports.getHistory = exports.buildCommitData = exports.canCommit = exports.diffIsEmpty = exports.getCurrentCommitSha = exports.cloneRepo = exports.getRemovedDeps = exports.getAddedDeps = exports.getBranchIdFromName = exports.getRepos = exports.BRANCH_NAME_REGEX = exports.EMPTY_COMMIT_DIFF = exports.EMPTY_RENDERED_APPLICATION_STATE = exports.EMPTY_COMMIT_STATE = void 0;
+exports.renderApiReponse = exports.getInvalidStates = exports.getApiDiff = exports.canAutoMergeOnTopCurrentState = exports.getMergedCommitState = exports.canAutoMergeCommitStates = exports.getMergeCommitStates = exports.getStateDiffFromCommitStates = exports.uniqueStrings = exports.uniqueKV = exports.mergeTokenStores = exports.detokenizeStore = exports.tokenizeCommitState = exports.convertCommitStateToRenderedState = exports.convertRenderedStateStoreToKV = exports.convertStateStoreToKV = exports.buildStateStore = exports.changeCommandMode = exports.getPluginsToRunUpdatesOn = exports.updateCurrentBranch = exports.updateCurrentWithNewBranch = exports.updateCurrentWithSHA = exports.updateCurrentCommitSHA = exports.convertRenderedCommitStateToKv = exports.getApplicationState = exports.getUnstagedCommitState = exports.getCurrentBranch = exports.applyStateDiffToCommitState = exports.getCommitState = exports.getDivergenceOriginSha = exports.getBaseDivergenceSha = exports.getHistory = exports.buildCommitData = exports.canCommit = exports.diffIsEmpty = exports.getCurrentCommitSha = exports.cloneRepo = exports.getRemovedDeps = exports.getAddedDeps = exports.getBranchIdFromName = exports.getRepos = exports.BRANCH_NAME_REGEX = exports.EMPTY_COMMIT_DIFF = exports.EMPTY_RENDERED_APPLICATION_STATE = exports.EMPTY_COMMIT_STATE = void 0;
 const axios_1 = __importDefault(require("axios"));
 const fs_1 = __importStar(require("fs"));
 const path_1 = __importDefault(require("path"));
@@ -201,6 +201,9 @@ const canCommit = async (datasource, repoId, user, message, diff) => {
         // ensure safe
     }
     const currentState = await datasource.readCurrentRepoState(repoId);
+    if (currentState.commandMode != "view") {
+        return false;
+    }
     if (!currentState) {
         return false;
     }
@@ -500,6 +503,21 @@ const getPluginsToRunUpdatesOn = (pastPlugins, nextPlugins) => {
     });
 };
 exports.getPluginsToRunUpdatesOn = getPluginsToRunUpdatesOn;
+const changeCommandMode = async (datasource, repoId, commandMode) => {
+    try {
+        const currentRepoState = await datasource.readCurrentRepoState(repoId);
+        const nextRepoState = {
+            ...currentRepoState,
+            commandMode,
+        };
+        await datasource.saveCurrentRepoState(repoId, nextRepoState);
+        return nextRepoState;
+    }
+    catch (e) {
+        return null;
+    }
+};
+exports.changeCommandMode = changeCommandMode;
 const buildStateStore = async (datasource, appKvState) => {
     let out = {};
     const manifests = await (0, plugins_1.getPluginManifests)(datasource, appKvState.plugins);
@@ -560,7 +578,7 @@ const tokenizeCommitState = (appKVState) => {
         return [...acc, hash];
     }, []);
     const binaries = appKVState.binaries.reduce((acc, value) => {
-        const hash = (0, versioncontrol_1.getKVHash)(value);
+        const hash = (0, versioncontrol_1.hashString)(value);
         tokenStore[hash] = value;
         return [...acc, hash];
     }, []);
@@ -636,6 +654,18 @@ const uniqueKV = (kvList) => {
     return out;
 };
 exports.uniqueKV = uniqueKV;
+const uniqueStrings = (strings) => {
+    let out = [];
+    let seen = new Set();
+    for (let str of strings) {
+        if (!seen.has(str)) {
+            seen.add(str);
+            out.push(str);
+        }
+    }
+    return out.sort();
+};
+exports.uniqueStrings = uniqueStrings;
 const getStateDiffFromCommitStates = (beforeKVState, afterKVState) => {
     const stateDiff = {
         plugins: {
@@ -668,9 +698,9 @@ const getStateDiffFromCommitStates = (beforeKVState, afterKVState) => {
             }
             continue;
         }
-        if (prop == "description") {
-            const diff = (0, versioncontrol_1.getTextDiff)((beforeKVState?.[prop] ?? []).join(""), (afterKVState?.[prop] ?? [])?.join(""));
-            stateDiff.description = diff;
+        if (prop == "description" || prop == "binaries") {
+            const diff = (0, versioncontrol_1.getArrayStringDiff)((beforeKVState?.[prop] ?? []), (afterKVState?.[prop] ?? []));
+            stateDiff[prop] = diff;
             continue;
         }
         const diff = (0, versioncontrol_1.getDiff)(beforeKVState?.[prop] ?? [], afterKVState?.[prop] ?? []);
@@ -740,16 +770,15 @@ const getMergedCommitState = async (datasource, fromState, intoState, originComm
         };
         const mergeState = (0, exports.detokenizeStore)(tokenizedState, tokenStore);
         mergeState.plugins = (0, exports.uniqueKV)(mergeState.plugins);
-        mergeState.binaries = (0, exports.uniqueKV)(mergeState.binaries);
         mergeState.licenses = (0, exports.uniqueKV)(mergeState.licenses);
         let stateStore = await (0, exports.buildStateStore)(datasource, mergeState);
         const manifests = await (0, plugins_1.getPluginManifests)(datasource, mergeState.plugins);
-        const rootManifests = manifests.filter((m) => Object.keys(m.imports).length === 0);
-        for (const manifest of rootManifests) {
-            const schemaMap = await (0, plugins_1.getSchemaMapForManifest)(datasource, manifest);
-            stateStore = await (0, plugins_1.cascadePluginState)(datasource, schemaMap, stateStore);
-        }
+        const schemaMap = (0, plugins_1.manifestListToSchemaMap)(manifests);
+        stateStore = await (0, plugins_1.cascadePluginState)(datasource, schemaMap, stateStore);
+        stateStore = await (0, plugins_1.nullifyMissingFileRefs)(datasource, schemaMap, stateStore);
+        const binaries = await (0, plugins_1.collectFileRefs)(datasource, schemaMap, stateStore);
         mergeState.store = await (0, exports.convertStateStoreToKV)(datasource, mergeState, stateStore);
+        mergeState.binaries = (0, exports.uniqueStrings)(binaries);
         return mergeState;
     }
     catch (e) {
@@ -771,4 +800,97 @@ const canAutoMergeOnTopCurrentState = async (datasource, repoId, mergeSha) => {
     }
 };
 exports.canAutoMergeOnTopCurrentState = canAutoMergeOnTopCurrentState;
+const getApiDiff = (beforeState, afterState, stateDiff) => {
+    const description = {
+        added: Object.keys(stateDiff.description.add).map((v) => parseInt(v)),
+        removed: Object.keys(stateDiff.description.remove).map((v) => parseInt(v)),
+    };
+    const licenses = {
+        added: Object.keys(stateDiff.licenses.add).map((v) => parseInt(v)),
+        removed: Object.keys(stateDiff.licenses.remove).map((v) => parseInt(v)),
+    };
+    const plugins = {
+        added: Object.keys(stateDiff.plugins.add).map((v) => parseInt(v)),
+        removed: Object.keys(stateDiff.plugins.remove).map((v) => parseInt(v)),
+    };
+    let store = {};
+    for (const pluginName in (stateDiff?.store ?? {})) {
+        if (!beforeState?.store?.[pluginName]) {
+            // show only added state
+            const afterIndexedKvs = (0, plugins_1.reIndexSchemaArrays)(afterState?.store?.[pluginName] ?? []);
+            const added = Object.keys(stateDiff?.store?.[pluginName]?.add ?? {})
+                .map((v) => parseInt(v))
+                .map((i) => afterIndexedKvs[i]);
+            store[pluginName] = {
+                added,
+                removed: [],
+            };
+            continue;
+        }
+        if (!afterState?.store?.[pluginName]) {
+            // show only removed state
+            const beforeIndexedKvs = (0, plugins_1.reIndexSchemaArrays)(beforeState?.store?.[pluginName] ?? []);
+            const removed = Object.keys(stateDiff?.store?.[pluginName]?.remove ?? {})
+                .map((v) => parseInt(v))
+                .map((i) => beforeIndexedKvs[i]);
+            store[pluginName] = {
+                added: [],
+                removed,
+            };
+            continue;
+        }
+        const afterIndexedKvs = (0, plugins_1.reIndexSchemaArrays)(afterState?.store?.[pluginName] ?? []);
+        const added = Object.keys(stateDiff?.store?.[pluginName]?.add ?? {})
+            .map((v) => parseInt(v))
+            .map((i) => afterIndexedKvs[i]);
+        const beforeIndexedKvs = (0, plugins_1.reIndexSchemaArrays)(beforeState?.store?.[pluginName] ?? []);
+        const removed = Object.keys(stateDiff?.store?.[pluginName]?.remove ?? {})
+            .map((v) => parseInt(v))
+            .map((i) => beforeIndexedKvs[i]);
+        store[pluginName] = {
+            added,
+            removed,
+        };
+    }
+    return {
+        description,
+        licenses,
+        plugins,
+        store,
+    };
+};
+exports.getApiDiff = getApiDiff;
+const getInvalidStates = async (datasource, appKvState) => {
+    const manifests = await (0, plugins_1.getPluginManifests)(datasource, appKvState.plugins);
+    const schemaMap = (0, plugins_1.manifestListToSchemaMap)(manifests);
+    const store = {};
+    for (let pluginName in appKvState.store) {
+        const invalidStateIndices = await (0, plugins_1.getPluginInvalidStateIndices)(datasource, schemaMap, appKvState.store[pluginName], pluginName);
+        const indexedKvs = (0, plugins_1.reIndexSchemaArrays)(appKvState?.store?.[pluginName] ?? []);
+        store[pluginName] = invalidStateIndices.map(i => indexedKvs[i]);
+    }
+    return store;
+};
+exports.getInvalidStates = getInvalidStates;
+const renderApiReponse = async (datasource, renderedApplicationState, applicationKVState, repoState) => {
+    const apiStoreInvalidity = await (0, exports.getInvalidStates)(datasource, applicationKVState);
+    if (repoState.commandMode == "edit") {
+        return {
+            apiStoreInvalidity,
+            repoState,
+            applicationState: renderedApplicationState
+        };
+    }
+    if (repoState.commandMode == "view") {
+        return {
+            apiStoreInvalidity,
+            repoState,
+            applicationState: renderedApplicationState
+        };
+    }
+    if (repoState.commandMode == "compare") {
+    }
+    return null;
+};
+exports.renderApiReponse = renderApiReponse;
 //# sourceMappingURL=repo.js.map

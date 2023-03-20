@@ -810,7 +810,7 @@ describe("plugincreator", () => {
                     },
                     typeA: {
                         aKey: {
-                            type: "int",
+                            type: "file",
                             isKey: true,
                         },
                         something: {
@@ -824,6 +824,22 @@ describe("plugincreator", () => {
                                         type: "ref<typeA>",
                                         isKey: true,
                                         onDelete: "nullify",
+                                    },
+                                },
+                            },
+                            list: {
+                                type: "array",
+                                values: {
+                                    someProp: {
+                                        type: "string",
+                                    },
+                                    subList: {
+                                        type: "array",
+                                        values: {
+                                            subProp: {
+                                                type: "int",
+                                            },
+                                        },
                                     },
                                 },
                             },
