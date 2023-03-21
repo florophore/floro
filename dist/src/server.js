@@ -296,7 +296,7 @@ app.get("/repo/:repoId/plugin/:pluginName/:version/compatability", (0, cors_1.de
     const isCompatible = await (0, plugins_1.pluginManifestIsSubsetOfManifest)(datasource, currentSchemaMap, {
         ...currentSchemaMap,
         ...proposedSchemaMap
-    });
+    }, true);
     if (isCompatible) {
         const dependencies = fetchedDeps.map(manifest => {
             return {
@@ -320,7 +320,7 @@ app.get("/repo/:repoId/plugin/:pluginName/:version/compatability", (0, cors_1.de
         const isCompatible = await (0, plugins_1.pluginManifestIsSubsetOfManifest)(datasource, currentSchemaMap, {
             ...currentSchemaMap,
             ...proposedSchemaMap
-        });
+        }, true);
         dependencies.push({
             pluginName: depManifest.name,
             pluginVersion: depManifest.version,
@@ -360,6 +360,79 @@ app.get("/repo/:repoId/plugin/:pluginName/:version/canuninstall", (0, cors_1.def
         manifestList: currentManifests
     });
 });
+app.post("/repo/:repoId/developmentplugins", (0, cors_1.default)(corsOptionsDelegate), async (req, res) => {
+    const repoId = req.params["repoId"];
+    if (!repoId) {
+        res.sendStatus(404);
+        return null;
+    }
+    const renderedState = await datasource.readRenderedState(repoId);
+    if (!renderedState) {
+        res.sendStatus(400);
+        return null;
+    }
+    const repoPluginNames = req?.body?.["pluginNames"] ?? [];
+    if (repoPluginNames.length == 0) {
+        res.send({});
+        return;
+    }
+    const currentManifests = await (0, plugins_1.getPluginManifests)(datasource, renderedState.plugins);
+    const currentSchemaMap = (0, plugins_1.manifestListToSchemaMap)(currentManifests);
+    const repoPluginSet = new Set(repoPluginNames);
+    const developmentPlugins = await (0, datasource_1.readDevPlugins)();
+    const availableDevPlugins = developmentPlugins.filter((d) => repoPluginSet.has(d));
+    let out = {};
+    for (const availablePluginName of availableDevPlugins) {
+        const availableDevVersions = await (0, datasource_1.readDevPluginVersions)(availablePluginName);
+        if (availableDevPlugins.length > 0) {
+            out[availablePluginName] = {};
+        }
+        for (let pluginVersion of availableDevVersions) {
+            const devManifest = await (0, datasource_1.readDevPluginManifest)(availablePluginName, `dev@${pluginVersion}`);
+            devManifest.version = `dev@${pluginVersion}`;
+            const depFetch = await (0, plugins_1.getDependenciesForManifest)(datasource, devManifest);
+            if (depFetch.status == "error") {
+                continue;
+            }
+            const proposedSchemaMap = (0, plugins_1.manifestListToSchemaMap)([devManifest, ...depFetch.deps]);
+            const isCompatible = await (0, plugins_1.pluginManifestIsSubsetOfManifest)(datasource, currentSchemaMap, {
+                ...currentSchemaMap,
+                ...proposedSchemaMap
+            });
+            out[availablePluginName][devManifest.version] = {
+                manifest: devManifest,
+                isCompatible
+            };
+        }
+    }
+    const pluginsJSON = await (0, filestructure_1.getPluginsJsonAsync)();
+    for (let pluginName in pluginsJSON ? pluginsJSON?.plugins ?? {} : {}) {
+        if (!repoPluginSet.has(pluginName)) {
+            continue;
+        }
+        const devManifest = await (0, datasource_1.readDevPluginManifest)(pluginName, "dev");
+        if (devManifest) {
+            devManifest.version = "dev";
+            if (!out[pluginName]) {
+                out[pluginName] = {};
+            }
+            const depFetch = await (0, plugins_1.getDependenciesForManifest)(datasource, devManifest, true);
+            if (depFetch.status == "error") {
+                continue;
+            }
+            const proposedSchemaMap = (0, plugins_1.manifestListToSchemaMap)([devManifest, ...depFetch.deps]);
+            const isCompatible = await (0, plugins_1.pluginManifestIsSubsetOfManifest)(datasource, currentSchemaMap, {
+                ...currentSchemaMap,
+                ...proposedSchemaMap
+            }, true);
+            out[pluginName]["dev"] = {
+                manifest: devManifest,
+                isCompatible
+            };
+        }
+    }
+    res.send(out);
+});
 app.post("/repo/:repoId/plugin/:pluginName/canupdate", (0, cors_1.default)(corsOptionsDelegate), async (req, res) => {
     const repoId = req.params["repoId"];
     if (!repoId) {
@@ -392,7 +465,7 @@ app.post("/repo/:repoId/plugin/:pluginName/canupdate", (0, cors_1.default)(corsO
         const isCompatible = await (0, plugins_1.pluginManifestIsSubsetOfManifest)(datasource, currentSchemaMap, {
             ...currentSchemaMap,
             ...proposedSchemaMap
-        });
+        }, true);
         if (isCompatible) {
             res.send({
                 canUpdate: true
@@ -417,7 +490,7 @@ app.get("/repo/:repoId/manifestlist", (0, cors_1.default)(corsOptionsDelegate), 
     }
     const currentManifests = await (0, plugins_1.getPluginManifests)(datasource, renderedState.plugins);
     for (let manifest of currentManifests) {
-        const upstreamDeps = await (0, plugins_1.getUpstreamDependencyManifests)(datasource, manifest);
+        const upstreamDeps = await (0, plugins_1.getUpstreamDependencyManifests)(datasource, manifest, true);
         for (const upstreamDep of upstreamDeps) {
             const seen = !!currentManifests?.find((m) => m.name == upstreamDep.name && m.version == upstreamDep.version);
             if (!seen) {
@@ -445,8 +518,8 @@ app.get("/repo/:repoId/plugin/:pluginName/:version/manifestlist", (0, cors_1.def
         return null;
     }
     const currentManifests = await (0, plugins_1.getPluginManifests)(datasource, renderedState.plugins);
-    const manifest = await datasource.getPluginManifest(pluginName, pluginVersion);
-    const upstreamDeps = await (0, plugins_1.getUpstreamDependencyManifests)(datasource, manifest);
+    const manifest = await datasource.getPluginManifest(pluginName, pluginVersion, true);
+    const upstreamDeps = await (0, plugins_1.getUpstreamDependencyManifests)(datasource, manifest, true);
     const manifestList = currentManifests;
     for (const upstreamDep of upstreamDeps) {
         const seen = !!manifestList?.find((m) => m.name == upstreamDep.name && m.version == upstreamDep.version);

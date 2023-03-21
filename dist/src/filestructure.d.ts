@@ -1,3 +1,4 @@
+import { Manifest } from "./plugins";
 export declare const userHome: string;
 export declare const homePath: string;
 export declare const vConfigPath: string;
@@ -11,6 +12,7 @@ export declare const vBinariesPath: string;
 export declare const vConfigCORSPath: string;
 export declare const vConfigRemotePath: string;
 export declare const vConfigPluginsPath: string;
+export declare const vDevManifestCachePath: string;
 export declare const userSessionPath: string;
 export declare const userPath: string;
 export declare const buildFloroFilestructure: () => void;
@@ -55,3 +57,9 @@ export declare const writePluginsJsonAsync: (plugins: {
 }) => Promise<void>;
 export declare const getRemoteHostSync: () => string;
 export declare const getRemoteHostAsync: () => Promise<string>;
+export declare const writeToDevManifestCache: (pluginName: string, manifest: Manifest) => Promise<{
+    [key: string]: Manifest;
+}>;
+export declare const getDevManifestCache: () => Promise<{
+    [key: string]: Manifest;
+}>;

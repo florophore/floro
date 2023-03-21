@@ -1,6 +1,7 @@
 import path from "path";
 import os from 'os';
 import fs from 'fs';
+import { Manifest } from "./plugins";
 
 // DIRECTORIES
 // ~/
@@ -32,6 +33,9 @@ export const vConfigCORSPath = path.join(vConfigPath, "cors.txt");
 export const vConfigRemotePath = path.join(vConfigPath, "remote.txt");
 // ~/.floro/config/plugins.json
 export const vConfigPluginsPath = path.join(vConfigPath, "plugins.json");
+
+// ~/.floro/config/dev_manifest_cache.json
+export const vDevManifestCachePath = path.join(vCachePath, "dev_manifest_cache.json");
 // USER
 // ~/.floro/user/session.json
 export const userSessionPath = path.join(vUserPath, "session.json");
@@ -65,6 +69,12 @@ const writeDefaultFiles = (isReset = false) => {
   // ~/.floro/config/plugins.json
   if (isReset || !fs.existsSync(vConfigPluginsPath)) {
     fs.writeFileSync(vConfigPluginsPath, JSON.stringify({ plugins: {}}, null, 2));
+  }
+
+  // FILES
+  // ~/.floro/config/plugins.json
+  if (isReset || !fs.existsSync(vDevManifestCachePath)) {
+    fs.writeFileSync(vDevManifestCachePath, JSON.stringify({}, null, 2));
   }
 }
 
@@ -287,5 +297,38 @@ export const getRemoteHostAsync = async (): Promise<string> => {
   } catch(e) {
     return 'https://floro.io';
   }
-
 }
+
+export const writeToDevManifestCache = async (
+  pluginName: string,
+  manifest: Manifest
+): Promise<{ [key: string]: Manifest }> => {
+  try {
+    const manifestCacheString = await fs.promises.readFile(
+      vDevManifestCachePath,
+      { encoding: "utf-8" }
+    );
+    const cache = JSON.parse(manifestCacheString.toString());
+    cache[pluginName] = manifest;
+    await fs.promises.writeFile(
+      vDevManifestCachePath,
+      JSON.stringify(cache, null, 2)
+    );
+    return cache;
+  } catch (e) {
+    return {};
+  }
+};
+
+export const getDevManifestCache = async (): Promise<{
+  [key: string]: Manifest;
+}> => {
+  try {
+    const manifestCache = await fs.promises.readFile(
+      vDevManifestCachePath
+    );
+    return JSON.parse(manifestCache.toString());
+  } catch (e) {
+    return null;
+  }
+};

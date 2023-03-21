@@ -26,16 +26,38 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.makeMemoizedDataSource = exports.makeDataSource = exports.readRepos = exports.getPluginManifest = exports.downloadPlugin = exports.fetchRemoteManifest = exports.readDevPluginManifest = void 0;
+exports.makeMemoizedDataSource = exports.makeDataSource = exports.readRepos = exports.getPluginManifest = exports.downloadPlugin = exports.fetchRemoteManifest = exports.readDevPluginManifest = exports.readDevPluginVersions = exports.readDevPlugins = void 0;
 const path_1 = __importDefault(require("path"));
 const fs_1 = __importStar(require("fs"));
 const filestructure_1 = require("./filestructure");
+const plugins_1 = require("./plugins");
 const axios_1 = __importDefault(require("axios"));
 const multiplexer_1 = require("./multiplexer");
 const tar_1 = __importDefault(require("tar"));
 axios_1.default.defaults.validateStatus = function () {
     return true;
 };
+const readDevPlugins = async () => {
+    try {
+        const pluginNames = await fs_1.default.promises.readdir(filestructure_1.vDEVPath);
+        return pluginNames ?? [];
+    }
+    catch (e) {
+        return [];
+    }
+};
+exports.readDevPlugins = readDevPlugins;
+const readDevPluginVersions = async (pluginName) => {
+    try {
+        const pluginPath = path_1.default.join(filestructure_1.vDEVPath, pluginName);
+        const pluginVersions = await fs_1.default.promises.readdir(pluginPath);
+        return pluginVersions ?? [];
+    }
+    catch (e) {
+        return [];
+    }
+};
+exports.readDevPluginVersions = readDevPluginVersions;
 /* PLUGINS */
 /**
  * We need to export readDevPluginManifest for the daemon server
@@ -52,16 +74,39 @@ const readDevPluginManifest = async (pluginName, pluginVersion) => {
         try {
             const uri = `http://127.0.0.1:63403/plugins/${pluginName}/dev/floro/floro.manifest.json`;
             const res = await axios_1.default.get(uri);
-            return res.data;
+            if (res.status >= 200 && res.status < 400) {
+                try {
+                    const isValid = await (0, plugins_1.validatePluginManifest)((0, exports.makeDataSource)(), res.data);
+                    if (isValid && isValid?.status == "ok") {
+                        res.data.version = "dev";
+                        await (0, filestructure_1.writeToDevManifestCache)(pluginName, res?.data);
+                        return res.data;
+                    }
+                }
+                catch (e) {
+                    return null;
+                }
+            }
+            const cachedManifests = await (0, filestructure_1.getDevManifestCache)();
+            if (cachedManifests && cachedManifests[pluginName]) {
+                return cachedManifests?.[pluginName] ?? null;
+            }
+            return null;
         }
         catch (e) {
+            const cachedManifests = await (0, filestructure_1.getDevManifestCache)();
+            if (cachedManifests && cachedManifests[pluginName]) {
+                return cachedManifests?.[pluginName] ?? null;
+            }
             return null;
         }
     }
     try {
         const pluginManifestPath = path_1.default.join(filestructure_1.vDEVPath, pluginName, pluginVersion.split("@")?.[1] ?? "none", "floro", "floro.manifest.json");
         const manifestString = await fs_1.default.promises.readFile(pluginManifestPath);
-        return JSON.parse(manifestString.toString());
+        const manifest = JSON.parse(manifestString.toString());
+        manifest.version = pluginVersion;
+        return manifest;
     }
     catch (e) {
         return null;
@@ -131,8 +176,6 @@ const pullPluginTar = async (name, version, link, hash) => {
 const fetchRemoteManifest = async (pluginName, pluginVersion) => {
     const remote = await (0, filestructure_1.getRemoteHostAsync)();
     const session = await (0, filestructure_1.getUserSessionAsync)();
-    //
-    //@Get("/api/plugin/:name/:version/manifest")
     const request = await axios_1.default.get(`${remote}/api/plugin/${pluginName}/${pluginVersion}/manifest`, {
         headers: {
             ["session_key"]: session?.clientKey,
@@ -597,12 +640,12 @@ const makeMemoizedDataSource = (dataSourceOverride = {}) => {
         return result;
     };
     const manifestMemo = {};
-    const _getPluginManifest = async (pluginName, pluginVersion) => {
+    const _getPluginManifest = async (pluginName, pluginVersion, disableDownloads = false) => {
         const memoString = pluginName + "-" + pluginVersion;
-        if (manifestMemo[memoString] && !pluginVersion.startsWith("dev")) {
+        if (manifestMemo[memoString] && !pluginVersion.startsWith("dev") && disableDownloads) {
             return manifestMemo[memoString];
         }
-        const result = await dataSource.getPluginManifest(pluginName, pluginVersion);
+        const result = await dataSource.getPluginManifest(pluginName, pluginVersion, disableDownloads);
         if (result) {
             manifestMemo[memoString] = result;
         }

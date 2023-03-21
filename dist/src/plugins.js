@@ -154,7 +154,7 @@ const getDependenciesForManifest = async (datasource, manifest, disableDownloads
             };
         }
         try {
-            const pluginManifest = await datasource.getPluginManifest(pluginName, manifest.imports[pluginName]);
+            const pluginManifest = await datasource.getPluginManifest(pluginName, manifest.imports[pluginName], disableDownloads);
             if (!pluginManifest) {
                 return {
                     status: "error",
@@ -183,17 +183,17 @@ const getDependenciesForManifest = async (datasource, manifest, disableDownloads
     };
 };
 exports.getDependenciesForManifest = getDependenciesForManifest;
-const getUpstreamDependencyManifests = async (datasource, manifest, memo = {}) => {
+const getUpstreamDependencyManifests = async (datasource, manifest, disableDownloads = false, memo = {}) => {
     if (memo[manifest.name + "-" + manifest.version]) {
         return memo[manifest.name + "-" + manifest.version];
     }
     const deps = [manifest];
     for (const dependentPluginName in manifest.imports) {
-        const dependentManifest = await datasource.getPluginManifest(dependentPluginName, manifest.imports[dependentPluginName]);
+        const dependentManifest = await datasource.getPluginManifest(dependentPluginName, manifest.imports[dependentPluginName], disableDownloads);
         if (!dependentManifest) {
             return null;
         }
-        const subDeps = await (0, exports.getUpstreamDependencyManifests)(datasource, dependentManifest, memo);
+        const subDeps = await (0, exports.getUpstreamDependencyManifests)(datasource, dependentManifest, disableDownloads, memo);
         if (subDeps == null) {
             return null;
         }
@@ -212,10 +212,21 @@ const coalesceDependencyVersions = (deps) => {
         return deps.reduce((acc, manifest) => {
             if (acc[manifest.name]) {
                 const semList = [manifest.version, ...acc[manifest.name]].sort((a, b) => {
-                    if (semver_1.default.eq(a, b)) {
+                    if (a == "dev" && b == "dev") {
                         return 0;
                     }
-                    return semver_1.default.gt(a, b) ? 1 : -1;
+                    if (a == "dev") {
+                        return 1;
+                    }
+                    if (b == "dev") {
+                        return -1;
+                    }
+                    const aVer = a.startsWith("dev") ? a.split("@")[1] : a;
+                    const bVer = b.startsWith("dev") ? b.split("@")[1] : b;
+                    if (semver_1.default.eq(aVer, bVer)) {
+                        return 0;
+                    }
+                    return semver_1.default.gt(aVer, bVer) ? 1 : -1;
                 });
                 return {
                     ...acc,
@@ -1407,12 +1418,12 @@ const getRootSchemaForPlugin = (schemaMap, pluginName) => {
     }, schemaWithStores, pluginName);
 };
 exports.getRootSchemaForPlugin = getRootSchemaForPlugin;
-const getRootSchemaMap = async (datasource, schemaMap) => {
+const getRootSchemaMap = async (datasource, schemaMap, disableDownloads = false) => {
     // need to top sort
     const rootSchemaMap = {};
     for (const pluginName in schemaMap) {
         const manifest = schemaMap[pluginName];
-        const upsteamDeps = await (0, exports.getUpstreamDependencyManifests)(datasource, manifest);
+        const upsteamDeps = await (0, exports.getUpstreamDependencyManifests)(datasource, manifest, disableDownloads);
         const subSchemaMap = (0, exports.manifestListToSchemaMap)(upsteamDeps);
         rootSchemaMap[pluginName] = (0, exports.getRootSchemaForPlugin)(subSchemaMap, pluginName);
     }
@@ -2057,9 +2068,9 @@ const objectIsSubsetOfObject = (current, next) => {
         return objectIsSubsetOfObject(c, n);
     }, true);
 };
-const pluginManifestIsSubsetOfManifest = async (datasource, currentSchemaMap, nextSchemaMap) => {
-    const oldRootSchema = await (0, exports.getRootSchemaMap)(datasource, currentSchemaMap);
-    const nextRootSchema = await (0, exports.getRootSchemaMap)(datasource, nextSchemaMap);
+const pluginManifestIsSubsetOfManifest = async (datasource, currentSchemaMap, nextSchemaMap, disableDownloads = false) => {
+    const oldRootSchema = await (0, exports.getRootSchemaMap)(datasource, currentSchemaMap, disableDownloads);
+    const nextRootSchema = await (0, exports.getRootSchemaMap)(datasource, nextSchemaMap, disableDownloads);
     if (!oldRootSchema) {
         return false;
     }

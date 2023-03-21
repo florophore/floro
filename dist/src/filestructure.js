@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getRemoteHostAsync = exports.getRemoteHostSync = exports.writePluginsJsonAsync = exports.getPluginsJsonAsync = exports.getPluginsJson = exports.copyDirectory = exports.existsAsync = exports.getUserAsync = exports.getUser = exports.removeUser = exports.writeUser = exports.getUserSessionAsync = exports.getUserSession = exports.removeUserSession = exports.writeUserSession = exports.reset = exports.clean = exports.buildFloroFilestructure = exports.userPath = exports.userSessionPath = exports.vConfigPluginsPath = exports.vConfigRemotePath = exports.vConfigCORSPath = exports.vBinariesPath = exports.vDEVPath = exports.vTMPPath = exports.vPluginsPath = exports.vReposPath = exports.vUserPath = exports.vCachePath = exports.vConfigPath = exports.homePath = exports.userHome = void 0;
+exports.getDevManifestCache = exports.writeToDevManifestCache = exports.getRemoteHostAsync = exports.getRemoteHostSync = exports.writePluginsJsonAsync = exports.getPluginsJsonAsync = exports.getPluginsJson = exports.copyDirectory = exports.existsAsync = exports.getUserAsync = exports.getUser = exports.removeUser = exports.writeUser = exports.getUserSessionAsync = exports.getUserSession = exports.removeUserSession = exports.writeUserSession = exports.reset = exports.clean = exports.buildFloroFilestructure = exports.userPath = exports.userSessionPath = exports.vDevManifestCachePath = exports.vConfigPluginsPath = exports.vConfigRemotePath = exports.vConfigCORSPath = exports.vBinariesPath = exports.vDEVPath = exports.vTMPPath = exports.vPluginsPath = exports.vReposPath = exports.vUserPath = exports.vCachePath = exports.vConfigPath = exports.homePath = exports.userHome = void 0;
 const path_1 = __importDefault(require("path"));
 const os_1 = __importDefault(require("os"));
 const fs_1 = __importDefault(require("fs"));
@@ -36,6 +36,8 @@ exports.vConfigCORSPath = path_1.default.join(exports.vConfigPath, "cors.txt");
 exports.vConfigRemotePath = path_1.default.join(exports.vConfigPath, "remote.txt");
 // ~/.floro/config/plugins.json
 exports.vConfigPluginsPath = path_1.default.join(exports.vConfigPath, "plugins.json");
+// ~/.floro/config/dev_manifest_cache.json
+exports.vDevManifestCachePath = path_1.default.join(exports.vCachePath, "dev_manifest_cache.json");
 // USER
 // ~/.floro/user/session.json
 exports.userSessionPath = path_1.default.join(exports.vUserPath, "session.json");
@@ -65,6 +67,11 @@ const writeDefaultFiles = (isReset = false) => {
     // ~/.floro/config/plugins.json
     if (isReset || !fs_1.default.existsSync(exports.vConfigPluginsPath)) {
         fs_1.default.writeFileSync(exports.vConfigPluginsPath, JSON.stringify({ plugins: {} }, null, 2));
+    }
+    // FILES
+    // ~/.floro/config/plugins.json
+    if (isReset || !fs_1.default.existsSync(exports.vDevManifestCachePath)) {
+        fs_1.default.writeFileSync(exports.vDevManifestCachePath, JSON.stringify({}, null, 2));
     }
 };
 const buildFloroFilestructure = () => {
@@ -278,4 +285,27 @@ const getRemoteHostAsync = async () => {
     }
 };
 exports.getRemoteHostAsync = getRemoteHostAsync;
+const writeToDevManifestCache = async (pluginName, manifest) => {
+    try {
+        const manifestCacheString = await fs_1.default.promises.readFile(exports.vDevManifestCachePath, { encoding: "utf-8" });
+        const cache = JSON.parse(manifestCacheString.toString());
+        cache[pluginName] = manifest;
+        await fs_1.default.promises.writeFile(exports.vDevManifestCachePath, JSON.stringify(cache, null, 2));
+        return cache;
+    }
+    catch (e) {
+        return {};
+    }
+};
+exports.writeToDevManifestCache = writeToDevManifestCache;
+const getDevManifestCache = async () => {
+    try {
+        const manifestCache = await fs_1.default.promises.readFile(exports.vDevManifestCachePath);
+        return JSON.parse(manifestCache.toString());
+    }
+    catch (e) {
+        return null;
+    }
+};
+exports.getDevManifestCache = getDevManifestCache;
 //# sourceMappingURL=filestructure.js.map

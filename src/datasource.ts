@@ -2,6 +2,7 @@ import path from "path";
 import fs, { createWriteStream } from "fs";
 import {
   existsAsync,
+  getDevManifestCache,
   getPluginsJsonAsync,
   getRemoteHostAsync,
   getUserSessionAsync,
@@ -10,6 +11,7 @@ import {
   vPluginsPath,
   vReposPath,
   vTMPPath,
+  writeToDevManifestCache,
 } from "./filestructure";
 import { Manifest } from "./plugins";
 import {
@@ -20,6 +22,9 @@ import {
   RepoSetting,
   RepoState,
 } from "./repo";
+import {
+  validatePluginManifest
+} from "./plugins";
 import { CommitData } from "./versioncontrol";
 import axios from "axios";
 import { broadcastAllDevices } from "./multiplexer";
@@ -114,6 +119,25 @@ export interface DataSource {
   checkBinary?(binaryId: string): Promise<boolean>;
 }
 
+export const readDevPlugins = async (): Promise<Array<string>> => {
+  try {
+  const pluginNames = await fs.promises.readdir(vDEVPath);
+  return pluginNames ?? [];
+  } catch (e) {
+    return []
+  }
+}
+
+export const readDevPluginVersions = async (pluginName: string): Promise<Array<string>> => {
+  try {
+  const pluginPath = path.join(vDEVPath, pluginName);
+  const pluginVersions = await fs.promises.readdir(pluginPath);
+  return pluginVersions ?? [];
+  } catch (e) {
+    return []
+  }
+}
+
 /* PLUGINS */
 /**
  * We need to export readDevPluginManifest for the daemon server
@@ -135,8 +159,28 @@ export const readDevPluginManifest = async (
     try {
       const uri = `http://127.0.0.1:63403/plugins/${pluginName}/dev/floro/floro.manifest.json`;
       const res = await axios.get(uri);
-      return res.data;
+      if (res.status >= 200 && res.status < 400) {
+        try {
+          const isValid = await validatePluginManifest(makeDataSource(), res.data)
+          if (isValid && isValid?.status == "ok") {
+            res.data.version = "dev";
+            await writeToDevManifestCache(pluginName, res?.data);
+            return res.data;
+          }
+        } catch (e) {
+          return null;
+        }
+      }
+      const cachedManifests = await getDevManifestCache();
+      if (cachedManifests && cachedManifests[pluginName]) {
+        return cachedManifests?.[pluginName] ?? null;
+      }
+      return null;
     } catch (e) {
+      const cachedManifests = await getDevManifestCache();
+      if (cachedManifests && cachedManifests[pluginName]) {
+        return cachedManifests?.[pluginName] ?? null;
+      }
       return null;
     }
   }
@@ -149,7 +193,9 @@ export const readDevPluginManifest = async (
       "floro.manifest.json"
     );
     const manifestString = await fs.promises.readFile(pluginManifestPath);
-    return JSON.parse(manifestString.toString());
+    const manifest = JSON.parse(manifestString.toString());
+    manifest.version = pluginVersion;
+    return manifest;
   } catch (e) {
     return null;
   }
@@ -236,9 +282,6 @@ export const fetchRemoteManifest = async (
 ): Promise<Manifest | null> => {
   const remote = await getRemoteHostAsync();
   const session = await getUserSessionAsync();
-
-  //
-  //@Get("/api/plugin/:name/:version/manifest")
   const request = await axios.get(
     `${remote}/api/plugin/${pluginName}/${pluginVersion}/manifest`,
     {
@@ -855,15 +898,17 @@ export const makeMemoizedDataSource = (dataSourceOverride: DataSource = {}) => {
   const manifestMemo: { [key: string]: Manifest } = {};
   const _getPluginManifest = async (
     pluginName: string,
-    pluginVersion: string
+    pluginVersion: string,
+    disableDownloads = false
   ): Promise<Manifest> => {
     const memoString = pluginName + "-" + pluginVersion;
-    if (manifestMemo[memoString] && !pluginVersion.startsWith("dev")) {
+    if (manifestMemo[memoString] && !pluginVersion.startsWith("dev") && disableDownloads) {
       return manifestMemo[memoString];
     }
     const result = await dataSource.getPluginManifest(
       pluginName,
-      pluginVersion
+      pluginVersion,
+      disableDownloads
     );
     if (result) {
       manifestMemo[memoString] = result;

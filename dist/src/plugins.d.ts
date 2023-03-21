@@ -66,7 +66,7 @@ export interface DepFetch {
     deps?: Array<Manifest>;
 }
 export declare const getDependenciesForManifest: (datasource: DataSource, manifest: Manifest, disableDownloads?: boolean, seen?: {}) => Promise<DepFetch>;
-export declare const getUpstreamDependencyManifests: (datasource: DataSource, manifest: Manifest, memo?: {
+export declare const getUpstreamDependencyManifests: (datasource: DataSource, manifest: Manifest, disableDownloads?: boolean, memo?: {
     [key: string]: Manifest[];
 }) => Promise<Array<Manifest> | null>;
 export declare const coalesceDependencyVersions: (deps: Array<Manifest>) => {
@@ -125,7 +125,7 @@ export declare const getRootSchemaForPlugin: (schemaMap: {
 }, pluginName: string) => TypeStruct;
 export declare const getRootSchemaMap: (datasource: DataSource, schemaMap: {
     [key: string]: Manifest;
-}) => Promise<{
+}, disableDownloads?: boolean) => Promise<{
     [key: string]: TypeStruct;
 }>;
 export declare const getKVStateForPlugin: (datasource: DataSource, schema: {
@@ -229,7 +229,7 @@ export declare const pluginManifestIsSubsetOfManifest: (datasource: DataSource, 
     [key: string]: Manifest;
 }, nextSchemaMap: {
     [key: string]: Manifest;
-}) => Promise<boolean>;
+}, disableDownloads?: boolean) => Promise<boolean>;
 export declare const isTopologicalSubset: (datasource: DataSource, oldSchemaMap: {
     [key: string]: Manifest;
 }, oldStateMap: {

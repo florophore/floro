@@ -259,7 +259,8 @@ export const getDependenciesForManifest = async (
     try {
       const pluginManifest = await datasource.getPluginManifest(
         pluginName,
-        manifest.imports[pluginName]
+        manifest.imports[pluginName],
+        disableDownloads
       );
       if (!pluginManifest) {
         return {
@@ -296,7 +297,8 @@ export const getDependenciesForManifest = async (
 export const getUpstreamDependencyManifests = async (
   datasource: DataSource,
   manifest: Manifest,
-  memo: { [key: string]: Array<Manifest> } = {}
+  disableDownloads = false,
+  memo: { [key: string]: Array<Manifest> } = {},
 ): Promise<Array<Manifest> | null> => {
   if (memo[manifest.name + "-" + manifest.version]) {
     return memo[manifest.name + "-" + manifest.version];
@@ -306,7 +308,8 @@ export const getUpstreamDependencyManifests = async (
   for (const dependentPluginName in manifest.imports) {
     const dependentManifest = await datasource.getPluginManifest(
       dependentPluginName,
-      manifest.imports[dependentPluginName]
+      manifest.imports[dependentPluginName],
+      disableDownloads
     );
     if (!dependentManifest) {
       return null;
@@ -314,6 +317,7 @@ export const getUpstreamDependencyManifests = async (
     const subDeps = await getUpstreamDependencyManifests(
       datasource,
       dependentManifest,
+      disableDownloads,
       memo
     );
     if (subDeps == null) {
@@ -339,10 +343,21 @@ export const coalesceDependencyVersions = (
       if (acc[manifest.name]) {
         const semList = [manifest.version, ...acc[manifest.name]].sort(
           (a: string, b: string) => {
-            if (semver.eq(a, b)) {
+            if (a == "dev" && b == "dev") {
               return 0;
             }
-            return semver.gt(a, b) ? 1 : -1;
+            if (a == "dev") {
+              return 1;
+            }
+            if (b == "dev") {
+              return -1;
+            }
+            const aVer = a.startsWith("dev") ? a.split("@")[1] : a;
+            const bVer = b.startsWith("dev") ? b.split("@")[1] : b;
+            if (semver.eq(aVer, bVer)) {
+              return 0;
+            }
+            return semver.gt(aVer, bVer) ? 1 : -1;
           }
         );
         return {
@@ -1924,7 +1939,8 @@ export const getRootSchemaMap = async (
   datasource: DataSource,
   schemaMap: {
     [key: string]: Manifest;
-  }
+  },
+  disableDownloads = false
 ): Promise<{ [key: string]: TypeStruct } | null> => {
   // need to top sort
   const rootSchemaMap = {};
@@ -1932,7 +1948,8 @@ export const getRootSchemaMap = async (
     const manifest = schemaMap[pluginName];
     const upsteamDeps = await getUpstreamDependencyManifests(
       datasource,
-      manifest
+      manifest,
+      disableDownloads
     );
     const subSchemaMap = manifestListToSchemaMap(upsteamDeps as Manifest[]);
     rootSchemaMap[pluginName] = getRootSchemaForPlugin(
@@ -2851,10 +2868,11 @@ const objectIsSubsetOfObject = (current: object, next: object): boolean => {
 export const pluginManifestIsSubsetOfManifest = async (
   datasource: DataSource,
   currentSchemaMap: { [key: string]: Manifest },
-  nextSchemaMap: { [key: string]: Manifest }
+  nextSchemaMap: { [key: string]: Manifest },
+  disableDownloads = false
 ): Promise<boolean> => {
-  const oldRootSchema = await getRootSchemaMap(datasource, currentSchemaMap);
-  const nextRootSchema = await getRootSchemaMap(datasource, nextSchemaMap);
+  const oldRootSchema = await getRootSchemaMap(datasource, currentSchemaMap, disableDownloads);
+  const nextRootSchema = await getRootSchemaMap(datasource, nextSchemaMap, disableDownloads);
   if (!oldRootSchema) {
     return false;
   }

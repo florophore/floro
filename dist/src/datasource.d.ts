@@ -30,6 +30,8 @@ export interface DataSource {
     saveBranchesMetaState?(repoId: string, branchesMetaState: BranchesMetaState): Promise<BranchesMetaState>;
     checkBinary?(binaryId: string): Promise<boolean>;
 }
+export declare const readDevPlugins: () => Promise<Array<string>>;
+export declare const readDevPluginVersions: (pluginName: string) => Promise<Array<string>>;
 /**
  * We need to export readDevPluginManifest for the daemon server
  * all other methods not in datasource should remain internal to

@@ -728,7 +728,6 @@ export const updatePlugins = async (
     );
     const newManifests = await getPluginManifests(datasource, plugins);
 
-
     const oldManifestMap = getManifestMapFromManifestList(oldManifests);
     const newManifestMap = getManifestMapFromManifestList(newManifests);
 
