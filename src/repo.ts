@@ -20,6 +20,7 @@ import {
   getPluginManifests,
   getSchemaMapForManifest,
   getStateFromKVForPlugin,
+  Manifest,
   manifestListToSchemaMap,
   nullifyMissingFileRefs,
   PluginElement,
@@ -162,6 +163,7 @@ export interface ApiStoreInvalidity {
 export interface ApiReponse {
   repoState: RepoState;
   applicationState: RenderedApplicationState;
+  schemaMap: {[key: string]: Manifest};
   beforeState?: RenderedApplicationState;
   apiDiff?: ApiDiff;
   apiStoreInvalidity?: ApiStoreInvalidity;
@@ -1310,11 +1312,14 @@ export const renderApiReponse = async (
   repoState: RepoState,
 ): Promise<ApiReponse> => {
   const apiStoreInvalidity = await getInvalidStates(datasource, applicationKVState);
+  const manifests = await getPluginManifests(datasource, renderedApplicationState.plugins);
+  const schemaMap = manifestListToSchemaMap(manifests);
   if (repoState.commandMode == "edit") {
     return {
       apiStoreInvalidity,
       repoState,
-      applicationState: renderedApplicationState
+      applicationState: renderedApplicationState,
+      schemaMap
     }
   }
 
@@ -1322,7 +1327,8 @@ export const renderApiReponse = async (
     return {
       apiStoreInvalidity,
       repoState,
-      applicationState: renderedApplicationState
+      applicationState: renderedApplicationState,
+      schemaMap
     }
   }
   if (repoState.commandMode == "compare") {

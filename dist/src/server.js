@@ -543,6 +543,42 @@ app.post("/repo/:repoId/plugins", (0, cors_1.default)(corsOptionsDelegate), asyn
     }
     res.send(apiResponse);
 });
+app.post("/repo/:repoId/plugin/:pluginName/state", (0, cors_1.default)(corsOptionsDelegate), async (req, res) => {
+    const repoId = req.params["repoId"];
+    const pluginName = req.params["pluginName"];
+    const state = req.body["state"];
+    const pluginNameToUpdate = req.body["pluginName"];
+    if (!pluginName || !state || !pluginNameToUpdate) {
+        res.sendStatus(400);
+        return;
+    }
+    const currentRenderedState = await datasource.readRenderedState(repoId);
+    const pluginElement = currentRenderedState?.plugins?.find(v => v.key == pluginName);
+    if (!pluginElement) {
+        res.sendStatus(400);
+        return;
+    }
+    const manifest = await datasource.getPluginManifest(pluginElement.key, pluginElement.value, true);
+    if (!manifest) {
+        res.sendStatus(400);
+        return;
+    }
+    if (!manifest.imports[pluginNameToUpdate]) {
+        res.sendStatus(400);
+        return;
+    }
+    const renderedState = await (0, repoapi_1.updatePluginState)(datasource, repoId, pluginNameToUpdate, state);
+    const [repoState, applicationState] = await Promise.all([
+        datasource.readCurrentRepoState(repoId),
+        (0, repo_1.convertRenderedCommitStateToKv)(datasource, renderedState),
+    ]);
+    const apiResponse = await (0, repo_1.renderApiReponse)(datasource, renderedState, applicationState, repoState);
+    if (!apiResponse) {
+        res.sendStatus(404);
+        return;
+    }
+    res.send(apiResponse);
+});
 app.get("/repo/:repoId/licenses", (0, cors_1.default)(corsOptionsDelegate), async (req, res) => {
     const repoId = req.params["repoId"];
     const licenses = await (0, repoapi_1.readRepoLicenses)(datasource, repoId);

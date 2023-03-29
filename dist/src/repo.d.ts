@@ -1,6 +1,6 @@
 import { DataSource } from "./datasource";
 import { User } from "./filestructure";
-import { PluginElement } from "./plugins";
+import { Manifest, PluginElement } from "./plugins";
 import { CommitData, Diff, StringDiff } from "./versioncontrol";
 export interface RepoState {
     branch: string | null;
@@ -129,6 +129,9 @@ export interface ApiStoreInvalidity {
 export interface ApiReponse {
     repoState: RepoState;
     applicationState: RenderedApplicationState;
+    schemaMap: {
+        [key: string]: Manifest;
+    };
     beforeState?: RenderedApplicationState;
     apiDiff?: ApiDiff;
     apiStoreInvalidity?: ApiStoreInvalidity;

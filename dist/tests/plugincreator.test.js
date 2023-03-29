@@ -124,7 +124,17 @@ describe("plugincreator", () => {
             const bDeps = await (0, plugins_1.getDependenciesForManifest)(datasource, PLUGIN_B_MANIFEST);
             expect(bDeps.deps).toEqual([PLUGIN_A_MANIFEST]);
             const cDeps = await (0, plugins_1.getDependenciesForManifest)(datasource, PLUGIN_C_MANIFEST);
-            expect(cDeps.deps).toEqual([PLUGIN_B_MANIFEST, PLUGIN_A_MANIFEST]);
+            expect(cDeps.deps).toEqual([{
+                    name: "B",
+                    version: "dev@0.0.0",
+                    displayName: "B",
+                    icon: "",
+                    imports: {
+                        A: "0.0.0",
+                    },
+                    types: {},
+                    store: {},
+                }, PLUGIN_A_MANIFEST]);
         });
         test("discovers cyclic dependency errors", async () => {
             const PLUGIN_A_0_MANIFEST = {
@@ -839,6 +849,15 @@ describe("plugincreator", () => {
                                             subProp: {
                                                 type: "int",
                                             },
+                                            primitiveSet: {
+                                                type: "set",
+                                                values: "string"
+                                            },
+                                            someNestedThing: {
+                                                innerMostString: {
+                                                    type: "string"
+                                                }
+                                            }
                                         },
                                     },
                                 },

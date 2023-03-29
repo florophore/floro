@@ -529,7 +529,7 @@ const generateLocalTypescriptAPI = async (cwd, useReact = true) => {
         const manifest = JSON.parse(floroManifestString.toString());
         const code = await (0, exports.generateTypeScriptAPI)(datasource, manifest, useReact);
         if (code) {
-            const writeApiPath = path_1.default.join(cwd, "src", "floro-schema-api.ts");
+            const writeApiPath = path_1.default.join(cwd, "src", "floro-schema-api.tsx");
             if (await (0, filestructure_1.existsAsync)(writeApiPath)) {
                 await fs_1.default.promises.rm(writeApiPath);
             }
@@ -552,7 +552,7 @@ const generateTypeScriptAPI = async (datasource, manifest, useReact = true) => {
     const referenceArgsMap = (0, plugins_1.buildPointerArgsMap)(referenceReturnTypeMap);
     const diffableListWithoutPartials = (0, plugins_1.getDiffablesList)(rootSchemaMap, referenceReturnTypeMap);
     const diffableListWithPartials = (0, plugins_1.getDiffablesList)(rootSchemaMap, referenceReturnTypeMap, true);
-    let code = useReact ? "import { useMemo } from 'react';\n\n" : "";
+    let code = useReact ? "import React, { useEffect, createContext, useMemo, useCallback, useState, useContext, useRef } from 'react';\n\n" : "";
     code += "export type FileRef = `${string}.${string}`;\n\n";
     const queryTypesCode = (0, plugins_1.drawMakeQueryRef)(referenceArgsMap, useReact);
     const partialDiffableQueryTypes = (0, plugins_1.drawDiffableQueryTypes)(diffableListWithPartials, true);
@@ -560,14 +560,24 @@ const generateTypeScriptAPI = async (datasource, manifest, useReact = true) => {
     const diffableQueryTypes = (0, plugins_1.drawDiffableQueryTypes)(diffableListWithoutPartials, false);
     code += diffableQueryTypes + "\n\n";
     code += queryTypesCode + "\n\n";
+    const schemaTypesCode = (0, plugins_1.drawSchematicTypes)(diffableListWithPartials, rootSchemaMap, referenceReturnTypeMap);
+    code += schemaTypesCode + "\n\n";
+    const diffableReturnType = (0, plugins_1.drawDiffableReturnTypes)(diffableListWithPartials);
+    code += diffableReturnType + "\n\n";
+    const pointerTypesCode = (0, plugins_1.drawPointerTypes)(diffableListWithPartials);
+    code += pointerTypesCode + "\n\n";
     const schemaRootCode = (0, plugins_1.drawSchemaRoot)(rootSchemaMap, referenceReturnTypeMap);
     code += schemaRootCode + "\n\n";
     const refReturnTypesCode = (0, plugins_1.drawRefReturnTypes)(rootSchemaMap, referenceReturnTypeMap);
     code += refReturnTypesCode;
+    const providerCode = (0, plugins_1.drawProviderApiCode)();
+    code += providerCode;
     const getReferenceObjectCode = (0, plugins_1.drawGetReferencedObject)(referenceArgsMap, useReact);
-    code += getReferenceObjectCode + "\n\n";
+    code += getReferenceObjectCode;
     const getReferencePluginStoreCode = (0, plugins_1.drawGetPluginStore)(rootSchemaMap, useReact);
     code += getReferencePluginStoreCode;
+    const useFloroStateCode = (0, plugins_1.drawUseFloroStateFunction)(diffableListWithPartials);
+    code += useFloroStateCode;
     return code;
 };
 exports.generateTypeScriptAPI = generateTypeScriptAPI;

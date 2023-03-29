@@ -41,7 +41,10 @@ describe("plugins", () => {
         "simple",
         "dev@0.0.0"
       );
-      expect(manifest).toEqual(SIMPLE_PLUGIN_MANIFEST);
+      expect(manifest).toEqual({
+        ...SIMPLE_PLUGIN_MANIFEST,
+        version: "dev@0.0.0"
+      });
     });
 
     test("returns non-dev manifest", async () => {

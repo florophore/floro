@@ -55,6 +55,7 @@ import {
   readRepoLicenses,
   checkoutSha,
   updatePlugins,
+  updatePluginState,
   //deleteBranch,
 } from "./repoapi";
 import { makeMemoizedDataSource, readDevPluginManifest, readDevPlugins, readDevPluginVersions } from "./datasource";
@@ -799,6 +800,61 @@ app.post(
       datasource,
       repoId,
       req.body?.["plugins"] ?? []
+    );
+    const [repoState, applicationState] = await Promise.all([
+      datasource.readCurrentRepoState(repoId),
+      convertRenderedCommitStateToKv(datasource, renderedState),
+    ]);
+    const apiResponse = await renderApiReponse(
+      datasource,
+      renderedState,
+      applicationState,
+      repoState
+    );
+    if (!apiResponse) {
+      res.sendStatus(404);
+      return;
+    }
+    res.send(apiResponse);
+  }
+);
+
+app.post(
+  "/repo/:repoId/plugin/:pluginName/state",
+  cors(corsOptionsDelegate),
+  async (req, res): Promise<void> => {
+    const repoId = req.params["repoId"];
+    const pluginName = req.params["pluginName"];
+    const state = req.body["state"];
+    const pluginNameToUpdate = req.body["pluginName"];
+    if (!pluginName || !state || !pluginNameToUpdate) {
+      res.sendStatus(400);
+      return;
+    }
+    const currentRenderedState = await datasource.readRenderedState(repoId);
+    const pluginElement = currentRenderedState?.plugins?.find(v => v.key == pluginName);
+    if (!pluginElement) {
+      res.sendStatus(400);
+      return;
+    }
+    const manifest = await datasource.getPluginManifest(
+      pluginElement.key,
+      pluginElement.value,
+      true
+    );
+    if (!manifest) {
+      res.sendStatus(400);
+      return;
+    }
+    if (!manifest.imports[pluginNameToUpdate]) {
+      res.sendStatus(400);
+      return;
+    }
+    const renderedState = await updatePluginState(
+      datasource,
+      repoId,
+      pluginNameToUpdate,
+      state
     );
     const [repoState, applicationState] = await Promise.all([
       datasource.readCurrentRepoState(repoId),

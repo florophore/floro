@@ -23,7 +23,10 @@ describe("plugins", () => {
         test("returns dev manifest", async () => {
             (0, fsmocks_1.makeTestPlugin)(pluginmocks_1.SIMPLE_PLUGIN_MANIFEST, true);
             const manifest = await datasource.getPluginManifest("simple", "dev@0.0.0");
-            expect(manifest).toEqual(pluginmocks_1.SIMPLE_PLUGIN_MANIFEST);
+            expect(manifest).toEqual({
+                ...pluginmocks_1.SIMPLE_PLUGIN_MANIFEST,
+                version: "dev@0.0.0"
+            });
         });
         test("returns non-dev manifest", async () => {
             (0, fsmocks_1.makeTestPlugin)(pluginmocks_1.SIMPLE_PLUGIN_MANIFEST);

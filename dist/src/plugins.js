@@ -4,7 +4,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.collectKeyRefs = exports.invalidSchemaPropsCheck = exports.isSchemaValid = exports.isTopologicalSubsetValid = exports.isTopologicalSubset = exports.pluginManifestIsSubsetOfManifest = exports.getPluginInvalidStateIndices = exports.validatePluginState = exports.collectFileRefs = exports.nullifyMissingFileRefs = exports.reIndexSchemaArrays = exports.cascadePluginState = exports.recursivelyCheckIfReferenceExists = exports.compileStatePointers = exports.getDownstreamDepsInSchemaMap = exports.getUpstreamDepsInSchemaMap = exports.getKVStateForPlugin = exports.getRootSchemaMap = exports.getRootSchemaForPlugin = exports.getExpandedTypesForPlugin = exports.getStateFromKVForPlugin = exports.buildObjectsAtPath = exports.indexArrayDuplicates = exports.flattenStateToSchemaPathKV = exports.getStateId = exports.decodeSchemaPathWithArrays = exports.decodeSchemaPath = exports.writePathStringWithArrays = exports.writePathString = exports.defaultVoidedState = exports.validatePluginManifest = exports.containsCyclicTypes = exports.schemaHasInvalidTypeSytax = exports.schemaManifestHasInvalidSyntax = exports.getSchemaMapForManifest = exports.verifyPluginDependencyCompatability = exports.coalesceDependencyVersions = exports.getUpstreamDependencyManifests = exports.getDependenciesForManifest = exports.hasPluginManifest = exports.hasPlugin = exports.manifestListToPluginList = exports.manifestListToSchemaMap = exports.pluginMapToList = exports.pluginListToMap = exports.getManifestMapFromManifestList = exports.getPluginManifests = exports.topSortManifests = exports.schemaMapsAreCompatible = exports.pluginManifestsAreCompatibleForUpdate = void 0;
-exports.renderDiffable = exports.drawDiffableQueryTypes = exports.drawGetPluginStore = exports.drawGetReferencedObject = exports.drawRefReturnTypes = exports.drawSchemaRoot = exports.drawMakeQueryRef = exports.getDiffablesListForTypestruct = exports.getDiffablesList = exports.buildPointerArgsMap = exports.buildPointerReturnTypeMap = exports.typestructsAreEquivalent = exports.replaceRawRefsInExpandedType = exports.replaceRefVarsWithWildcards = void 0;
+exports.USE_FLORO_STATE_FUNCTION = exports.drawUseFloroStateFunction = exports.drawProviderApiCode = exports.drawDiffableReturnTypes = exports.drawPointerTypes = exports.drawSchematicTypes = exports.renderDiffableToSchematicPath = exports.renderDiffableToWildcard = exports.renderDiffable = exports.drawDiffableQueryTypes = exports.drawGetPluginStore = exports.drawGetReferencedObject = exports.drawRefReturnTypes = exports.drawSchemaRoot = exports.drawMakeQueryRef = exports.getDiffablesListForTypestruct = exports.getDiffablesList = exports.buildPointerArgsMap = exports.buildPointerReturnTypeMap = exports.typestructsAreEquivalent = exports.replaceRawRefsInExpandedType = exports.replaceRefVarsWithWildcards = void 0;
 const axios_1 = __importDefault(require("axios"));
 const semver_1 = __importDefault(require("semver"));
 axios_1.default.defaults.validateStatus = function () {
@@ -1338,7 +1338,12 @@ const iterateSchemaTypes = (types, pluginName, importedTypes = {}) => {
                 out[prop].type = `ref<${pluginName}.${typeGroup}>`;
             }
             else {
-                out[prop].type = types[prop].type;
+                if (splitGroup[0] == "$") {
+                    out[prop].type = `ref<${[`$(${pluginName})`, ...splitGroup.slice(1)].join(".")}>`;
+                }
+                else {
+                    out[prop].type = types[prop].type;
+                }
             }
             continue;
         }
@@ -2448,6 +2453,8 @@ const invalidSchemaPropsCheck = (typeStruct, rootSchema, path = []) => {
 exports.invalidSchemaPropsCheck = invalidSchemaPropsCheck;
 const collectKeyRefs = (typeStruct, path = []) => {
     const out = [];
+    const sets = [];
+    const objects = [];
     for (const prop in typeStruct) {
         if (typeStruct[prop]?.isKey) {
             if (typeStruct[prop].type == "ref") {
@@ -2460,19 +2467,25 @@ const collectKeyRefs = (typeStruct, path = []) => {
         }
         if (typeStruct[prop]?.type == "set" &&
             typeof typeStruct[prop]?.values == "object") {
-            out.push(...(0, exports.collectKeyRefs)(typeStruct[prop].values, [
-                ...path,
-                path.length == 0 ? `$(${prop})` : prop,
-            ]));
+            sets.push(prop);
             continue;
         }
         if (!typeStruct[prop]?.type && typeof typeStruct[prop] == "object") {
-            out.push(...(0, exports.collectKeyRefs)(typeStruct[prop], [
-                ...path,
-                path.length == 0 ? `$(${prop})` : prop,
-            ]));
+            objects.push(prop);
             continue;
         }
+    }
+    for (const prop of sets) {
+        out.push(...(0, exports.collectKeyRefs)(typeStruct[prop].values, [
+            ...path,
+            path.length == 0 ? `$(${prop})` : prop,
+        ]));
+    }
+    for (const prop of objects) {
+        out.push(...(0, exports.collectKeyRefs)(typeStruct[prop], [
+            ...path,
+            path.length == 0 ? `$(${prop})` : prop,
+        ]));
     }
     return out;
 };
@@ -2643,7 +2656,7 @@ const getDiffablesListForTypestruct = (rootSchemaMap, pointerArgsMap, typestruct
                             args
                         },
                     ]);
-                    const subPaths = (0, exports.getDiffablesListForTypestruct)(rootSchemaMap, pointerArgsMap, typestruct[prop], includePartialPaths, [...path, prop, {
+                    const subPaths = (0, exports.getDiffablesListForTypestruct)(rootSchemaMap, pointerArgsMap, typestruct[prop]?.values, includePartialPaths, [...path, prop, {
                             type: "set-key",
                             key: keyProp,
                             args,
@@ -2660,7 +2673,7 @@ const getDiffablesListForTypestruct = (rootSchemaMap, pointerArgsMap, typestruct
                         args: [typestruct[prop]?.values[keyProp].type]
                     },
                 ]);
-                const subPaths = (0, exports.getDiffablesListForTypestruct)(rootSchemaMap, pointerArgsMap, typestruct[prop], includePartialPaths, [
+                const subPaths = (0, exports.getDiffablesListForTypestruct)(rootSchemaMap, pointerArgsMap, typestruct[prop]?.values, includePartialPaths, [
                     ...path,
                     prop,
                     {
@@ -2681,7 +2694,7 @@ const getDiffablesListForTypestruct = (rootSchemaMap, pointerArgsMap, typestruct
                         args: ["number"],
                     },
                 ]);
-                const subPaths = (0, exports.getDiffablesListForTypestruct)(rootSchemaMap, pointerArgsMap, typestruct[prop], includePartialPaths, [
+                const subPaths = (0, exports.getDiffablesListForTypestruct)(rootSchemaMap, pointerArgsMap, typestruct[prop]?.values, includePartialPaths, [
                     ...path,
                     prop,
                     {
@@ -2694,6 +2707,10 @@ const getDiffablesListForTypestruct = (rootSchemaMap, pointerArgsMap, typestruct
             }
         }
         if (!typestruct[prop]?.type && typeof typestruct[prop] == "object") {
+            out.push([
+                ...path,
+                prop
+            ]);
             const subPaths = (0, exports.getDiffablesListForTypestruct)(rootSchemaMap, pointerArgsMap, typestruct[prop], includePartialPaths, [...path, prop]);
             out.push(...subPaths);
             continue;
@@ -2711,18 +2728,42 @@ const drawQueryTypes = (argMap) => {
                 argPossibilities[0] == "FileRef" ||
                 argPossibilities[0] == "boolean" ||
                 argPossibilities[0] == "number") {
-                return s.replace("<?>", `<$\{${argPossibilities[0]}}>`);
+                return findAndReplaceWildCard(s, `<$\{${argPossibilities[0]}}>`);
             }
             const line = argPossibilities
                 .map(exports.replaceRefVarsWithWildcards)
-                .map((wcq) => `QueryTypes['${wcq}']`)
+                .map((wcq) => {
+                return `QueryTypes['${wcq}']`;
+            })
                 .join("|");
-            return s.replace("<?>", `<$\{${line}}>`);
+            return findAndReplaceWildCard(s, `<$\{${line}}>`);
         }, wildcard);
         code += `  ['${wildcard}']: \`${argStr}\`;\n`;
     }
     code += "};\n";
     return code;
+};
+const findAndReplaceWildCard = (s, replacement) => {
+    let balance = 0;
+    let index = null;
+    for (let i = 0; i < s.length; ++i) {
+        if (i > 2 && s[i] == ">" && s[i - 1] == "?" && s[i - 2] == "<" && balance == 1) {
+            index = [i - 2, i];
+            break;
+        }
+        if (s[i] == "<") {
+            balance++;
+        }
+        if (s[i] == ">") {
+            balance--;
+        }
+    }
+    if (index) {
+        const firstHalf = s.split("").slice(0, index[0]).join("");
+        const secondHalf = s.split("").slice(index[1] + 1).join("");
+        return firstHalf + replacement + secondHalf;
+    }
+    return s;
 };
 const drawMakeQueryRef = (argMap, useReact = false) => {
     let code = drawQueryTypes(argMap) + "\n";
@@ -2789,16 +2830,24 @@ const drawMakeQueryRef = (argMap, useReact = false) => {
                 argType[0] == "FileRef" ||
                 argType[0] == "boolean" ||
                 argType[0] == "number") {
-                return s.replace("<?>", `<$\{arg${i} as ${argType[0]}}>`);
+                return findAndReplaceWildCard(s, `<$\{arg${i} as ${argType[0]}}>`);
             }
-            return s.replace("<?>", `<$\{arg${i} as ${argType
+            return findAndReplaceWildCard(s, `<$\{arg${i} as ${argType
                 .map(exports.replaceRefVarsWithWildcards)
                 .map((v) => `QueryTypes['${v}']`)
                 .join("|")}}>`);
         }, `return \`${(0, exports.replaceRefVarsWithWildcards)(query)}\`;`);
-        code += `  if (query == '${(0, exports.replaceRefVarsWithWildcards)(query)}') {\n`;
-        code += `    ${returnType}\n`;
-        code += `  }\n`;
+        if (args.length > 0) {
+            const argCheck = args?.map((_, i) => `(arg${i} != null && arg${i} != undefined)`).join(" && ");
+            code += `  if (${argCheck} && query == '${(0, exports.replaceRefVarsWithWildcards)(query)}') {\n`;
+            code += `    ${returnType}\n`;
+            code += `  }\n`;
+        }
+        else {
+            code += `  if (query == '${(0, exports.replaceRefVarsWithWildcards)(query)}') {\n`;
+            code += `    ${returnType}\n`;
+            code += `  }\n`;
+        }
     }
     code += `  return null;\n`;
     code += `};\n`;
@@ -2863,9 +2912,9 @@ const drawRefReturnTypes = (rootSchemaMap, referenceReturnTypeMap) => {
         const [staticPath] = referenceReturnTypeMap[path];
         const pluginName = /^\$\((.+)\)$/.exec(staticPath.split(".")[0])?.[1];
         const staticSchema = getStaticSchemaAtPath(rootSchemaMap[pluginName], staticPath);
-        const typestructCode = drawTypestruct(staticSchema, referenceReturnTypeMap, "  ");
+        const typestructCode = drawTypestruct(staticSchema, referenceReturnTypeMap, "  ", false, false, false);
         const wildcard = (0, exports.replaceRefVarsWithWildcards)(path);
-        code += `  ['${wildcard}']: ${typestructCode}\n`;
+        code += `  ['${wildcard}']: ${typestructCode};\n`;
     }
     code += "};\n";
     return code;
@@ -2913,7 +2962,7 @@ const drawTypestruct = (typeStruct, referenceReturnTypeMap, indentation = "", se
                 ? "number"
                 : typeStruct[prop]?.values == "file"
                     ? "FileRef"
-                    : typeStruct[prop]?.type;
+                    : typeStruct[prop]?.values;
             const propName = `['${prop}']`;
             code += `  ${indentation}${propName}: Array<${type}>;\n`;
             continue;
@@ -3020,7 +3069,7 @@ const getObjectInStateMap = (
 ): object | null => {
   let current: null | object = null;
   const [pluginWrapper, ...decodedPath] = decodeSchemaPathWithArrays(path);
-  const pluginName = /^$((.+))$/.exec(pluginWrapper as string)?.[1] ?? null;
+  const pluginName = /^\$\((.+)\)$/.exec(pluginWrapper as string)?.[1] ?? null;
   if (pluginName == null) {
     return null;
   }
@@ -3072,6 +3121,72 @@ export function containsDiffable(changeset: Set<string>, query: PartialDiffableQ
   }
   return false;
 }
+
+const getIndexPathInStateMap = (
+  stateMap: { [pluginName: string]: object },
+  path: string
+): Array<string | number> | null => {
+  let current: null | object = null;
+  const [pluginWrapper, ...decodedPath] = decodeSchemaPathWithArrays(path);
+  const pluginName = /^\$\((.+)\)$/.exec(pluginWrapper as string)?.[1] ?? null;
+  const indexPath: Array<string | number> = [];
+  if (pluginName == null) {
+    return null;
+  }
+  indexPath.push(pluginName);
+  current = stateMap[pluginName];
+  for (const part of decodedPath) {
+    if (!current) {
+      return null;
+    }
+    if (typeof part == "number") {
+      current = current[part];
+      indexPath.push(part);
+    } else if (typeof part != "string") {
+      const { key, value } = part as { key: string; value: string };
+      if (Array.isArray(current)) {
+        const element = current?.find?.((v, index) => {
+          if (v?.[key] == value) {
+            indexPath.push(index);
+            return true;
+          }
+          return false;
+        });
+        current = element;
+      } else {
+        return null;
+      }
+    } else {
+      indexPath.push(part);
+      current = current[part];
+    }
+  }
+  return indexPath;
+};
+
+const updateObjectInStateMap = (
+  stateMap: { [pluginName: string]: object },
+  path: string,
+  objectToUpdate: object
+) => {
+  const indexPath = getIndexPathInStateMap(stateMap, path);
+  if (indexPath == null) {
+    return null;
+  }
+  let current: object = stateMap;
+  let last!: object | Array<object>;
+  for (let i = 0; i < indexPath.length; ++i) {
+    last = current;
+    current = current[indexPath[i]];
+  }
+  if (!last) {
+    return stateMap;
+  }
+  last[indexPath[indexPath.length - 1]] = objectToUpdate;
+  return stateMap;
+};
+
+
 `;
 const drawGetReferencedObject = (argMap, useReact = false) => {
     const wildcards = Object.keys(argMap).map(exports.replaceRefVarsWithWildcards);
@@ -3089,7 +3204,7 @@ const drawGetReferencedObject = (argMap, useReact = false) => {
         .join("|");
     code += `export function getReferencedObject(root: SchemaRoot, query: ${globalQueryTypes}): ${globalReturnTypes}|null {\n`;
     for (const wildcard of wildcards) {
-        code += `  if (replaceRefVarsWithWildcards(query) == '${wildcard}') {\n`;
+        code += `  if (root && query && replaceRefVarsWithWildcards(query) == '${wildcard}') {\n`;
         code += `    return getObjectInStateMap(root, query) as RefReturnTypes['${wildcard}'];\n`;
         code += `  }\n`;
     }
@@ -3098,7 +3213,7 @@ const drawGetReferencedObject = (argMap, useReact = false) => {
     if (useReact) {
         code += `\n`;
         for (const wildcard of wildcards) {
-            code += `export function useReferencedObject(root: SchemaRoot, query: QueryTypes['${wildcard}']): RefReturnTypes['${wildcard}'];\n`;
+            code += `export function useReferencedObject(query: QueryTypes['${wildcard}']): RefReturnTypes['${wildcard}'];\n`;
         }
         const globalQueryTypes = wildcards
             .map((wildcard) => `QueryTypes['${wildcard}']`)
@@ -3106,10 +3221,12 @@ const drawGetReferencedObject = (argMap, useReact = false) => {
         const globalReturnTypes = wildcards
             .map((wildcard) => `RefReturnTypes['${wildcard}']`)
             .join("|");
-        code += `export function useReferencedObject(root: SchemaRoot, query: ${globalQueryTypes}): ${globalReturnTypes}|null {\n`;
+        code += `export function useReferencedObject(query: ${globalQueryTypes}): ${globalReturnTypes}|null {\n`;
+        code += `  const ctx = useFloroContext();\n`;
+        code += `  const root = ctx.applicationState;\n`;
         code += `  return useMemo(() => {\n`;
         for (const wildcard of wildcards) {
-            code += `    if (replaceRefVarsWithWildcards(query) == '${wildcard}') {\n`;
+            code += `    if (root && query && replaceRefVarsWithWildcards(query) == '${wildcard}') {\n`;
             code += `      return getObjectInStateMap(root, query) as RefReturnTypes['${wildcard}'];\n`;
             code += `    }\n`;
         }
@@ -3125,20 +3242,30 @@ const drawGetPluginStore = (rootSchemaMap, useReact = false) => {
     code += "\n";
     const plugins = Object.keys(rootSchemaMap);
     for (const plugin of plugins) {
-        code += `export function getPluginStore(root: SchemaRoot, plugin: '${plugin}'): SchemaRoot['${plugin}'];\n`;
+        code += `export function getPluginStore(plugin: '${plugin}'): SchemaRoot['${plugin}'];\n`;
     }
     const globalPluginArgs = plugins.map((p) => `'${p}'`).join("|");
     const globalPluginReturn = plugins.map((p) => `SchemaRoot['${p}']`).join("|");
-    code += `export function getPluginStore(root: SchemaRoot, plugin: ${globalPluginArgs}): ${globalPluginReturn} {\n`;
+    code += `export function getPluginStore(plugin: ${globalPluginArgs}): ${globalPluginReturn} {\n`;
+    code += `  const ctx = useFloroContext();\n`;
+    code += `  const root = ctx.applicationState;\n`;
+    code += `  if (root == null) {\n`;
+    code += `    return {} as ${globalPluginReturn};\n`;
+    code += `  }\n`;
     code += `  return root[plugin];\n`;
     code += `}\n`;
     if (useReact) {
         code += "\n";
         for (const plugin of plugins) {
-            code += `export function usePluginStore(root: SchemaRoot, plugin: '${plugin}'): SchemaRoot['${plugin}'];\n`;
+            code += `export function usePluginStore(plugin: '${plugin}'): SchemaRoot['${plugin}'];\n`;
         }
-        code += `export function usePluginStore(root: SchemaRoot, plugin: ${globalPluginArgs}): ${globalPluginReturn} {\n`;
+        code += `export function usePluginStore(plugin: ${globalPluginArgs}): ${globalPluginReturn} {\n`;
+        code += `  const ctx = useFloroContext();\n`;
+        code += `  const root = ctx.applicationState;\n`;
         code += `  return useMemo(() => {\n`;
+        code += `    if (root == null) {\n`;
+        code += `      return {} as ${globalPluginReturn};\n`;
+        code += `    }\n`;
         code += `    return root[plugin];\n`;
         code += `  }, [root, plugin]);\n`;
         code += `}\n`;
@@ -3186,4 +3313,344 @@ const renderDiffable = (diffable) => {
     return [`$(${pluginName})`, ...subTypes].join(".");
 };
 exports.renderDiffable = renderDiffable;
+const renderDiffableToWildcard = (diffable) => {
+    const [pluginName, ...res] = diffable;
+    const subTypes = res.map((element) => {
+        if (typeof element == "string") {
+            return element;
+        }
+        if (element.type == "array-index") {
+            return "[?]";
+        }
+        if (element.args[0] == "boolean") {
+            return `${element.key}<?>`;
+        }
+        if (element.args[0] == "string") {
+            return `${element.key}<?>`;
+        }
+        if (element.args[0] == "file") {
+            return `${element.key}<?>`;
+        }
+        if (element.args[0] == "int" ||
+            element.args[0] == "float") {
+            return `${element.key}<?>`;
+        }
+        return `${element.key}<?>`;
+    });
+    return [`$(${pluginName})`, ...subTypes].join(".");
+};
+exports.renderDiffableToWildcard = renderDiffableToWildcard;
+const renderDiffableToSchematicPath = (diffable) => {
+    const [pluginName, ...res] = diffable;
+    const subTypes = res.map((element) => {
+        if (typeof element == "string") {
+            return element;
+        }
+        return "values";
+    });
+    return [`$(${pluginName})`, ...subTypes].join(".");
+};
+exports.renderDiffableToSchematicPath = renderDiffableToSchematicPath;
+const drawSchematicTypes = (partialDiffables, rootStruct, referenceReturnTypeMap) => {
+    let code = "export type SchemaTypes = {\n";
+    for (const pd of partialDiffables) {
+        const wildcardPath = (0, exports.renderDiffableToWildcard)(pd);
+        const schemaPath = (0, exports.renderDiffableToSchematicPath)(pd);
+        const subSchema = getObjectInStateMap(rootStruct, schemaPath);
+        if (subSchema?.type == "set" || subSchema?.type == "array") {
+            const typeStruct = `Array<${drawTypestruct(subSchema?.values, referenceReturnTypeMap, "  ", false, false, false)}>`;
+            code += `  ['${wildcardPath}']: ${typeStruct};\n`;
+        }
+        else {
+            const typeStruct = drawTypestruct(subSchema, referenceReturnTypeMap, "  ", false, false, false);
+            code += `  ['${wildcardPath}']: ${typeStruct};\n`;
+        }
+    }
+    code += "};\n";
+    return code;
+};
+exports.drawSchematicTypes = drawSchematicTypes;
+const drawPointerTypes = (partialDiffables) => {
+    let code = "export type PointerTypes = {\n";
+    for (const pd of partialDiffables) {
+        const wildcardPath = (0, exports.renderDiffableToWildcard)(pd);
+        const pointerPath = (0, exports.renderDiffable)(pd);
+        code += `  ['${wildcardPath}']: \`${pointerPath}\`;\n`;
+    }
+    code += "};\n";
+    return code;
+};
+exports.drawPointerTypes = drawPointerTypes;
+const drawDiffableReturnTypes = (diffables) => {
+    const diffableValue = diffables.map(diffable => {
+        return `SchemaTypes['${(0, exports.renderDiffableToWildcard)(diffable)}']`;
+    }).join("|");
+    return `export type DiffableReturnTypes = ${diffableValue};`;
+};
+exports.drawDiffableReturnTypes = drawDiffableReturnTypes;
+const drawProviderApiCode = () => `
+interface Packet {
+  id: string;
+  chunk: string;
+  index: number;
+  totalPackets: number;
+  pluginName: string;
+}
+
+interface PluginState {
+  commandMode: "view" | "edit";
+  applicationState: SchemaRoot | null;
+}
+
+interface IFloroContext {
+  commandMode: "view" | "edit";
+  applicationState: SchemaRoot | null;
+  hasLoaded: boolean;
+  saveState: <T extends keyof SchemaRoot>(pluginName: T, state: SchemaRoot|null) => string | null;
+  loadingIds: Set<string>;
+}
+
+const FloroContext = createContext({
+  commandMode: "view",
+  applicationState: null,
+  hasLoaded: false,
+  saveState: (_state: null) => null,
+  loadingIds: new Set([]),
+} as IFloroContext);
+
+export interface Props {
+  children: React.ReactElement;
+}
+
+const MAX_DATA_SIZE = 10_000;
+const sendMessagetoParent = (id: string, pluginName: string, command: string, data: object) => {
+  const dataString = JSON.stringify({ command, data });
+  const totalPackets = Math.floor(dataString.length / MAX_DATA_SIZE);
+  for (let i = 0; i < dataString.length; i += MAX_DATA_SIZE) {
+    const chunk =
+      i + MAX_DATA_SIZE > dataString.length
+        ? dataString.substring(i)
+        : dataString.substring(i, i + MAX_DATA_SIZE);
+    setTimeout(() => {
+      window.parent?.postMessage(
+        {
+          id,
+          chunk,
+          index: i / MAX_DATA_SIZE,
+          totalPackets,
+          pluginName
+        },
+        "*"
+      );
+    }, 0);
+  }
+};
+
+export const FloroProvider = (props: Props) => {
+  const [pluginState, setPluginState] = useState<PluginState>({
+    commandMode: "view",
+    applicationState: null,
+  });
+  const [hasLoaded, setHasLoaded] = useState(false);
+  const [loadingIds, setLoadingIds] = useState<Set<string>>(new Set());
+  const ids = useRef<Set<string>>(new Set());
+
+  const incoming = useRef({});
+
+  const commandMode = useMemo(() => {
+    return pluginState.commandMode;
+  }, [pluginState.commandMode]);
+
+  const saveState = useCallback(
+    <T extends keyof SchemaRoot>(pluginName: T, state: SchemaRoot|null): string | null => {
+      if (commandMode != "edit") {
+        return null;
+      }
+      if (state == null || state[pluginName] == null) {
+        return null;
+      }
+      if (ids.current) {
+        const id = Math.random().toString(16).substring(2);
+        ids.current = new Set([...Array.from(ids.current), id]);
+        setLoadingIds(ids.current);
+        new Promise((resolve) => {
+          const onReturnId = ({ data }) => {
+            if (data.id == id) {
+              if (
+                incoming.current[data.id] &&
+                incoming.current[data.id].counter == data.totalPackets + 1
+              ) {
+                ids.current = new Set([
+                  ...Array.from(ids.current).filter((i) => i != id),
+                ]);
+                setLoadingIds(ids.current);
+                delete incoming.current[data.id];
+                window.removeEventListener("message", onReturnId);
+                resolve(id);
+              }
+            }
+          };
+          window.addEventListener("message", onReturnId);
+          sendMessagetoParent(id, pluginName, "save", state[pluginName]);
+        });
+        return id;
+      }
+      return null;
+    },
+    [commandMode, loadingIds]
+  );
+
+  const applicationState = useMemo(() => {
+    if (!hasLoaded) {
+      return {} as SchemaRoot;
+    }
+    return pluginState.applicationState;
+  }, [pluginState.applicationState, hasLoaded]);
+
+  useEffect(() => {
+    const onMessage = ({ data }: { data: Packet }) => {
+      if (!incoming.current[data.id]) {
+        incoming.current[data.id] = {
+          counter: 0,
+          data: new Array(data.totalPackets + 1),
+        };
+      }
+      incoming.current[data.id].data[data.index] = data.chunk;
+      incoming.current[data.id].counter++;
+      if (incoming.current[data.id].counter == data.totalPackets + 1) {
+        const response: {event: string, data: unknown} = JSON.parse(
+          incoming.current[data.id].data.join("")
+        );
+        if (response.event == "load") {
+            const state: PluginState = response.data as PluginState;
+            setPluginState(state);
+            setHasLoaded(true);
+        }
+        if (response.event == "ack" || response.event == "update") {
+            const state: PluginState = response.data as PluginState;
+            setPluginState(state);
+        }
+        if (!ids.current.has(data.id)) {
+          delete incoming.current[data.id];
+        }
+      }
+    };
+    window.addEventListener("message", onMessage);
+    return () => {
+      window.removeEventListener("message", onMessage);
+    };
+  }, []);
+
+  return (
+    <FloroContext.Provider
+      value={{
+        applicationState,
+        commandMode,
+        hasLoaded,
+        saveState,
+        loadingIds,
+      }}
+    >
+      {props.children}
+    </FloroContext.Provider>
+  );
+};
+
+export const useFloroContext = () => {
+  return useContext(FloroContext);
+};
+
+function getPluginNameFromQuery(query: string|null): keyof SchemaRoot|null {
+  if (query == null) {
+    return null;
+  }
+  const [pluginWrapper] = query.split(".");
+  const pluginName = /^\$\((.+)\)$/.exec(pluginWrapper as string)?.[1] ?? null;
+  if (!pluginName) {
+    return null;
+  }
+  return pluginName as keyof SchemaRoot;
+}
+`;
+exports.drawProviderApiCode = drawProviderApiCode;
+const drawUseFloroStateFunction = (diffables) => {
+    let code = "";
+    for (let diffable of diffables) {
+        const wildcard = (0, exports.renderDiffableToWildcard)(diffable);
+        code += `export function useFloroState(query: PointerTypes['${wildcard}'], defaultData?: SchemaTypes['${wildcard}'], mutateStoreWithDefault?: boolean): [SchemaTypes['${wildcard}']|null, (t: SchemaTypes['${wildcard}'], doSave?: boolean) => void, boolean, () => void];\n`;
+    }
+    code += exports.USE_FLORO_STATE_FUNCTION + "\n";
+    return code;
+};
+exports.drawUseFloroStateFunction = drawUseFloroStateFunction;
+exports.USE_FLORO_STATE_FUNCTION = `
+export function useFloroState<T>(query: string, defaultData?: T, mutateStoreWithDefault = true): [T|null, (t: T, doSave?: boolean) => void, boolean, () => void] {
+  const ctx = useFloroContext();
+  const pluginName = useMemo(() => getPluginNameFromQuery(query), [query]);
+  const objString = useMemo(() => {
+    if (!ctx.applicationState) {
+        return null;
+    }
+    const existingObj = getObjectInStateMap(
+      ctx.applicationState as SchemaRoot,
+      query
+    );
+    if (!existingObj) {
+      return null;
+    }
+    return JSON.stringify(existingObj);
+  }, [ctx.applicationState, query])
+
+  const obj = useMemo((): T|null => {
+    const existingObj = getObjectInStateMap(
+      ctx.applicationState as SchemaRoot,
+      query
+    );
+    if (existingObj) {
+      return existingObj as T;
+    }
+    if (ctx.applicationState && defaultData) {
+      if (mutateStoreWithDefault) {
+          updateObjectInStateMap(ctx.applicationState, query, defaultData);
+      }
+      return defaultData;
+    }
+    return null;
+  }, [objString, query, defaultData, mutateStoreWithDefault]);
+
+  const [getter, setter] = useState<T|null>(obj ?? defaultData ?? null);
+
+  const [id, setId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setter(obj);
+  }, [obj]);
+
+  const isLoading = useMemo(
+    () => !!id && ctx.loadingIds.has(id),
+    [id, ctx.loadingIds]
+  );
+
+  const save = useCallback(() => {
+    if (ctx.applicationState && pluginName && getter && ctx.commandMode == "edit" && !isLoading) {
+      updateObjectInStateMap(ctx.applicationState, query, getter);
+      const id = ctx.saveState(pluginName, ctx.applicationState);
+      if (id) {
+        setId(id);
+      }
+    }
+  }, [query, pluginName, ctx.applicationState, ctx.commandMode, getter]);
+
+  const set = useCallback((obj: T, save: boolean = false) => {
+    setter(obj);
+    if (save && ctx.applicationState && pluginName && obj && ctx.commandMode == "edit" && !isLoading) {
+      updateObjectInStateMap(ctx.applicationState, query, obj);
+      const id = ctx.saveState(pluginName, ctx.applicationState);
+      if (id) {
+        setId(id);
+      }
+    }
+  }, [query, pluginName, ctx.applicationState, ctx.commandMode])
+  return [getter, set, isLoading, save];
+};`;
 //# sourceMappingURL=plugins.js.map

@@ -874,18 +874,22 @@ const getInvalidStates = async (datasource, appKvState) => {
 exports.getInvalidStates = getInvalidStates;
 const renderApiReponse = async (datasource, renderedApplicationState, applicationKVState, repoState) => {
     const apiStoreInvalidity = await (0, exports.getInvalidStates)(datasource, applicationKVState);
+    const manifests = await (0, plugins_1.getPluginManifests)(datasource, renderedApplicationState.plugins);
+    const schemaMap = (0, plugins_1.manifestListToSchemaMap)(manifests);
     if (repoState.commandMode == "edit") {
         return {
             apiStoreInvalidity,
             repoState,
-            applicationState: renderedApplicationState
+            applicationState: renderedApplicationState,
+            schemaMap
         };
     }
     if (repoState.commandMode == "view") {
         return {
             apiStoreInvalidity,
             repoState,
-            applicationState: renderedApplicationState
+            applicationState: renderedApplicationState,
+            schemaMap
         };
     }
     if (repoState.commandMode == "compare") {

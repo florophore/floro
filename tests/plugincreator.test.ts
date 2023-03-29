@@ -180,7 +180,17 @@ describe("plugincreator", () => {
         datasource,
         PLUGIN_C_MANIFEST,
       );
-      expect(cDeps.deps).toEqual([PLUGIN_B_MANIFEST, PLUGIN_A_MANIFEST]);
+      expect(cDeps.deps).toEqual([{
+        name: "B",
+        version: "dev@0.0.0",
+        displayName: "B",
+        icon: "",
+        imports: {
+          A: "0.0.0",
+        },
+        types: {},
+        store: {},
+      }, PLUGIN_A_MANIFEST]);
     });
 
     test("discovers cyclic dependency errors", async () => {
@@ -999,6 +1009,15 @@ describe("plugincreator", () => {
                       subProp: {
                         type: "int",
                       },
+                      primitiveSet: {
+                        type: "set",
+                        values: "string"
+                      },
+                      someNestedThing: {
+                        innerMostString: {
+                          type: "string"
+                        }
+                      }
                     },
                   },
                 },
