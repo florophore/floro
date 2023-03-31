@@ -846,7 +846,7 @@ app.post(
       res.sendStatus(400);
       return;
     }
-    if (!manifest.imports[pluginNameToUpdate]) {
+    if (pluginName != pluginNameToUpdate && !manifest.imports[pluginNameToUpdate]) {
       res.sendStatus(400);
       return;
     }

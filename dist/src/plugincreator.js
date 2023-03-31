@@ -578,6 +578,8 @@ const generateTypeScriptAPI = async (datasource, manifest, useReact = true) => {
     code += getReferencePluginStoreCode;
     const useFloroStateCode = (0, plugins_1.drawUseFloroStateFunction)(diffableListWithPartials);
     code += useFloroStateCode;
+    const useFloroIsInvalidCode = (0, plugins_1.drawUseFloroStateFunction)(diffableListWithPartials);
+    code += useFloroIsInvalidCode;
     return code;
 };
 exports.generateTypeScriptAPI = generateTypeScriptAPI;

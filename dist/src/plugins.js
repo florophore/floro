@@ -4,7 +4,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.collectKeyRefs = exports.invalidSchemaPropsCheck = exports.isSchemaValid = exports.isTopologicalSubsetValid = exports.isTopologicalSubset = exports.pluginManifestIsSubsetOfManifest = exports.getPluginInvalidStateIndices = exports.validatePluginState = exports.collectFileRefs = exports.nullifyMissingFileRefs = exports.reIndexSchemaArrays = exports.cascadePluginState = exports.recursivelyCheckIfReferenceExists = exports.compileStatePointers = exports.getDownstreamDepsInSchemaMap = exports.getUpstreamDepsInSchemaMap = exports.getKVStateForPlugin = exports.getRootSchemaMap = exports.getRootSchemaForPlugin = exports.getExpandedTypesForPlugin = exports.getStateFromKVForPlugin = exports.buildObjectsAtPath = exports.indexArrayDuplicates = exports.flattenStateToSchemaPathKV = exports.getStateId = exports.decodeSchemaPathWithArrays = exports.decodeSchemaPath = exports.writePathStringWithArrays = exports.writePathString = exports.defaultVoidedState = exports.validatePluginManifest = exports.containsCyclicTypes = exports.schemaHasInvalidTypeSytax = exports.schemaManifestHasInvalidSyntax = exports.getSchemaMapForManifest = exports.verifyPluginDependencyCompatability = exports.coalesceDependencyVersions = exports.getUpstreamDependencyManifests = exports.getDependenciesForManifest = exports.hasPluginManifest = exports.hasPlugin = exports.manifestListToPluginList = exports.manifestListToSchemaMap = exports.pluginMapToList = exports.pluginListToMap = exports.getManifestMapFromManifestList = exports.getPluginManifests = exports.topSortManifests = exports.schemaMapsAreCompatible = exports.pluginManifestsAreCompatibleForUpdate = void 0;
-exports.USE_FLORO_STATE_FUNCTION = exports.drawUseFloroStateFunction = exports.drawProviderApiCode = exports.drawDiffableReturnTypes = exports.drawPointerTypes = exports.drawSchematicTypes = exports.renderDiffableToSchematicPath = exports.renderDiffableToWildcard = exports.renderDiffable = exports.drawDiffableQueryTypes = exports.drawGetPluginStore = exports.drawGetReferencedObject = exports.drawRefReturnTypes = exports.drawSchemaRoot = exports.drawMakeQueryRef = exports.getDiffablesListForTypestruct = exports.getDiffablesList = exports.buildPointerArgsMap = exports.buildPointerReturnTypeMap = exports.typestructsAreEquivalent = exports.replaceRawRefsInExpandedType = exports.replaceRefVarsWithWildcards = void 0;
+exports.USE_FLORO_IS_INVALID_FUNCTION = exports.drawUseIsFloroInvalidFunction = exports.USE_FLORO_STATE_FUNCTION = exports.drawUseFloroStateFunction = exports.drawProviderApiCode = exports.drawDiffableReturnTypes = exports.drawPointerTypes = exports.drawSchematicTypes = exports.renderDiffableToSchematicPath = exports.renderDiffableToWildcard = exports.renderDiffable = exports.drawDiffableQueryTypes = exports.drawGetPluginStore = exports.drawGetReferencedObject = exports.drawRefReturnTypes = exports.drawSchemaRoot = exports.drawMakeQueryRef = exports.getDiffablesListForTypestruct = exports.getDiffablesList = exports.buildPointerArgsMap = exports.buildPointerReturnTypeMap = exports.typestructsAreEquivalent = exports.replaceRawRefsInExpandedType = exports.replaceRefVarsWithWildcards = void 0;
 const axios_1 = __importDefault(require("axios"));
 const semver_1 = __importDefault(require("semver"));
 axios_1.default.defaults.validateStatus = function () {
@@ -1221,7 +1221,6 @@ const getSchemaAtPath = (rootSchema, path) => {
     catch (e) {
         return null;
     }
-    // ignore $(store)
 };
 const getStaticSchemaAtPath = (rootSchema, path) => {
     // ignore $(store)
@@ -2027,7 +2026,10 @@ const getPluginInvalidStateIndices = async (datasource, schemaMap, kvs, pluginNa
             }
             if (subSchema[prop]?.type &&
                 (!subSchema[prop]?.nullable || subSchema[prop]?.isKey) &&
-                value[prop] == null) {
+                (value[prop] == null ||
+                    ((subSchema[prop]?.type == "string" ||
+                        subSchema[prop]?.type == "file") &&
+                        value[prop] == ""))) {
                 out.push(i);
                 continue;
             }
@@ -2144,7 +2146,10 @@ const isTopologicalSubsetValid = async (datasource, oldSchemaMap, oldStateMap, n
             }
             if (subSchema[prop]?.type &&
                 (!subSchema[prop]?.nullable || subSchema[prop]?.isKey) &&
-                value[prop] == null) {
+                (value[prop] == null ||
+                    ((subSchema[prop]?.type == "string" ||
+                        subSchema[prop]?.type == "file") &&
+                        value[prop] == ""))) {
                 return false;
             }
         }
@@ -3069,7 +3074,7 @@ const getObjectInStateMap = (
 ): object | null => {
   let current: null | object = null;
   const [pluginWrapper, ...decodedPath] = decodeSchemaPathWithArrays(path);
-  const pluginName = /^\$\((.+)\)$/.exec(pluginWrapper as string)?.[1] ?? null;
+  const pluginName = /^\\$\\((.+)\\)$/.exec(pluginWrapper as string)?.[1] ?? null;
   if (pluginName == null) {
     return null;
   }
@@ -3108,8 +3113,8 @@ export const replaceRefVarsWithWildcards = (pathString: string): string => {
     .join(".");
 };
 
-export function containsDiffable(changeset: Set<string>, query: PartialDiffableQuery, fuzzy: true): boolean;
-export function containsDiffable(changeset: Set<string>, query: DiffableQuery, fuzzy: false): boolean;
+export function containsDiffable(changeset: Set<string>, query: PartialDiffableQuery, fuzzy: boolean): boolean;
+export function containsDiffable(changeset: Set<string>, query: DiffableQuery, fuzzy: boolean): boolean;
 export function containsDiffable(changeset: Set<string>, query: PartialDiffableQuery|DiffableQuery, fuzzy: boolean) {
   if (!fuzzy) {
     return changeset.has(query);
@@ -3128,7 +3133,7 @@ const getIndexPathInStateMap = (
 ): Array<string | number> | null => {
   let current: null | object = null;
   const [pluginWrapper, ...decodedPath] = decodeSchemaPathWithArrays(path);
-  const pluginName = /^\$\((.+)\)$/.exec(pluginWrapper as string)?.[1] ?? null;
+  const pluginName = /^\\$\\((.+)\\)$/.exec(pluginWrapper as string)?.[1] ?? null;
   const indexPath: Array<string | number> = [];
   if (pluginName == null) {
     return null;
@@ -3400,21 +3405,34 @@ interface Packet {
 interface PluginState {
   commandMode: "view" | "edit";
   applicationState: SchemaRoot | null;
+  apiStoreInvalidity: {[key: string]: Array<string>};
 }
 
 interface IFloroContext {
   commandMode: "view" | "edit";
   applicationState: SchemaRoot | null;
+  apiStoreInvalidity: {[key: string]: Array<string>};
+  apiStoreInvaliditySets: {[key: string]: Set<string>};
   hasLoaded: boolean;
   saveState: <T extends keyof SchemaRoot>(pluginName: T, state: SchemaRoot|null) => string | null;
+  setPluginState: (state: PluginState) => void;
+  pluginState: PluginState;
   loadingIds: Set<string>;
 }
 
 const FloroContext = createContext({
   commandMode: "view",
   applicationState: null,
+  apiStoreInvalidity: {},
+  apiStoreInvaliditySets: {},
   hasLoaded: false,
   saveState: (_state: null) => null,
+  setPluginState: (_state: PluginState) => {},
+  pluginState: {
+    commandMode: "view",
+    applicationState: null,
+    apiStoreInvalidity: {},
+  },
   loadingIds: new Set([]),
 } as IFloroContext);
 
@@ -3450,6 +3468,7 @@ export const FloroProvider = (props: Props) => {
   const [pluginState, setPluginState] = useState<PluginState>({
     commandMode: "view",
     applicationState: null,
+    apiStoreInvalidity: {}
   });
   const [hasLoaded, setHasLoaded] = useState(false);
   const [loadingIds, setLoadingIds] = useState<Set<string>>(new Set());
@@ -3460,6 +3479,21 @@ export const FloroProvider = (props: Props) => {
   const commandMode = useMemo(() => {
     return pluginState.commandMode;
   }, [pluginState.commandMode]);
+
+  useEffect(() => {
+    const commandToggleListeners = (event: KeyboardEvent) => {
+      if (event.metaKey && event.shiftKey && event.key == "p") {
+        window.parent?.postMessage("toggle-vcs", "*");
+      }
+      if (event.metaKey && event.shiftKey && event.key == "e") {
+        window.parent?.postMessage("toggle-command-mode", "*");
+      }
+    };
+    window.addEventListener("keydown", commandToggleListeners);
+    return () => {
+      window.removeEventListener("keydown", commandToggleListeners);
+    };
+  }, []);
 
   const saveState = useCallback(
     <T extends keyof SchemaRoot>(pluginName: T, state: SchemaRoot|null): string | null => {
@@ -3507,6 +3541,25 @@ export const FloroProvider = (props: Props) => {
     return pluginState.applicationState;
   }, [pluginState.applicationState, hasLoaded]);
 
+  const apiStoreInvalidity = useMemo(() => {
+    if (!hasLoaded) {
+      return {} as {[key: string]: Array<string>};
+    }
+    return pluginState.apiStoreInvalidity ?? {};
+  }, [pluginState.apiStoreInvalidity, hasLoaded]);
+
+  const apiStoreInvalidityStr = useMemo(() => {
+    return JSON.stringify(apiStoreInvalidity);
+  }, [apiStoreInvalidity]);
+
+  const apiStoreInvaliditySets = useMemo(() => {
+    const out: {[key: string]: Set<string>} = {};
+     for (let plugin in apiStoreInvalidity) {
+      out[plugin] = new Set(apiStoreInvalidity?.[plugin] ?? []);
+     }
+     return out;
+  }, [apiStoreInvalidityStr]);
+
   useEffect(() => {
     const onMessage = ({ data }: { data: Packet }) => {
       if (!incoming.current[data.id]) {
@@ -3535,9 +3588,10 @@ export const FloroProvider = (props: Props) => {
         }
       }
     };
-    window.addEventListener("message", onMessage);
+    window.addEventListener("message", onMessage, true);
+    window.parent?.postMessage("ready", "*");
     return () => {
-      window.removeEventListener("message", onMessage);
+      window.removeEventListener("message", onMessage, true);
     };
   }, []);
 
@@ -3545,9 +3599,13 @@ export const FloroProvider = (props: Props) => {
     <FloroContext.Provider
       value={{
         applicationState,
+        apiStoreInvalidity,
+        apiStoreInvaliditySets,
         commandMode,
         hasLoaded,
         saveState,
+        setPluginState,
+        pluginState,
         loadingIds,
       }}
     >
@@ -3565,7 +3623,7 @@ function getPluginNameFromQuery(query: string|null): keyof SchemaRoot|null {
     return null;
   }
   const [pluginWrapper] = query.split(".");
-  const pluginName = /^\$\((.+)\)$/.exec(pluginWrapper as string)?.[1] ?? null;
+  const pluginName = /^\\$\\((.+)\\)$/.exec(pluginWrapper as string)?.[1] ?? null;
   if (!pluginName) {
     return null;
   }
@@ -3601,7 +3659,11 @@ export function useFloroState<T>(query: string, defaultData?: T, mutateStoreWith
     return JSON.stringify(existingObj);
   }, [ctx.applicationState, query])
 
+
   const obj = useMemo((): T|null => {
+    if (!ctx.hasLoaded) {
+      return defaultData ?? null;
+    }
     const existingObj = getObjectInStateMap(
       ctx.applicationState as SchemaRoot,
       query
@@ -3609,14 +3671,15 @@ export function useFloroState<T>(query: string, defaultData?: T, mutateStoreWith
     if (existingObj) {
       return existingObj as T;
     }
+
+    if (mutateStoreWithDefault && ctx.applicationState && defaultData) {
+      updateObjectInStateMap(ctx.applicationState, query, defaultData);
+    }
     if (ctx.applicationState && defaultData) {
-      if (mutateStoreWithDefault) {
-          updateObjectInStateMap(ctx.applicationState, query, defaultData);
-      }
       return defaultData;
     }
     return null;
-  }, [objString, query, defaultData, mutateStoreWithDefault]);
+  }, [ctx.applicationState, query, defaultData, mutateStoreWithDefault, ctx.hasLoaded]);
 
   const [getter, setter] = useState<T|null>(obj ?? defaultData ?? null);
 
@@ -3624,7 +3687,7 @@ export function useFloroState<T>(query: string, defaultData?: T, mutateStoreWith
 
   useEffect(() => {
     setter(obj);
-  }, [obj]);
+  }, [objString]);
 
   const isLoading = useMemo(
     () => !!id && ctx.loadingIds.has(id),
@@ -3632,25 +3695,63 @@ export function useFloroState<T>(query: string, defaultData?: T, mutateStoreWith
   );
 
   const save = useCallback(() => {
-    if (ctx.applicationState && pluginName && getter && ctx.commandMode == "edit" && !isLoading) {
+    if (ctx.applicationState && pluginName && getter && ctx.commandMode == "edit") {
       updateObjectInStateMap(ctx.applicationState, query, getter);
+      ctx.setPluginState({
+        ...ctx.pluginState,
+        applicationState: ctx.applicationState
+      });
       const id = ctx.saveState(pluginName, ctx.applicationState);
       if (id) {
         setId(id);
       }
     }
-  }, [query, pluginName, ctx.applicationState, ctx.commandMode, getter]);
+  }, [query, pluginName, ctx.pluginState, ctx.applicationState, ctx.commandMode, getter]);
 
   const set = useCallback((obj: T, save: boolean = false) => {
     setter(obj);
-    if (save && ctx.applicationState && pluginName && obj && ctx.commandMode == "edit" && !isLoading) {
+    if (save && ctx.applicationState && pluginName && obj && ctx.commandMode == "edit") {
       updateObjectInStateMap(ctx.applicationState, query, obj);
+      ctx.setPluginState({
+        ...ctx.pluginState,
+        applicationState: ctx.applicationState
+      });
       const id = ctx.saveState(pluginName, ctx.applicationState);
       if (id) {
         setId(id);
       }
     }
-  }, [query, pluginName, ctx.applicationState, ctx.commandMode])
+  }, [query, pluginName, ctx.pluginState, ctx.applicationState, ctx.commandMode])
   return [getter, set, isLoading, save];
+};`;
+const drawUseIsFloroInvalidFunction = (diffables) => {
+    let code = "";
+    for (let diffable of diffables) {
+        const wildcard = (0, exports.renderDiffableToWildcard)(diffable);
+        code += `export function useIsFloroInvalid(query: PointerTypes['${wildcard}'], fuzzy?: boolean): boolean;\n`;
+    }
+    code += exports.USE_FLORO_IS_INVALID_FUNCTION + "\n";
+    return code;
+};
+exports.drawUseIsFloroInvalidFunction = drawUseIsFloroInvalidFunction;
+exports.USE_FLORO_IS_INVALID_FUNCTION = `
+export function useIsFloroInvalid(query: PartialDiffableQuery|DiffableQuery, fuzzy = true): boolean {
+  const ctx = useFloroContext();
+  const pluginName = useMemo(() => getPluginNameFromQuery(query), [query]);
+  const invalidQueriesSet = useMemo(() => {
+    if (!pluginName) {
+      return new Set() as Set<PartialDiffableQuery | DiffableQuery>;
+    }
+    return (
+      ctx.apiStoreInvaliditySets?.[pluginName] ??
+      (new Set() as Set<PartialDiffableQuery | DiffableQuery>)
+    );
+  }, [ctx.apiStoreInvaliditySets, pluginName]);
+  return useMemo(() => {
+    if (fuzzy) {
+      return containsDiffable(invalidQueriesSet, query, true);
+    }
+    return containsDiffable(invalidQueriesSet, query, false);
+  }, [invalidQueriesSet, query, fuzzy])
 };`;
 //# sourceMappingURL=plugins.js.map

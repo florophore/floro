@@ -563,7 +563,7 @@ app.post("/repo/:repoId/plugin/:pluginName/state", (0, cors_1.default)(corsOptio
         res.sendStatus(400);
         return;
     }
-    if (!manifest.imports[pluginNameToUpdate]) {
+    if (pluginName != pluginNameToUpdate && !manifest.imports[pluginNameToUpdate]) {
         res.sendStatus(400);
         return;
     }

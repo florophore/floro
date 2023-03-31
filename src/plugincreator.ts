@@ -768,5 +768,8 @@ export const generateTypeScriptAPI = async (
 
   const useFloroStateCode = drawUseFloroStateFunction(diffableListWithPartials);
   code += useFloroStateCode;
+
+  const useFloroIsInvalidCode = drawUseFloroStateFunction(diffableListWithPartials);
+  code += useFloroIsInvalidCode;
   return code;
 };
