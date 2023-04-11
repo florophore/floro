@@ -34,6 +34,7 @@ import {
   convertRenderedCommitStateToKv,
   getApplicationState,
   renderApiReponse,
+  renderSourceGraph,
 } from "./repo";
 import {
   getCurrentRepoBranch,
@@ -56,6 +57,9 @@ import {
   checkoutSha,
   updatePlugins,
   updatePluginState,
+  canSwitchShasWithWIP,
+  createRepoBranch,
+  deleteLocalBranch,
   //deleteBranch,
 } from "./repoapi";
 import { makeMemoizedDataSource, readDevPluginManifest, readDevPlugins, readDevPluginVersions } from "./datasource";
@@ -70,6 +74,7 @@ import {
   getDownstreamDepsInSchemaMap,
   getUpstreamDependencyManifests,
 } from "./plugins";
+import { SourceGraph } from "./sourcegraph";
 
 const remoteHost = getRemoteHostSync();
 
@@ -202,6 +207,7 @@ app.get(
       renderedState
     );
     const apiResponse = await renderApiReponse(
+      repoId,
       datasource,
       renderedState,
       applicationState,
@@ -212,6 +218,28 @@ app.get(
       return;
     }
     res.send(apiResponse);
+  }
+);
+
+app.get(
+  "/repo/:repoId/sourcegraph",
+  cors(corsOptionsDelegate),
+  async (req, res): Promise<void> => {
+    const repoId = req.params["repoId"];
+    if (!repoId) {
+      res.sendStatus(404);
+      return;
+    }
+    try {
+      const sourceGraphResponse = await renderSourceGraph(repoId, datasource);
+      if (!sourceGraphResponse) {
+        res.sendStatus(404);
+        return;
+      }
+      res.send(sourceGraphResponse);
+    } catch(e) {
+      res.sendStatus(400);
+    }
   }
 );
 
@@ -227,6 +255,7 @@ app.post(
       renderedState
     );
     const apiResponse = await renderApiReponse(
+      repoId,
       datasource,
       renderedState,
       applicationState,
@@ -254,18 +283,198 @@ app.get(
   }
 );
 
-app.post(
-  "/repo/:repoId/branch/:branch",
+
+app.get(
+  "/repo/:repoId/sha/:sha/canswitchwip",
   cors(corsOptionsDelegate),
   async (req, res): Promise<void> => {
     const repoId = req.params["repoId"];
-    const branchName = req.params["branch"];
-    const branch = await switchRepoBranch(datasource, repoId, branchName);
-    if (!branch) {
+    if (!repoId) {
+      res.sendStatus(404);
+      return;
+    }
+    const sha = req.params["sha"];
+    try {
+      const canSwitch = await canSwitchShasWithWIP(
+        datasource,
+        repoId,
+        sha
+      );
+      if (canSwitch == null) {
+        res.sendStatus(400);
+        return;
+      }
+      res.send({ canSwitch });
+    } catch(e) {
       res.sendStatus(400);
       return;
     }
-    res.send(branch);
+  }
+);
+
+app.post(
+  "/repo/:repoId/branch",
+  cors(corsOptionsDelegate),
+  async (req, res): Promise<void> => {
+    const repoId = req.params["repoId"];
+    if (!repoId) {
+      res.sendStatus(404);
+      return;
+    }
+    const branchName = req.body["branchName"] ?? "";
+    const branchHead = req.body["branchHead"] ?? null;
+    const baseBranchId = req.body["baseBranchId"] ?? null;
+    const switchBranchOnCreate = req.body["switchBranchOnCreate"] ?? true;
+    try {
+      if (switchBranchOnCreate && branchHead) {
+        const canSwitch = await canSwitchShasWithWIP(datasource, repoId, branchHead)
+        if (!canSwitch) {
+          res.sendStatus(400);
+          return;
+        }
+      }
+      const repoState = await createRepoBranch(
+        datasource,
+        repoId,
+        branchName,
+        branchHead,
+        baseBranchId,
+        switchBranchOnCreate
+      );
+
+      if (repoState == null) {
+        res.sendStatus(400);
+        return;
+      }
+
+      const renderedState = await getApplicationState(datasource, repoId);
+      const applicationState = await convertRenderedCommitStateToKv(
+        datasource,
+        renderedState
+      );
+      const apiResponse = await renderApiReponse(
+        repoId,
+        datasource,
+        renderedState,
+        applicationState,
+        repoState
+      );
+
+      const sourceGraphResponse = await renderSourceGraph(repoId, datasource);
+      res.send({
+        apiResponse,
+        sourceGraphResponse
+      });
+    } catch(e) {
+      res.sendStatus(400);
+      return null;
+    }
+  }
+);
+
+
+app.post(
+  "/repo/:repoId/branch/switch",
+  cors(corsOptionsDelegate),
+  async (req, res): Promise<void> => {
+    const repoId = req.params["repoId"];
+    if (!repoId) {
+      res.sendStatus(404);
+      return;
+    }
+    const branchId = req.body["branchId"] ?? "";
+    const branch = branchId ? await datasource.readBranch(repoId, branchId) : null;
+    try {
+      const canSwitch = await canSwitchShasWithWIP(datasource, repoId, branch?.lastCommit)
+      if (!canSwitch) {
+        res.sendStatus(400);
+        return;
+      }
+      const repoState = await switchRepoBranch(
+        datasource,
+        repoId,
+        branch?.id
+      );
+
+      if (repoState == null) {
+        res.sendStatus(400);
+        return;
+      }
+
+      const renderedState = await getApplicationState(datasource, repoId);
+      const applicationState = await convertRenderedCommitStateToKv(
+        datasource,
+        renderedState
+      );
+      const apiResponse = await renderApiReponse(
+        repoId,
+        datasource,
+        renderedState,
+        applicationState,
+        repoState
+      );
+
+      const sourceGraphResponse = await renderSourceGraph(repoId, datasource);
+      res.send({
+        apiResponse,
+        sourceGraphResponse
+      });
+    } catch(e) {
+      res.sendStatus(400);
+      return null;
+    }
+  }
+);
+
+app.post(
+  "/repo/:repoId/branch/:branchId/delete",
+  cors(corsOptionsDelegate),
+  async (req, res): Promise<void> => {
+    const repoId = req.params["repoId"];
+    if (!repoId) {
+      res.sendStatus(404);
+      return;
+    }
+    const branchId = req.body["branchId"] ?? "";
+    const branch = branchId ? await datasource.readBranch(repoId, branchId) : null;
+    try {
+      if (!branch) {
+        res.sendStatus(400);
+        return;
+      }
+      const repoState = await deleteLocalBranch(
+        datasource,
+        repoId,
+        branch?.id
+      );
+
+      if (repoState == null) {
+        res.sendStatus(400);
+        return;
+      }
+
+      const renderedState = await getApplicationState(datasource, repoId);
+      const applicationState = await convertRenderedCommitStateToKv(
+        datasource,
+        renderedState
+      );
+      const apiResponse = await renderApiReponse(
+        repoId,
+        datasource,
+        renderedState,
+        applicationState,
+        repoState
+      );
+
+      const sourceGraphResponse = await renderSourceGraph(repoId, datasource);
+      res.send({
+        apiResponse,
+        sourceGraphResponse
+      });
+    } catch(e) {
+      res.sendStatus(400);
+      return null;
+    }
   }
 );
 
@@ -280,21 +489,6 @@ app.get(
       return;
     }
     res.send(settings);
-  }
-);
-
-app.post(
-  "/repo/:repoId/checkout/branch/:branch",
-  cors(corsOptionsDelegate),
-  async (req, res): Promise<void> => {
-    const repoId = req.params["repoId"];
-    const branchName = req.params["branch"];
-    const state = await switchRepoBranch(datasource, repoId, branchName);
-    if (!state) {
-      res.sendStatus(400);
-      return;
-    }
-    res.send(state);
   }
 );
 
@@ -357,6 +551,7 @@ app.post(
       convertRenderedCommitStateToKv(datasource, renderedState),
     ]);
     const apiResponse = await renderApiReponse(
+      repoId,
       datasource,
       renderedState,
       applicationState,
@@ -399,6 +594,7 @@ app.post(
       convertRenderedCommitStateToKv(datasource, renderedState),
     ]);
     const apiResponse = await renderApiReponse(
+      repoId,
       datasource,
       renderedState,
       applicationState,
@@ -806,6 +1002,7 @@ app.post(
       convertRenderedCommitStateToKv(datasource, renderedState),
     ]);
     const apiResponse = await renderApiReponse(
+      repoId,
       datasource,
       renderedState,
       applicationState,
@@ -861,6 +1058,7 @@ app.post(
       convertRenderedCommitStateToKv(datasource, renderedState),
     ]);
     const apiResponse = await renderApiReponse(
+      repoId,
       datasource,
       renderedState,
       applicationState,

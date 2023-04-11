@@ -2,6 +2,7 @@ import { Branch, RenderedApplicationState, RepoState } from "./repo";
 import { CommitData } from "./versioncontrol";
 import { PluginElement } from "./plugins";
 import { DataSource } from "./datasource";
+export declare const ILLEGAL_BRANCH_NAMES: Set<string>;
 export declare const writeRepoDescription: (datasource: DataSource, repoId?: string, description?: string) => Promise<RenderedApplicationState>;
 export declare const writeRepoLicenses: (datasource: DataSource, repoId?: string, licensesInput?: Array<{
     key: string;
@@ -14,8 +15,9 @@ export declare const readRepoLicenses: (datasource: DataSource, repoId?: string)
 export declare const readRepoDescription: (datasource: DataSource, repoId?: string) => Promise<string[]>;
 export declare const getCurrentRepoBranch: (datasource: DataSource, repoId?: string) => Promise<Branch>;
 export declare const getRepoBranches: (datasource: DataSource, repoId?: string) => Promise<Branch[]>;
-export declare const createRepoBranch: (datasource: DataSource, repoId?: string, branchName?: string, baseBranchId?: string) => Promise<RepoState>;
+export declare const createRepoBranch: (datasource: DataSource, repoId?: string, branchName?: string, branchHead?: string, baseBranchId?: string, shouldSwitchToNewBranch?: boolean) => Promise<RepoState>;
 export declare const switchRepoBranch: (datasource: DataSource, repoId?: string, branchId?: string) => Promise<RepoState>;
+export declare const deleteLocalBranch: (datasource: DataSource, repoId?: string, branchId?: string) => Promise<RepoState>;
 export declare const deleteUserBranch: (datasource: DataSource, repoId?: string, branchId?: string) => Promise<RenderedApplicationState>;
 export declare const readSettings: (datasource: DataSource, repoId?: string) => Promise<import("./repo").RepoSetting>;
 export declare const readLastCommit: (datasource: DataSource, repoId?: string) => Promise<CommitData>;
@@ -49,3 +51,4 @@ export declare const canPopStashedChanges: (datasource: DataSource, repoId: stri
 export declare const popStashedChanges: (datasource: DataSource, repoId: string) => Promise<RenderedApplicationState>;
 export declare const applyStashedChange: (datasource: DataSource, repoId: string, index: number) => Promise<RenderedApplicationState>;
 export declare const discardCurrentChanges: (datasource: DataSource, repoId: string) => Promise<RenderedApplicationState>;
+export declare const canSwitchShasWithWIP: (datasource: DataSource, repoId: string, toSha?: string) => Promise<boolean>;

@@ -39,6 +39,7 @@ import {
   hashString,
   StringDiff,
 } from "./versioncontrol";
+import { SourceCommitNode, SourceGraph } from "./sourcegraph";
 
 export interface RepoState {
   branch: string | null;
@@ -167,6 +168,17 @@ export interface ApiReponse {
   beforeState?: RenderedApplicationState;
   apiDiff?: ApiDiff;
   apiStoreInvalidity?: ApiStoreInvalidity;
+  isWIP?: boolean;
+  branch?: Branch;
+  baseBranch?: Branch;
+  lastCommit?: CommitData;
+}
+
+export interface SourceGraphResponse {
+  pointers: { [sha: string]: SourceCommitNode };
+  rootNodes: Array<SourceCommitNode>;
+  branches: Array<Branch>;
+  branchesMetaState: BranchesMetaState;
 }
 
 export const EMPTY_COMMIT_STATE: ApplicationKVState = {
@@ -195,7 +207,7 @@ export const EMPTY_COMMIT_DIFF: StateDiff = {
 
 const CHECKPOINT_MODULO = 50;
 
-export const BRANCH_NAME_REGEX = /^[-_ a-zA-Z0-9]{3,100}$/;
+export const BRANCH_NAME_REGEX = /^[-_ ()[\]'"|a-zA-Z0-9]{3,100}$/;
 
 export const getRepos = async (): Promise<string[]> => {
   const repoDir = await fs.promises.readdir(vReposPath);
@@ -207,7 +219,7 @@ export const getRepos = async (): Promise<string[]> => {
 };
 
 export const getBranchIdFromName = (name: string): string => {
-  return name.toLowerCase().replaceAll(" ", "-");
+  return name.toLowerCase().replaceAll(" ", "-").replaceAll(/[[\]'"]/g, "");
 };
 
 export const getAddedDeps = (
@@ -357,9 +369,6 @@ export const canCommit = async (
     // ensure safe
   }
   const currentState = await datasource.readCurrentRepoState(repoId);
-  if (currentState.commandMode != "view") {
-    return false;
-  }
   if (!currentState) {
     return false;
   }
@@ -684,24 +693,23 @@ export const updateCurrentWithSHA = async (
 export const updateCurrentWithNewBranch = async (
   datasource: DataSource,
   repoId: string,
-  branchId: string
+  branch: Branch
 ): Promise<RepoState | null> => {
   try {
     const current = await datasource.readCurrentRepoState(repoId);
     if (current.isInMergeConflict) {
       return null;
     }
-    const branch = await datasource.readBranch(repoId, branchId);
     const updated = {
       ...current,
-      commit: branch.lastCommit,
+      commit: branch?.lastCommit,
       branch: branch.id,
     };
     await datasource.saveCurrentRepoState(repoId, updated);
     const unrenderedState = await getCommitState(
       datasource,
       repoId,
-      branch.lastCommit
+      branch?.lastCommit
     );
     const renderedState = await convertCommitStateToRenderedState(
       datasource,
@@ -731,11 +739,7 @@ export const updateCurrentBranch = async (
       branch: branchId,
     };
     await datasource.saveBranch(repoId, branchId, branch);
-    const out = await datasource.saveCurrentRepoState(repoId, updated);
-    const state = await getCommitState(datasource, repoId, branch.lastCommit);
-    const renderedState = await convertCommitStateToRenderedState(datasource, state);
-    await datasource.saveRenderedState(repoId, renderedState);
-    return out;
+    return await datasource.saveCurrentRepoState(repoId, updated);
   } catch (e) {
     return null;
   }
@@ -1305,35 +1309,125 @@ export const getInvalidStates = async (
   return store;
 }
 
+export const getIsWip = (
+  unstagedState: ApplicationKVState,
+  applicationKVState: ApplicationKVState,
+
+) => {
+    const diff = getStateDiffFromCommitStates(unstagedState, applicationKVState);
+    return !diffIsEmpty(diff);
+}
+
+export const getBranchFromRepoState = async (
+  repoId: string,
+  datasource: DataSource,
+  repoState: RepoState
+) => {
+  if (!repoState?.branch) {
+    return null;
+  }
+  return (await datasource.readBranch(repoId, repoState?.branch)) ?? null;
+}
+
+export const getBaseBranchFromBranch = async (
+  repoId: string,
+  datasource: DataSource,
+  branch: Branch
+) => {
+  if (!branch) {
+    return null;
+  }
+  if (!branch?.baseBranchId) {
+    return null;
+  }
+  return (await datasource.readBranch(repoId, branch?.baseBranchId)) ?? null;
+}
+
+export const getLastCommitFromRepoState = async (
+  repoId: string,
+  datasource: DataSource,
+  repoState: RepoState
+) => {
+  if (!repoState?.commit) {
+    return null;
+  }
+  return (await datasource.readCommit(repoId, repoState?.commit)) ?? null;
+}
+
 export const renderApiReponse = async (
+  repoId: string,
   datasource: DataSource,
   renderedApplicationState: RenderedApplicationState,
   applicationKVState: ApplicationKVState,
-  repoState: RepoState,
+  repoState: RepoState
 ): Promise<ApiReponse> => {
   const apiStoreInvalidity = await getInvalidStates(datasource, applicationKVState);
   const manifests = await getPluginManifests(datasource, renderedApplicationState.plugins);
   const schemaMap = manifestListToSchemaMap(manifests);
+  const branch = await getBranchFromRepoState(repoId, datasource, repoState);
+  const baseBranch = await getBaseBranchFromBranch(repoId, datasource, branch);
+  const lastCommit = await getLastCommitFromRepoState(repoId, datasource, repoState);
   if (repoState.commandMode == "edit") {
     return {
       apiStoreInvalidity,
       repoState,
       applicationState: renderedApplicationState,
-      schemaMap
+      schemaMap,
+      branch,
+      baseBranch,
+      lastCommit
     }
   }
 
+  const unstagedState = await getUnstagedCommitState(datasource, repoId);
+  const isWIP = unstagedState && getIsWip(unstagedState, applicationKVState);
   if (repoState.commandMode == "view") {
     return {
       apiStoreInvalidity,
       repoState,
       applicationState: renderedApplicationState,
-      schemaMap
+      schemaMap,
+      branch,
+      baseBranch,
+      lastCommit,
+      isWIP
     }
   }
   if (repoState.commandMode == "compare") {
+    return {
+      apiStoreInvalidity,
+      repoState,
+      applicationState: renderedApplicationState,
+      schemaMap,
+      branch,
+      baseBranch,
+      lastCommit,
+      isWIP
+    }
 
   }
   return null;
 
 }
+
+export const renderSourceGraph = async (
+  repoId: string,
+  datasource: DataSource
+): Promise<SourceGraphResponse> => {
+  try {
+    const sourcegraph = new SourceGraph(datasource, repoId);
+    const [, branches, branchesMetaState] = await Promise.all([
+      sourcegraph.buildGraph(),
+      datasource.readBranches(repoId),
+      datasource.readBranchesMetaState(repoId),
+    ]);
+    return {
+      rootNodes: sourcegraph.getGraph(),
+      pointers: sourcegraph.getPointers(),
+      branches,
+      branchesMetaState,
+    };
+  } catch (e) {
+    return null;
+  }
+};

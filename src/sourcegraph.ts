@@ -1,7 +1,8 @@
 import { DataSource } from "./datasource";
-import { CommitHistory } from "./repo";
+import { Branch, CommitHistory } from "./repo";
 
 export interface SourceCommitNode extends CommitHistory {
+    children?: Array<SourceCommitNode>;
     message: string;
     userId: string;
     authorUserId: string;
@@ -11,8 +12,7 @@ export interface SourceCommitNode extends CommitHistory {
     isInUserBranchLineage?: boolean;
     isCurrent?: boolean;
     isUserBranch?: boolean;
-    branchId?: string;
-    children?: Array<SourceCommitNode>;
+    branchIds?: Array<string>;
 }
 
 export class SourceGraph {
@@ -52,7 +52,13 @@ export class SourceGraph {
         const branchesMetaState = await this.datasource.readBranchesMetaState(this.repoId);
         for (let branch of branchesMetaState.allBranches) {
             let node = this.pointers[branch.lastLocalCommit];
-            node.branchId = branch.branchId;
+            if (!node) {
+                continue;
+            }
+            if (!node?.branchIds) {
+                node.branchIds = [];
+            }
+            node.branchIds.push(branch.branchId);
             node.isInBranchLineage = true;
             for (let i = node.idx -1; i >= 0; i--) {
                 if (node.parent) {
@@ -64,6 +70,9 @@ export class SourceGraph {
 
         for (let branch of branchesMetaState.userBranches) {
             let node = this.pointers[branch.lastLocalCommit];
+            if (!node) {
+                continue;
+            }
             node.isInUserBranchLineage = true;
             for (let i = node.idx -1; i >= 0; i--) {
                 if (node.parent) {
@@ -83,4 +92,78 @@ export class SourceGraph {
         return this.roots;
     }
 
+    public getPointers(): {[sha: string]: SourceCommitNode} {
+        return this.pointers;
+    }
+
+}
+
+export const getTopologicalBranchMap = (
+  branches: Array<Branch>
+): { [key: string]: string } => {
+  return branches.reduce((acc, branch) => {
+    return {
+      ...acc,
+      [branch.id]: branch.baseBranchId,
+    };
+  }, {});
+};
+
+export const getBranchMap = (
+  branches: Array<Branch>
+): { [key: string]: Branch } => {
+  return branches.reduce((acc, branch) => {
+    return {
+      ...acc,
+      [branch.id]: branch,
+    };
+  }, {});
+};
+
+const getBranchTopOrder = (
+  branchId: string,
+  branchMap: { [key: string]: string },
+  out: Array<string> = []
+): Array<string> => {
+  if (!branchMap?.[branchId]) {
+    return out;
+  }
+  return getBranchTopOrder(branchMap[branchId], branchMap, [
+    ...out,
+    branchMap[branchId],
+  ]);
+};
+
+export const getPotentialBaseBranchesForSha = (
+  sha: string|undefined|null,
+  branches: Array<Branch>,
+  pointerMap: { [sha: string]: SourceCommitNode } = {}
+): Array<Branch> => {
+  if (!sha) {
+    return branches.filter?.(b => !b?.lastCommit) ?? [];
+  }
+
+  const sourceCommit = pointerMap[sha];
+  if (!sourceCommit) {
+    return branches.filter?.(b => !b?.lastCommit) ?? [];
+  }
+  const visitedBranches = new Set<string>([]);
+  const branchMap = getBranchMap(branches);
+  const topologicalBranchMap = getTopologicalBranchMap(branches);
+  const order: Array<string> = [];
+  let index = 0;
+  for (const branchId of sourceCommit?.branchIds ?? []) {
+    const upsteamBranches = [branchId, ...getBranchTopOrder(branchId, topologicalBranchMap)];
+    for (let bId of upsteamBranches) {
+      if (bId && !visitedBranches.has(bId)) {
+        visitedBranches.add(bId);
+        order[bId] = index++;
+      }
+    }
+  }
+  const out: Array<Branch> = [];
+  for (const branchId of order) {
+    out.push(branchMap[branchId]);
+  }
+  return out;
 }

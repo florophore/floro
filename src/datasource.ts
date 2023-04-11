@@ -486,7 +486,8 @@ const readBranch = async (
     const branch = JSON.parse(branchData.toString());
     return {
       ...branch,
-      name: branchId,
+      id: branchId,
+      baseBranchId: branch?.baseBranchId ?? null
     };
   } catch (e) {
     return null;
@@ -623,6 +624,7 @@ const readCommits = async (
             message: commit.message,
             timestamp: commit.timestamp,
             children: [],
+            branchIds: []
           };
         });
       }
@@ -955,13 +957,13 @@ export const makeMemoizedDataSource = (dataSourceOverride: DataSource = {}) => {
   const branchesMemo = {};
   const _readBranch = async (
     repoId: string,
-    branchName: string
+    branchId: string
   ): Promise<Branch> => {
-    const branchMemoString = repoId + "-" + branchName;
+    const branchMemoString = repoId + "-" + branchId;
     if (branchMemo[branchMemoString]) {
       return branchMemo[branchMemoString];
     }
-    const result = await dataSource.readBranch(repoId, branchName);
+    const result = await dataSource.readBranch(repoId, branchId);
     if (result) {
       branchMemo[branchMemoString] = result;
     }

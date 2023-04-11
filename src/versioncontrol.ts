@@ -97,6 +97,7 @@ export const getDiffHash = (commitData: CommitData): string => {
   if (!commitData.timestamp) {
     return null;
   }
+  // DO NOT INCLUDE MESSAGE IN HASH
   if (!commitData.message) {
     return null;
   }
@@ -104,7 +105,7 @@ export const getDiffHash = (commitData: CommitData): string => {
   if (!commitData.parent && !commitData.historicalParent) {
     const str = `userId:${commitData.userId}/authorUserId:${
       commitData.authorUserId ?? commitData.userId
-    }/timestamp:${commitData.timestamp}/message:${commitData.message}/idx:${
+    }/timestamp:${commitData.timestamp}/idx:${
       commitData.idx
     }/mergeBase:${commitData?.mergeBase ?? "none"}/diff:${diffString}`;
     return Crypto.SHA256(str);
@@ -112,9 +113,7 @@ export const getDiffHash = (commitData: CommitData): string => {
   if (!commitData.parent) {
     const str = `userId:${commitData.userId}/authorUserId:${
       commitData.authorUserId ?? commitData.userId
-    }/timestamp:${commitData.timestamp}/message:${
-      commitData.message
-    }/historicalParent:${commitData.historicalParent}/idx:${
+    }/timestamp:${commitData.timestamp}/historicalParent:${commitData.historicalParent}/idx:${
       commitData.idx
     }/mergeBase:${commitData?.mergeBase ?? "none"}/diff:${diffString}`;
     return Crypto.SHA256(str);
@@ -122,7 +121,7 @@ export const getDiffHash = (commitData: CommitData): string => {
   if (!commitData.historicalParent) {
     const str = `userId:${commitData.userId}/authorUserId:${
       commitData.authorUserId ?? commitData.userId
-    }/timestamp:${commitData.timestamp}/message:${commitData.message}/parent:${
+    }/timestamp:${commitData.timestamp}/parent:${
       commitData.parent
     }/idx:${commitData.idx}/mergeBase:${
       commitData?.mergeBase ?? "none"
@@ -131,7 +130,7 @@ export const getDiffHash = (commitData: CommitData): string => {
   }
   const str = `userId:${commitData.userId}/authorUserId:${
     commitData.authorUserId ?? commitData.userId
-  }/timestamp:${commitData.timestamp}/message:${commitData.message}/parent:${
+  }/timestamp:${commitData.timestamp}/parent:${
     commitData.parent
   }/historicalParent:${commitData.historicalParent}/idx:${
     commitData.idx

@@ -26,7 +26,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.renderApiReponse = exports.getInvalidStates = exports.getApiDiff = exports.canAutoMergeOnTopCurrentState = exports.getMergedCommitState = exports.canAutoMergeCommitStates = exports.getMergeCommitStates = exports.getStateDiffFromCommitStates = exports.uniqueStrings = exports.uniqueKV = exports.mergeTokenStores = exports.detokenizeStore = exports.tokenizeCommitState = exports.convertCommitStateToRenderedState = exports.convertRenderedStateStoreToKV = exports.convertStateStoreToKV = exports.buildStateStore = exports.changeCommandMode = exports.getPluginsToRunUpdatesOn = exports.updateCurrentBranch = exports.updateCurrentWithNewBranch = exports.updateCurrentWithSHA = exports.updateCurrentCommitSHA = exports.convertRenderedCommitStateToKv = exports.getApplicationState = exports.getUnstagedCommitState = exports.getCurrentBranch = exports.applyStateDiffToCommitState = exports.getCommitState = exports.getDivergenceOriginSha = exports.getBaseDivergenceSha = exports.getHistory = exports.buildCommitData = exports.canCommit = exports.diffIsEmpty = exports.getCurrentCommitSha = exports.cloneRepo = exports.getRemovedDeps = exports.getAddedDeps = exports.getBranchIdFromName = exports.getRepos = exports.BRANCH_NAME_REGEX = exports.EMPTY_COMMIT_DIFF = exports.EMPTY_RENDERED_APPLICATION_STATE = exports.EMPTY_COMMIT_STATE = void 0;
+exports.renderSourceGraph = exports.renderApiReponse = exports.getLastCommitFromRepoState = exports.getBaseBranchFromBranch = exports.getBranchFromRepoState = exports.getIsWip = exports.getInvalidStates = exports.getApiDiff = exports.canAutoMergeOnTopCurrentState = exports.getMergedCommitState = exports.canAutoMergeCommitStates = exports.getMergeCommitStates = exports.getStateDiffFromCommitStates = exports.uniqueStrings = exports.uniqueKV = exports.mergeTokenStores = exports.detokenizeStore = exports.tokenizeCommitState = exports.convertCommitStateToRenderedState = exports.convertRenderedStateStoreToKV = exports.convertStateStoreToKV = exports.buildStateStore = exports.changeCommandMode = exports.getPluginsToRunUpdatesOn = exports.updateCurrentBranch = exports.updateCurrentWithNewBranch = exports.updateCurrentWithSHA = exports.updateCurrentCommitSHA = exports.convertRenderedCommitStateToKv = exports.getApplicationState = exports.getUnstagedCommitState = exports.getCurrentBranch = exports.applyStateDiffToCommitState = exports.getCommitState = exports.getDivergenceOriginSha = exports.getBaseDivergenceSha = exports.getHistory = exports.buildCommitData = exports.canCommit = exports.diffIsEmpty = exports.getCurrentCommitSha = exports.cloneRepo = exports.getRemovedDeps = exports.getAddedDeps = exports.getBranchIdFromName = exports.getRepos = exports.BRANCH_NAME_REGEX = exports.EMPTY_COMMIT_DIFF = exports.EMPTY_RENDERED_APPLICATION_STATE = exports.EMPTY_COMMIT_STATE = void 0;
 const axios_1 = __importDefault(require("axios"));
 const fs_1 = __importStar(require("fs"));
 const path_1 = __importDefault(require("path"));
@@ -35,6 +35,7 @@ const filestructure_1 = require("./filestructure");
 const multiplexer_1 = require("./multiplexer");
 const plugins_1 = require("./plugins");
 const versioncontrol_1 = require("./versioncontrol");
+const sourcegraph_1 = require("./sourcegraph");
 exports.EMPTY_COMMIT_STATE = {
     description: [],
     licenses: [],
@@ -57,7 +58,7 @@ exports.EMPTY_COMMIT_DIFF = {
     binaries: { add: {}, remove: {} },
 };
 const CHECKPOINT_MODULO = 50;
-exports.BRANCH_NAME_REGEX = /^[-_ a-zA-Z0-9]{3,100}$/;
+exports.BRANCH_NAME_REGEX = /^[-_ ()[\]'"|a-zA-Z0-9]{3,100}$/;
 const getRepos = async () => {
     const repoDir = await fs_1.default.promises.readdir(filestructure_1.vReposPath);
     return repoDir?.filter((repoName) => {
@@ -66,7 +67,7 @@ const getRepos = async () => {
 };
 exports.getRepos = getRepos;
 const getBranchIdFromName = (name) => {
-    return name.toLowerCase().replaceAll(" ", "-");
+    return name.toLowerCase().replaceAll(" ", "-").replaceAll(/[[\]'"]/g, "");
 };
 exports.getBranchIdFromName = getBranchIdFromName;
 const getAddedDeps = (oldPlugins, newPlugins) => {
@@ -201,9 +202,6 @@ const canCommit = async (datasource, repoId, user, message, diff) => {
         // ensure safe
     }
     const currentState = await datasource.readCurrentRepoState(repoId);
-    if (currentState.commandMode != "view") {
-        return false;
-    }
     if (!currentState) {
         return false;
     }
@@ -443,20 +441,19 @@ const updateCurrentWithSHA = async (datasource, repoId, sha, isResolvingMerge) =
     }
 };
 exports.updateCurrentWithSHA = updateCurrentWithSHA;
-const updateCurrentWithNewBranch = async (datasource, repoId, branchId) => {
+const updateCurrentWithNewBranch = async (datasource, repoId, branch) => {
     try {
         const current = await datasource.readCurrentRepoState(repoId);
         if (current.isInMergeConflict) {
             return null;
         }
-        const branch = await datasource.readBranch(repoId, branchId);
         const updated = {
             ...current,
-            commit: branch.lastCommit,
+            commit: branch?.lastCommit,
             branch: branch.id,
         };
         await datasource.saveCurrentRepoState(repoId, updated);
-        const unrenderedState = await (0, exports.getCommitState)(datasource, repoId, branch.lastCommit);
+        const unrenderedState = await (0, exports.getCommitState)(datasource, repoId, branch?.lastCommit);
         const renderedState = await (0, exports.convertCommitStateToRenderedState)(datasource, unrenderedState);
         await datasource.saveRenderedState(repoId, renderedState);
         return updated;
@@ -479,11 +476,7 @@ const updateCurrentBranch = async (datasource, repoId, branchId) => {
             branch: branchId,
         };
         await datasource.saveBranch(repoId, branchId, branch);
-        const out = await datasource.saveCurrentRepoState(repoId, updated);
-        const state = await (0, exports.getCommitState)(datasource, repoId, branch.lastCommit);
-        const renderedState = await (0, exports.convertCommitStateToRenderedState)(datasource, state);
-        await datasource.saveRenderedState(repoId, renderedState);
-        return out;
+        return await datasource.saveCurrentRepoState(repoId, updated);
     }
     catch (e) {
         return null;
@@ -872,29 +865,100 @@ const getInvalidStates = async (datasource, appKvState) => {
     return store;
 };
 exports.getInvalidStates = getInvalidStates;
-const renderApiReponse = async (datasource, renderedApplicationState, applicationKVState, repoState) => {
+const getIsWip = (unstagedState, applicationKVState) => {
+    const diff = (0, exports.getStateDiffFromCommitStates)(unstagedState, applicationKVState);
+    return !(0, exports.diffIsEmpty)(diff);
+};
+exports.getIsWip = getIsWip;
+const getBranchFromRepoState = async (repoId, datasource, repoState) => {
+    if (!repoState?.branch) {
+        return null;
+    }
+    return (await datasource.readBranch(repoId, repoState?.branch)) ?? null;
+};
+exports.getBranchFromRepoState = getBranchFromRepoState;
+const getBaseBranchFromBranch = async (repoId, datasource, branch) => {
+    if (!branch) {
+        return null;
+    }
+    if (!branch?.baseBranchId) {
+        return null;
+    }
+    return (await datasource.readBranch(repoId, branch?.baseBranchId)) ?? null;
+};
+exports.getBaseBranchFromBranch = getBaseBranchFromBranch;
+const getLastCommitFromRepoState = async (repoId, datasource, repoState) => {
+    if (!repoState?.commit) {
+        return null;
+    }
+    return (await datasource.readCommit(repoId, repoState?.commit)) ?? null;
+};
+exports.getLastCommitFromRepoState = getLastCommitFromRepoState;
+const renderApiReponse = async (repoId, datasource, renderedApplicationState, applicationKVState, repoState) => {
     const apiStoreInvalidity = await (0, exports.getInvalidStates)(datasource, applicationKVState);
     const manifests = await (0, plugins_1.getPluginManifests)(datasource, renderedApplicationState.plugins);
     const schemaMap = (0, plugins_1.manifestListToSchemaMap)(manifests);
+    const branch = await (0, exports.getBranchFromRepoState)(repoId, datasource, repoState);
+    const baseBranch = await (0, exports.getBaseBranchFromBranch)(repoId, datasource, branch);
+    const lastCommit = await (0, exports.getLastCommitFromRepoState)(repoId, datasource, repoState);
     if (repoState.commandMode == "edit") {
         return {
             apiStoreInvalidity,
             repoState,
             applicationState: renderedApplicationState,
-            schemaMap
+            schemaMap,
+            branch,
+            baseBranch,
+            lastCommit
         };
     }
+    const unstagedState = await (0, exports.getUnstagedCommitState)(datasource, repoId);
+    const isWIP = unstagedState && (0, exports.getIsWip)(unstagedState, applicationKVState);
     if (repoState.commandMode == "view") {
         return {
             apiStoreInvalidity,
             repoState,
             applicationState: renderedApplicationState,
-            schemaMap
+            schemaMap,
+            branch,
+            baseBranch,
+            lastCommit,
+            isWIP
         };
     }
     if (repoState.commandMode == "compare") {
+        return {
+            apiStoreInvalidity,
+            repoState,
+            applicationState: renderedApplicationState,
+            schemaMap,
+            branch,
+            baseBranch,
+            lastCommit,
+            isWIP
+        };
     }
     return null;
 };
 exports.renderApiReponse = renderApiReponse;
+const renderSourceGraph = async (repoId, datasource) => {
+    try {
+        const sourcegraph = new sourcegraph_1.SourceGraph(datasource, repoId);
+        const [, branches, branchesMetaState] = await Promise.all([
+            sourcegraph.buildGraph(),
+            datasource.readBranches(repoId),
+            datasource.readBranchesMetaState(repoId),
+        ]);
+        return {
+            rootNodes: sourcegraph.getGraph(),
+            pointers: sourcegraph.getPointers(),
+            branches,
+            branchesMetaState,
+        };
+    }
+    catch (e) {
+        return null;
+    }
+};
+exports.renderSourceGraph = renderSourceGraph;
 //# sourceMappingURL=repo.js.map

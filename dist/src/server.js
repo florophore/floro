@@ -130,19 +130,37 @@ app.get("/repo/:repoId/current", (0, cors_1.default)(corsOptionsDelegate), async
         (0, repo_1.getApplicationState)(datasource, repoId),
     ]);
     const applicationState = await (0, repo_1.convertRenderedCommitStateToKv)(datasource, renderedState);
-    const apiResponse = await (0, repo_1.renderApiReponse)(datasource, renderedState, applicationState, repoState);
+    const apiResponse = await (0, repo_1.renderApiReponse)(repoId, datasource, renderedState, applicationState, repoState);
     if (!apiResponse) {
         res.sendStatus(404);
         return;
     }
     res.send(apiResponse);
 });
+app.get("/repo/:repoId/sourcegraph", (0, cors_1.default)(corsOptionsDelegate), async (req, res) => {
+    const repoId = req.params["repoId"];
+    if (!repoId) {
+        res.sendStatus(404);
+        return;
+    }
+    try {
+        const sourceGraphResponse = await (0, repo_1.renderSourceGraph)(repoId, datasource);
+        if (!sourceGraphResponse) {
+            res.sendStatus(404);
+            return;
+        }
+        res.send(sourceGraphResponse);
+    }
+    catch (e) {
+        res.sendStatus(400);
+    }
+});
 app.post("/repo/:repoId/command", (0, cors_1.default)(corsOptionsDelegate), async (req, res) => {
     const repoId = req.params["repoId"];
     const repoState = await (0, repo_1.changeCommandMode)(datasource, repoId, req.body.commandMode);
     const renderedState = await (0, repo_1.getApplicationState)(datasource, repoId);
     const applicationState = await (0, repo_1.convertRenderedCommitStateToKv)(datasource, renderedState);
-    const apiResponse = await (0, repo_1.renderApiReponse)(datasource, renderedState, applicationState, repoState);
+    const apiResponse = await (0, repo_1.renderApiReponse)(repoId, datasource, renderedState, applicationState, repoState);
     if (!apiResponse) {
         res.sendStatus(404);
         return;
@@ -158,15 +176,127 @@ app.get("/repo/:repoId/branch", (0, cors_1.default)(corsOptionsDelegate), async 
     }
     res.send({ branch });
 });
-app.post("/repo/:repoId/branch/:branch", (0, cors_1.default)(corsOptionsDelegate), async (req, res) => {
+app.get("/repo/:repoId/sha/:sha/canswitchwip", (0, cors_1.default)(corsOptionsDelegate), async (req, res) => {
     const repoId = req.params["repoId"];
-    const branchName = req.params["branch"];
-    const branch = await (0, repoapi_1.switchRepoBranch)(datasource, repoId, branchName);
-    if (!branch) {
+    if (!repoId) {
+        res.sendStatus(404);
+        return;
+    }
+    const sha = req.params["sha"];
+    try {
+        const canSwitch = await (0, repoapi_1.canSwitchShasWithWIP)(datasource, repoId, sha);
+        if (canSwitch == null) {
+            res.sendStatus(400);
+            return;
+        }
+        res.send({ canSwitch });
+    }
+    catch (e) {
         res.sendStatus(400);
         return;
     }
-    res.send(branch);
+});
+app.post("/repo/:repoId/branch", (0, cors_1.default)(corsOptionsDelegate), async (req, res) => {
+    const repoId = req.params["repoId"];
+    if (!repoId) {
+        res.sendStatus(404);
+        return;
+    }
+    const branchName = req.body["branchName"] ?? "";
+    const branchHead = req.body["branchHead"] ?? null;
+    const baseBranchId = req.body["baseBranchId"] ?? null;
+    const switchBranchOnCreate = req.body["switchBranchOnCreate"] ?? true;
+    try {
+        if (switchBranchOnCreate && branchHead) {
+            const canSwitch = await (0, repoapi_1.canSwitchShasWithWIP)(datasource, repoId, branchHead);
+            if (!canSwitch) {
+                res.sendStatus(400);
+                return;
+            }
+        }
+        const repoState = await (0, repoapi_1.createRepoBranch)(datasource, repoId, branchName, branchHead, baseBranchId, switchBranchOnCreate);
+        if (repoState == null) {
+            res.sendStatus(400);
+            return;
+        }
+        const renderedState = await (0, repo_1.getApplicationState)(datasource, repoId);
+        const applicationState = await (0, repo_1.convertRenderedCommitStateToKv)(datasource, renderedState);
+        const apiResponse = await (0, repo_1.renderApiReponse)(repoId, datasource, renderedState, applicationState, repoState);
+        const sourceGraphResponse = await (0, repo_1.renderSourceGraph)(repoId, datasource);
+        res.send({
+            apiResponse,
+            sourceGraphResponse
+        });
+    }
+    catch (e) {
+        res.sendStatus(400);
+        return null;
+    }
+});
+app.post("/repo/:repoId/branch/switch", (0, cors_1.default)(corsOptionsDelegate), async (req, res) => {
+    const repoId = req.params["repoId"];
+    if (!repoId) {
+        res.sendStatus(404);
+        return;
+    }
+    const branchId = req.body["branchId"] ?? "";
+    const branch = branchId ? await datasource.readBranch(repoId, branchId) : null;
+    try {
+        const canSwitch = await (0, repoapi_1.canSwitchShasWithWIP)(datasource, repoId, branch?.lastCommit);
+        if (!canSwitch) {
+            res.sendStatus(400);
+            return;
+        }
+        const repoState = await (0, repoapi_1.switchRepoBranch)(datasource, repoId, branch?.id);
+        if (repoState == null) {
+            res.sendStatus(400);
+            return;
+        }
+        const renderedState = await (0, repo_1.getApplicationState)(datasource, repoId);
+        const applicationState = await (0, repo_1.convertRenderedCommitStateToKv)(datasource, renderedState);
+        const apiResponse = await (0, repo_1.renderApiReponse)(repoId, datasource, renderedState, applicationState, repoState);
+        const sourceGraphResponse = await (0, repo_1.renderSourceGraph)(repoId, datasource);
+        res.send({
+            apiResponse,
+            sourceGraphResponse
+        });
+    }
+    catch (e) {
+        res.sendStatus(400);
+        return null;
+    }
+});
+app.post("/repo/:repoId/branch/:branchId/delete", (0, cors_1.default)(corsOptionsDelegate), async (req, res) => {
+    const repoId = req.params["repoId"];
+    if (!repoId) {
+        res.sendStatus(404);
+        return;
+    }
+    const branchId = req.body["branchId"] ?? "";
+    const branch = branchId ? await datasource.readBranch(repoId, branchId) : null;
+    try {
+        if (!branch) {
+            res.sendStatus(400);
+            return;
+        }
+        const repoState = await (0, repoapi_1.deleteLocalBranch)(datasource, repoId, branch?.id);
+        if (repoState == null) {
+            res.sendStatus(400);
+            return;
+        }
+        const renderedState = await (0, repo_1.getApplicationState)(datasource, repoId);
+        const applicationState = await (0, repo_1.convertRenderedCommitStateToKv)(datasource, renderedState);
+        const apiResponse = await (0, repo_1.renderApiReponse)(repoId, datasource, renderedState, applicationState, repoState);
+        const sourceGraphResponse = await (0, repo_1.renderSourceGraph)(repoId, datasource);
+        res.send({
+            apiResponse,
+            sourceGraphResponse
+        });
+    }
+    catch (e) {
+        res.sendStatus(400);
+        return null;
+    }
 });
 app.get("/repo/:repoId/settings", (0, cors_1.default)(corsOptionsDelegate), async (req, res) => {
     const repoId = req.params["repoId"];
@@ -176,16 +306,6 @@ app.get("/repo/:repoId/settings", (0, cors_1.default)(corsOptionsDelegate), asyn
         return;
     }
     res.send(settings);
-});
-app.post("/repo/:repoId/checkout/branch/:branch", (0, cors_1.default)(corsOptionsDelegate), async (req, res) => {
-    const repoId = req.params["repoId"];
-    const branchName = req.params["branch"];
-    const state = await (0, repoapi_1.switchRepoBranch)(datasource, repoId, branchName);
-    if (!state) {
-        res.sendStatus(400);
-        return;
-    }
-    res.send(state);
 });
 app.post("/repo/:repoId/checkout/commit/:sha", (0, cors_1.default)(corsOptionsDelegate), async (req, res) => {
     const repoId = req.params["repoId"];
@@ -227,7 +347,7 @@ app.post("/repo/:repoId/description", (0, cors_1.default)(corsOptionsDelegate), 
         datasource.readCurrentRepoState(repoId),
         (0, repo_1.convertRenderedCommitStateToKv)(datasource, renderedState),
     ]);
-    const apiResponse = await (0, repo_1.renderApiReponse)(datasource, renderedState, applicationState, repoState);
+    const apiResponse = await (0, repo_1.renderApiReponse)(repoId, datasource, renderedState, applicationState, repoState);
     if (!apiResponse) {
         res.sendStatus(404);
         return;
@@ -254,7 +374,7 @@ app.post("/repo/:repoId/licenses", (0, cors_1.default)(corsOptionsDelegate), asy
         datasource.readCurrentRepoState(repoId),
         (0, repo_1.convertRenderedCommitStateToKv)(datasource, renderedState),
     ]);
-    const apiResponse = await (0, repo_1.renderApiReponse)(datasource, renderedState, applicationState, repoState);
+    const apiResponse = await (0, repo_1.renderApiReponse)(repoId, datasource, renderedState, applicationState, repoState);
     if (!apiResponse) {
         res.sendStatus(404);
         return;
@@ -536,7 +656,7 @@ app.post("/repo/:repoId/plugins", (0, cors_1.default)(corsOptionsDelegate), asyn
         datasource.readCurrentRepoState(repoId),
         (0, repo_1.convertRenderedCommitStateToKv)(datasource, renderedState),
     ]);
-    const apiResponse = await (0, repo_1.renderApiReponse)(datasource, renderedState, applicationState, repoState);
+    const apiResponse = await (0, repo_1.renderApiReponse)(repoId, datasource, renderedState, applicationState, repoState);
     if (!apiResponse) {
         res.sendStatus(404);
         return;
@@ -572,7 +692,7 @@ app.post("/repo/:repoId/plugin/:pluginName/state", (0, cors_1.default)(corsOptio
         datasource.readCurrentRepoState(repoId),
         (0, repo_1.convertRenderedCommitStateToKv)(datasource, renderedState),
     ]);
-    const apiResponse = await (0, repo_1.renderApiReponse)(datasource, renderedState, applicationState, repoState);
+    const apiResponse = await (0, repo_1.renderApiReponse)(repoId, datasource, renderedState, applicationState, repoState);
     if (!apiResponse) {
         res.sendStatus(404);
         return;
