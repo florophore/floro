@@ -36,6 +36,9 @@ import {
   drawDiffableReturnTypes,
   drawProviderApiCode,
   drawUseFloroStateFunction,
+  drawUseWasAddedFunction,
+  drawUseWasRemovedFunction,
+  drawUseIsFloroInvalidFunction,
 } from "./plugins";
 import clc from "cli-color";
 import semver from "semver";
@@ -769,7 +772,13 @@ export const generateTypeScriptAPI = async (
   const useFloroStateCode = drawUseFloroStateFunction(diffableListWithPartials);
   code += useFloroStateCode;
 
-  const useFloroIsInvalidCode = drawUseFloroStateFunction(diffableListWithPartials);
+  const useFloroIsInvalidCode = drawUseIsFloroInvalidFunction(diffableListWithPartials);
   code += useFloroIsInvalidCode;
+
+  const useWasAddedCode = drawUseWasAddedFunction(diffableListWithPartials);
+  code += useWasAddedCode;
+
+  const useWasRemovedCode = drawUseWasRemovedFunction(diffableListWithPartials);
+  code += useWasRemovedCode;
   return code;
 };

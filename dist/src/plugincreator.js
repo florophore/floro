@@ -578,8 +578,12 @@ const generateTypeScriptAPI = async (datasource, manifest, useReact = true) => {
     code += getReferencePluginStoreCode;
     const useFloroStateCode = (0, plugins_1.drawUseFloroStateFunction)(diffableListWithPartials);
     code += useFloroStateCode;
-    const useFloroIsInvalidCode = (0, plugins_1.drawUseFloroStateFunction)(diffableListWithPartials);
+    const useFloroIsInvalidCode = (0, plugins_1.drawUseIsFloroInvalidFunction)(diffableListWithPartials);
     code += useFloroIsInvalidCode;
+    const useWasAddedCode = (0, plugins_1.drawUseWasAddedFunction)(diffableListWithPartials);
+    code += useWasAddedCode;
+    const useWasRemovedCode = (0, plugins_1.drawUseWasRemovedFunction)(diffableListWithPartials);
+    code += useWasRemovedCode;
     return code;
 };
 exports.generateTypeScriptAPI = generateTypeScriptAPI;

@@ -13,7 +13,7 @@
     "test": "FLORO_VCDN_HOST=localhost FLORO_VCDN_PORT=63405 jest",
     "test:debug": "FLORO_VCDN_HOST=localhost FLORO_VCDN_PORT=63405 node --inspect-brk node_modules/.bin/jest --runInBand",
     "dev": "concurrently \"npx tsc --watch\" \"nodemon -q dist/src/server.js\"",
-    "dev:debug": "concurrently \"npx tsc --watch\" \"node inspect dist/src/server.js\""
+    "dev:debug": "nodemon --exec \"node --inspect-brk=0.0.0.0:9229 --require ts-node/register src/server.ts\""
   },
   "author": "",
   "license": "MIT",

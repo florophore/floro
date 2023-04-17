@@ -12,7 +12,8 @@
     "removeComments": false,
     "noImplicitAny": false,
     "outDir": "dist",
-    "types": ["node", "jest", "express"]
+    "types": ["node", "jest", "express"],
+    "typeRoots" : ["./types", "./node_modules/@types"]
   },
   "exclude": [
     "node_modules",

@@ -319,6 +319,7 @@ const readBranch = async (repoId, branchId) => {
         };
     }
     catch (e) {
+        console.log("E", e);
         return null;
     }
 };

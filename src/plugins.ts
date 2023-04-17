@@ -4643,14 +4643,18 @@ interface Packet {
 }
 
 interface PluginState {
-  commandMode: "view" | "edit";
+  commandMode: "view" | "edit" | "compare";
+  compareFrom: "none" | "before" | "after";
   applicationState: SchemaRoot | null;
   apiStoreInvalidity: {[key: string]: Array<string>};
+  changeset: Array<string>;
 }
 
 interface IFloroContext {
-  commandMode: "view" | "edit";
+  commandMode: "view" | "edit" | "compare";
+  compareFrom: "none" | "before" | "after";
   applicationState: SchemaRoot | null;
+  changeset: Set<string>;
   apiStoreInvalidity: {[key: string]: Array<string>};
   apiStoreInvaliditySets: {[key: string]: Set<string>};
   hasLoaded: boolean;
@@ -4662,7 +4666,9 @@ interface IFloroContext {
 
 const FloroContext = createContext({
   commandMode: "view",
+  compareFrom: "none",
   applicationState: null,
+  changeset: new Set([]),
   apiStoreInvalidity: {},
   apiStoreInvaliditySets: {},
   hasLoaded: false,
@@ -4670,8 +4676,10 @@ const FloroContext = createContext({
   setPluginState: (_state: PluginState) => {},
   pluginState: {
     commandMode: "view",
+    compareFrom: "none",
     applicationState: null,
     apiStoreInvalidity: {},
+    changeset: [],
   },
   loadingIds: new Set([]),
 } as IFloroContext);
@@ -4707,8 +4715,10 @@ const sendMessagetoParent = (id: string, pluginName: string, command: string, da
 export const FloroProvider = (props: Props) => {
   const [pluginState, setPluginState] = useState<PluginState>({
     commandMode: "view",
+    compareFrom: "none",
     applicationState: null,
-    apiStoreInvalidity: {}
+    apiStoreInvalidity: {},
+    changeset: [],
   });
   const [hasLoaded, setHasLoaded] = useState(false);
   const [loadingIds, setLoadingIds] = useState<Set<string>>(new Set());
@@ -4720,6 +4730,14 @@ export const FloroProvider = (props: Props) => {
     return pluginState.commandMode;
   }, [pluginState.commandMode]);
 
+  const compareFrom = useMemo(() => {
+    return pluginState.compareFrom;
+  }, [pluginState.compareFrom]);
+
+  const changeset = useMemo(() => {
+    return new Set(pluginState.changeset);
+  }, [pluginState.changeset]);
+
   useEffect(() => {
     const commandToggleListeners = (event: KeyboardEvent) => {
       if (event.metaKey && event.shiftKey && event.key == "p") {
@@ -4727,6 +4745,22 @@ export const FloroProvider = (props: Props) => {
       }
       if (event.metaKey && event.shiftKey && event.key == "e") {
         window.parent?.postMessage("toggle-command-mode", "*");
+      }
+
+      if (event.metaKey && event.shiftKey && event.key == "[") {
+        window.parent?.postMessage("toggle-before", "*");
+      }
+
+      if (event.metaKey && event.shiftKey && event.key == "]") {
+        window.parent?.postMessage("toggle-after", "*");
+      }
+
+      if (event.metaKey && event.shiftKey && event.key == "c") {
+        window.parent?.postMessage("toggle-compare-mode", "*");
+      }
+
+      if (event.metaKey && event.shiftKey && event.key == "b") {
+        window.parent?.postMessage("toggle-branches", "*");
       }
     };
     window.addEventListener("keydown", commandToggleListeners);
@@ -4841,7 +4875,9 @@ export const FloroProvider = (props: Props) => {
         applicationState,
         apiStoreInvalidity,
         apiStoreInvaliditySets,
+        changeset,
         commandMode,
+        compareFrom,
         hasLoaded,
         saveState,
         setPluginState,
@@ -4998,4 +5034,57 @@ export function useIsFloroInvalid(query: PartialDiffableQuery|DiffableQuery, fuz
     }
     return containsDiffable(invalidQueriesSet, query, false);
   }, [invalidQueriesSet, query, fuzzy])
+};`;
+
+export const drawUseWasAddedFunction = (
+  diffables: Array<Array<string|DiffableElement>>
+) => {
+  let code = "";
+  for (let diffable of diffables) {
+    const wildcard = renderDiffableToWildcard(diffable);
+    code += `export function useWasAdded(query: PointerTypes['${wildcard}'], fuzzy?: boolean): boolean;\n`;
+  }
+  code += USE_WAS_ADDED_FUNCTION + "\n";
+  return code;
+}
+
+export const USE_WAS_ADDED_FUNCTION = `
+export function useWasAdded(query: PartialDiffableQuery|DiffableQuery, fuzzy = true): boolean {
+  const ctx = useFloroContext();
+  return useMemo(() => {
+    if (ctx.commandMode != "compare" || ctx.compareFrom != "after") {
+      return false;
+    }
+    if (fuzzy) {
+      return containsDiffable(ctx.changeset, query, true);
+    }
+    return containsDiffable(ctx.changeset, query, false);
+  }, [ctx.changeset, query, fuzzy, ctx.compareFrom, ctx.commandMode])
+};`;
+
+
+export const drawUseWasRemovedFunction = (
+  diffables: Array<Array<string|DiffableElement>>
+) => {
+  let code = "";
+  for (let diffable of diffables) {
+    const wildcard = renderDiffableToWildcard(diffable);
+    code += `export function useWasRemoved(query: PointerTypes['${wildcard}'], fuzzy?: boolean): boolean;\n`;
+  }
+  code += USE_WAS_REMOVED_FUNCTION + "\n";
+  return code;
+}
+
+export const USE_WAS_REMOVED_FUNCTION = `
+export function useWasRemoved(query: PartialDiffableQuery|DiffableQuery, fuzzy = true): boolean {
+  const ctx = useFloroContext();
+  return useMemo(() => {
+    if (ctx.commandMode != "compare" || ctx.compareFrom != "before") {
+      return false;
+    }
+    if (fuzzy) {
+      return containsDiffable(ctx.changeset, query, true);
+    }
+    return containsDiffable(ctx.changeset, query, false);
+  }, [ctx.changeset, query, fuzzy, ctx.compareFrom, ctx.commandMode])
 };`;

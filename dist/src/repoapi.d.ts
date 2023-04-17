@@ -15,6 +15,7 @@ export declare const readRepoLicenses: (datasource: DataSource, repoId?: string)
 export declare const readRepoDescription: (datasource: DataSource, repoId?: string) => Promise<string[]>;
 export declare const getCurrentRepoBranch: (datasource: DataSource, repoId?: string) => Promise<Branch>;
 export declare const getRepoBranches: (datasource: DataSource, repoId?: string) => Promise<Branch[]>;
+export declare const updateLocalBranch: (datasource: DataSource, repoId?: string, branchName?: string, branchHeadSha?: string, baseBranchId?: string) => Promise<RepoState>;
 export declare const createRepoBranch: (datasource: DataSource, repoId?: string, branchName?: string, branchHead?: string, baseBranchId?: string, shouldSwitchToNewBranch?: boolean) => Promise<RepoState>;
 export declare const switchRepoBranch: (datasource: DataSource, repoId?: string, branchId?: string) => Promise<RepoState>;
 export declare const deleteLocalBranch: (datasource: DataSource, repoId?: string, branchId?: string) => Promise<RepoState>;
@@ -44,10 +45,10 @@ export declare const autofixReversion: (datasource: DataSource, repoId: string, 
 export declare const cherryPickRevision: (datasource: DataSource, repoId: string, cherryPickedSha: string) => Promise<RenderedApplicationState>;
 export declare const canCherryPickRevision: (datasource: DataSource, repoId: string, cherryPickedSha: string) => Promise<boolean>;
 export declare const rollbackCommit: (datasource: DataSource, repoId: string) => Promise<RenderedApplicationState>;
-export declare const canStash: (datasource: DataSource, repoId: string) => Promise<boolean>;
+export declare const getCanStash: (datasource: DataSource, repoId: string) => Promise<boolean>;
 export declare const stashChanges: (datasource: DataSource, repoId: string) => Promise<RenderedApplicationState>;
 export declare const getStashSize: (datasource: DataSource, repoId: string) => Promise<number>;
-export declare const canPopStashedChanges: (datasource: DataSource, repoId: string) => Promise<boolean>;
+export declare const getCanPopStashedChanges: (datasource: DataSource, repoId: string) => Promise<boolean>;
 export declare const popStashedChanges: (datasource: DataSource, repoId: string) => Promise<RenderedApplicationState>;
 export declare const applyStashedChange: (datasource: DataSource, repoId: string, index: number) => Promise<RenderedApplicationState>;
 export declare const discardCurrentChanges: (datasource: DataSource, repoId: string) => Promise<RenderedApplicationState>;

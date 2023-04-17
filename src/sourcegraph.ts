@@ -37,15 +37,14 @@ export class SourceGraph {
           }
         );
         this.roots = commits.filter(v => v.idx == 0);
-        for (const rootNode of this.roots) {
-            this.pointers[rootNode.sha] = rootNode
+        for (const commit of commits) {
+            this.pointers[commit.sha] = commit;
         }
         for (const commit of commits) {
             if (commit.idx == 0) {
                 continue;
             }
-            if (!this.pointers[commit.sha]) {
-                this.pointers[commit.sha] = commit;
+            if (!this.pointers[commit.sha]?.children?.includes(commit)) {
                 this.pointers[commit.parent].children.push(commit);
             }
         }
@@ -64,6 +63,7 @@ export class SourceGraph {
                 if (node.parent) {
                     node = this.pointers[node.parent];
                     node.isInBranchLineage = true;
+                    node.branchIds.push(branch.branchId);
                 }
             }
         }
@@ -140,17 +140,21 @@ export const getPotentialBaseBranchesForSha = (
   pointerMap: { [sha: string]: SourceCommitNode } = {}
 ): Array<Branch> => {
   if (!sha) {
-    return branches.filter?.(b => !b?.lastCommit) ?? [];
+    return branches.filter?.(b => !b.lastCommit) ?? [];
+  }
+  let firstCommitWithBranchIds = pointerMap[sha];
+  while(firstCommitWithBranchIds?.parent && firstCommitWithBranchIds?.branchIds?.length == 0) {
+    firstCommitWithBranchIds = pointerMap[firstCommitWithBranchIds.parent];
   }
 
-  const sourceCommit = pointerMap[sha];
+  const sourceCommit = pointerMap[firstCommitWithBranchIds?.sha as string];
   if (!sourceCommit) {
-    return branches.filter?.(b => !b?.lastCommit) ?? [];
+    return branches.filter?.(b => !b.lastCommit) ?? [];
   }
   const visitedBranches = new Set<string>([]);
   const branchMap = getBranchMap(branches);
   const topologicalBranchMap = getTopologicalBranchMap(branches);
-  const order: Array<string> = [];
+  const order: {[key: string]: number} = {};
   let index = 0;
   for (const branchId of sourceCommit?.branchIds ?? []) {
     const upsteamBranches = [branchId, ...getBranchTopOrder(branchId, topologicalBranchMap)];
@@ -162,8 +166,11 @@ export const getPotentialBaseBranchesForSha = (
     }
   }
   const out: Array<Branch> = [];
-  for (const branchId of order) {
-    out.push(branchMap[branchId]);
+  for (let i = 0; i < Object.keys(order).length; ++i) {
+    out.push();
+  }
+  for (const branchId in order) {
+    out[order[branchId]] = branchMap[branchId];
   }
   return out;
 }

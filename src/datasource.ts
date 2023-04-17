@@ -490,6 +490,7 @@ const readBranch = async (
       baseBranchId: branch?.baseBranchId ?? null
     };
   } catch (e) {
+    console.log("E", e)
     return null;
   }
 };

@@ -40,6 +40,13 @@ import {
   StringDiff,
 } from "./versioncontrol";
 import { SourceCommitNode, SourceGraph } from "./sourcegraph";
+import { getCanPopStashedChanges, getStashSize } from "./repoapi";
+
+export interface Comparison {
+  against: "wip" | "branch" | "sha" | "merge";
+  branch: string | null;
+  commit: string | null;
+};
 
 export interface RepoState {
   branch: string | null;
@@ -52,11 +59,7 @@ export interface RepoState {
     direction: "yours" | "theirs";
   };
   commandMode: "view" | "edit" | "compare";
-  comparison: null | {
-    against: "last"|"branch"|"sha"|"merge";
-    branch: string | null;
-    commit: string | null;
-  };
+  comparison: null | Comparison;
 }
 
 export interface RepoSetting {
@@ -161,17 +164,22 @@ export interface ApiStoreInvalidity {
   [key: string]: Array<string>;
 }
 
-export interface ApiReponse {
+export interface ApiResponse {
   repoState: RepoState;
   applicationState: RenderedApplicationState;
   schemaMap: {[key: string]: Manifest};
   beforeState?: RenderedApplicationState;
+  beforeApiStoreInvalidity?: ApiStoreInvalidity,
+  beforeManifests?: Array<Manifest>,
+  beforeSchemaMap?: { [pluginName: string]: Manifest }
   apiDiff?: ApiDiff;
   apiStoreInvalidity?: ApiStoreInvalidity;
   isWIP?: boolean;
   branch?: Branch;
   baseBranch?: Branch;
   lastCommit?: CommitData;
+  canPopStashedChanges?: boolean;
+  stashSize?: number;
 }
 
 export interface SourceGraphResponse {
@@ -761,16 +769,135 @@ export const getPluginsToRunUpdatesOn = (
   });
 };
 
+const getDefaultComparison = async (
+  datasource: DataSource,
+  repoId: string,
+  repoState: RepoState
+): Promise<Comparison> => {
+  const renderedState = await getApplicationState(datasource, repoId);
+  const applicationKVState = await convertRenderedCommitStateToKv(
+    datasource,
+    renderedState
+  );
+  const unstagedState = await getUnstagedCommitState(datasource, repoId);
+  const isWIP = unstagedState && getIsWip(unstagedState, applicationKVState);
+  if (isWIP) {
+    return {
+      against: "wip",
+      branch: null,
+      commit: null,
+    };
+  }
+  if (repoState?.branch) {
+    const currentBranch = await datasource?.readBranch(
+      repoId,
+      repoState?.branch
+    );
+    if (currentBranch && currentBranch?.baseBranchId) {
+      const baseBranch = currentBranch?.baseBranchId
+        ? await datasource?.readBranch(repoId, currentBranch?.baseBranchId)
+        : null;
+      if (baseBranch?.id) {
+        return {
+          against: "branch",
+          branch: baseBranch?.id,
+          commit: null,
+        };
+      }
+    }
+  }
+  if (repoState?.commit) {
+    const currentCommit = await datasource?.readCommit(
+      repoId,
+      repoState?.commit
+    );
+    if (currentCommit && currentCommit?.parent) {
+      const previousCommit = currentCommit?.parent
+        ? await datasource?.readCommit(repoId, currentCommit?.parent)
+        : null;
+      if (previousCommit?.sha) {
+        return {
+          against: "sha",
+          branch: null,
+          commit: previousCommit.sha,
+        };
+      }
+    }
+  }
+
+  return {
+    against: "wip",
+    branch: null,
+    commit: null,
+  };
+};
+
 export const changeCommandMode = async (datasource: DataSource, repoId: string, commandMode: "view"|"edit"|"compare") => {
   try {
     const currentRepoState = await datasource.readCurrentRepoState(repoId);
     const nextRepoState: RepoState = {
       ...currentRepoState,
       commandMode,
+      comparison:
+        commandMode == "compare"
+          ? await getDefaultComparison(datasource, repoId, currentRepoState)
+          : null,
     };
     await datasource.saveCurrentRepoState(repoId, nextRepoState);
     return nextRepoState;
   } catch (e) {
+    return null;
+  }
+}
+
+export const updateComparison = async (
+  datasource: DataSource,
+  repoId: string,
+  against: "wip" | "branch" | "sha",
+  branchId?: string|null,
+  sha?: string|null,
+) => {
+
+  try {
+    const currentRepoState = await datasource.readCurrentRepoState(repoId);
+    if (!currentRepoState || currentRepoState?.commandMode != "compare") {
+      return null;
+    }
+    if (against == "wip") {
+      const nextRepoState: RepoState = {
+        ...currentRepoState,
+        comparison: {
+          against,
+          branch: null,
+          commit: null,
+        }
+      };
+      return await datasource.saveCurrentRepoState(repoId, nextRepoState);
+    }
+    if (against == "branch") {
+      const nextRepoState: RepoState = {
+        ...currentRepoState,
+        comparison: {
+          against,
+          branch: branchId ?? null,
+          commit: null,
+        }
+      };
+      return await datasource.saveCurrentRepoState(repoId, nextRepoState);
+    }
+    if (against == "sha") {
+      const nextRepoState: RepoState = {
+        ...currentRepoState,
+        comparison: {
+          against,
+          branch: null,
+          commit: sha ?? null,
+        }
+      };
+      return await datasource.saveCurrentRepoState(repoId, nextRepoState);
+    }
+    return null;
+  } catch(e) {
     return null;
   }
 }
@@ -1178,7 +1305,33 @@ export const getMergedCommitState = async (
   }
 };
 
-export const canAutoMergeOnTopCurrentState = async (
+export const getCanAutoMergeOnUnStagedState = async (
+  datasource: DataSource,
+  repoId: string,
+  mergeSha: string
+) => {
+  try {
+  const unstagedState = await getUnstagedCommitState(datasource, repoId);
+    const repoState = await datasource.readCurrentRepoState(repoId);
+    const mergeState = await getCommitState(datasource, repoId, mergeSha);
+    const { originCommit } = await getMergeCommitStates(
+      datasource,
+      repoId,
+      repoState.commit,
+      mergeSha
+    );
+    return await canAutoMergeCommitStates(
+      datasource,
+      unstagedState,
+      mergeState,
+      originCommit
+    );
+  } catch (e) {
+    return null;
+  }
+};
+
+export const getCanAutoMergeOnTopCurrentState = async (
   datasource: DataSource,
   repoId: string,
   mergeSha: string
@@ -1354,20 +1507,100 @@ export const getLastCommitFromRepoState = async (
   return (await datasource.readCommit(repoId, repoState?.commit)) ?? null;
 }
 
+export const getApiDiffFromComparisonState = async (
+  repoId: string,
+  datasource: DataSource,
+  repoState: RepoState,
+  applicationKVState: ApplicationKVState
+): Promise<{
+  apiDiff: ApiDiff,
+  beforeState: RenderedApplicationState,
+  beforeApiStoreInvalidity: ApiStoreInvalidity,
+  beforeManifests: Array<Manifest>,
+  beforeSchemaMap: { [pluginName: string]: Manifest }
+  }> => {
+
+  if (repoState.comparison?.against == "branch") {
+    const comparatorBranch = repoState?.comparison?.branch
+      ? await datasource.readBranch(repoId, repoState?.comparison?.branch)
+      : null;
+    const branchState = await getCommitState(
+      datasource,
+      repoId,
+      comparatorBranch?.lastCommit
+    );
+    const diff = getStateDiffFromCommitStates(branchState, applicationKVState);
+    const beforeState = await convertCommitStateToRenderedState(datasource, branchState);
+    const beforeApiStoreInvalidity = await getInvalidStates(datasource, branchState);
+    const beforeManifests = await getPluginManifests(datasource, branchState.plugins);
+    const beforeSchemaMap = manifestListToSchemaMap(beforeManifests);
+    return {
+      beforeState,
+      beforeApiStoreInvalidity,
+      beforeManifests,
+      beforeSchemaMap,
+      apiDiff: getApiDiff(branchState, applicationKVState, diff)
+    };
+  }
+
+  if (repoState.comparison?.against == "sha") {
+    const commitState = await getCommitState(
+      datasource,
+      repoId,
+      repoState.comparison?.commit
+    );
+    const diff = getStateDiffFromCommitStates(commitState, applicationKVState);
+    const beforeState = await convertCommitStateToRenderedState(datasource, commitState);
+    const beforeApiStoreInvalidity = await getInvalidStates(datasource, commitState);
+    const beforeManifests = await getPluginManifests(datasource, commitState.plugins);
+    const beforeSchemaMap = manifestListToSchemaMap(beforeManifests);
+    return {
+      beforeState,
+      beforeApiStoreInvalidity,
+      beforeManifests,
+      beforeSchemaMap,
+      apiDiff: getApiDiff(commitState, applicationKVState, diff)
+    };
+  }
+  // "WIP"
+  const unstagedState = await getUnstagedCommitState(datasource, repoId);
+  const diff = getStateDiffFromCommitStates(unstagedState, applicationKVState);
+  const beforeState = await convertCommitStateToRenderedState(datasource, unstagedState);
+  const beforeApiStoreInvalidity = await getInvalidStates(datasource, unstagedState);
+  const beforeManifests = await getPluginManifests(datasource, unstagedState.plugins);
+  const beforeSchemaMap = manifestListToSchemaMap(beforeManifests);
+  return {
+    beforeState,
+    beforeApiStoreInvalidity,
+    beforeManifests,
+    beforeSchemaMap,
+    apiDiff: getApiDiff(unstagedState, applicationKVState, diff)
+  };
+}
+
 export const renderApiReponse = async (
   repoId: string,
   datasource: DataSource,
   renderedApplicationState: RenderedApplicationState,
   applicationKVState: ApplicationKVState,
   repoState: RepoState
-): Promise<ApiReponse> => {
+): Promise<ApiResponse> => {
   const apiStoreInvalidity = await getInvalidStates(datasource, applicationKVState);
   const manifests = await getPluginManifests(datasource, renderedApplicationState.plugins);
   const schemaMap = manifestListToSchemaMap(manifests);
   const branch = await getBranchFromRepoState(repoId, datasource, repoState);
   const baseBranch = await getBaseBranchFromBranch(repoId, datasource, branch);
   const lastCommit = await getLastCommitFromRepoState(repoId, datasource, repoState);
+
   if (repoState.commandMode == "edit") {
+    const unstagedState = await getUnstagedCommitState(datasource, repoId);
+    const isWIP = unstagedState && getIsWip(unstagedState, applicationKVState);
+    const [canPopStashedChanges, stashSize] = await Promise.all(
+      [
+        getCanPopStashedChanges(datasource, repoId),
+        getStashSize(datasource, repoId)
+      ]
+    )
     return {
       apiStoreInvalidity,
       repoState,
@@ -1375,13 +1608,17 @@ export const renderApiReponse = async (
       schemaMap,
       branch,
       baseBranch,
-      lastCommit
+      lastCommit,
+      isWIP,
+      canPopStashedChanges,
+      stashSize
     }
   }
 
-  const unstagedState = await getUnstagedCommitState(datasource, repoId);
-  const isWIP = unstagedState && getIsWip(unstagedState, applicationKVState);
   if (repoState.commandMode == "view") {
+
+    const unstagedState = await getUnstagedCommitState(datasource, repoId);
+    const isWIP = unstagedState && getIsWip(unstagedState, applicationKVState);
     return {
       apiStoreInvalidity,
       repoState,
@@ -1394,6 +1631,15 @@ export const renderApiReponse = async (
     }
   }
   if (repoState.commandMode == "compare") {
+
+    const unstagedState = await getUnstagedCommitState(datasource, repoId);
+    const isWIP = unstagedState && getIsWip(unstagedState, applicationKVState);
+    const { apiDiff, beforeState, beforeApiStoreInvalidity, beforeManifests, beforeSchemaMap } = await getApiDiffFromComparisonState(
+      repoId,
+      datasource,
+      repoState,
+      applicationKVState
+    );
     return {
       apiStoreInvalidity,
       repoState,
@@ -1402,8 +1648,13 @@ export const renderApiReponse = async (
       branch,
       baseBranch,
       lastCommit,
-      isWIP
-    }
+      isWIP,
+      apiDiff,
+      beforeState,
+      beforeApiStoreInvalidity,
+      beforeManifests,
+      beforeSchemaMap,
+    };
 
   }
   return null;
@@ -1428,6 +1679,7 @@ export const renderSourceGraph = async (
       branchesMetaState,
     };
   } catch (e) {
+    console.log("E", e);
     return null;
   }
 };
