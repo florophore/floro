@@ -1,5 +1,4 @@
-import { DataSource } from "./datasource";
-import { Branch, CommitHistory } from "./repo";
+import { Branch, BranchesMetaState, CommitHistory, RepoState } from "./repo";
 export interface SourceCommitNode extends CommitHistory {
     children?: Array<SourceCommitNode>;
     message: string;
@@ -14,12 +13,13 @@ export interface SourceCommitNode extends CommitHistory {
     branchIds?: Array<string>;
 }
 export declare class SourceGraph {
-    private datasource;
     private roots;
     private pointers;
-    private repoId;
-    constructor(datasource: DataSource, repoId: string);
-    buildGraph(): Promise<void>;
+    private commits;
+    private branchesMetaState;
+    private repoState?;
+    constructor(commits: Array<SourceCommitNode>, branchesMetaState: BranchesMetaState, repoState?: RepoState);
+    private buildGraph;
     getGraph(): Array<SourceCommitNode>;
     getPointers(): {
         [sha: string]: SourceCommitNode;
@@ -34,3 +34,4 @@ export declare const getBranchMap: (branches: Array<Branch>) => {
 export declare const getPotentialBaseBranchesForSha: (sha: string | undefined | null, branches: Array<Branch>, pointerMap?: {
     [sha: string]: SourceCommitNode;
 }) => Array<Branch>;
+export declare const getTargetBranchId: (branches: Array<Branch>, branchIds: Array<string>) => string | null;

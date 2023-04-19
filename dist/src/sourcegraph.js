@@ -1,66 +1,75 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getPotentialBaseBranchesForSha = exports.getBranchMap = exports.getTopologicalBranchMap = exports.SourceGraph = void 0;
+exports.getTargetBranchId = exports.getPotentialBaseBranchesForSha = exports.getBranchMap = exports.getTopologicalBranchMap = exports.SourceGraph = void 0;
 class SourceGraph {
-    datasource;
     roots = [];
     pointers = {};
-    repoId;
-    constructor(datasource, repoId) {
-        this.datasource = datasource;
-        this.repoId = repoId;
+    commits;
+    branchesMetaState;
+    repoState;
+    constructor(commits, branchesMetaState, repoState) {
+        this.commits = commits;
+        this.branchesMetaState = branchesMetaState;
+        this.repoState = repoState;
+        this.buildGraph();
     }
-    async buildGraph() {
-        const commits = (await this.datasource.readCommits(this.repoId)).sort((a, b) => {
+    buildGraph() {
+        const commits = this.commits.sort((a, b) => {
             return a.idx - b.idx;
         });
         this.roots = commits.filter(v => v.idx == 0);
         for (const commit of commits) {
-            this.pointers[commit.sha] = commit;
+            if (commit.sha) {
+                this.pointers[commit.sha] = commit;
+            }
         }
         for (const commit of commits) {
             if (commit.idx == 0) {
                 continue;
             }
-            if (!this.pointers[commit.sha]?.children?.includes(commit)) {
-                this.pointers[commit.parent].children.push(commit);
-            }
-        }
-        const branchesMetaState = await this.datasource.readBranchesMetaState(this.repoId);
-        for (let branch of branchesMetaState.allBranches) {
-            let node = this.pointers[branch.lastLocalCommit];
-            if (!node) {
-                continue;
-            }
-            if (!node?.branchIds) {
-                node.branchIds = [];
-            }
-            node.branchIds.push(branch.branchId);
-            node.isInBranchLineage = true;
-            for (let i = node.idx - 1; i >= 0; i--) {
-                if (node.parent) {
-                    node = this.pointers[node.parent];
-                    node.isInBranchLineage = true;
-                    node.branchIds.push(branch.branchId);
+            if (commit.sha && commit.parent) {
+                if (!this.pointers[commit.sha]?.children?.includes(commit)) {
+                    this.pointers?.[commit.parent]?.children?.push(commit);
                 }
             }
         }
-        for (let branch of branchesMetaState.userBranches) {
-            let node = this.pointers[branch.lastLocalCommit];
-            if (!node) {
-                continue;
-            }
-            node.isInUserBranchLineage = true;
-            for (let i = node.idx - 1; i >= 0; i--) {
-                if (node.parent) {
-                    node = this.pointers[node.parent];
-                    node.isInUserBranchLineage = true;
+        for (const branch of this.branchesMetaState.allBranches) {
+            if (branch.lastLocalCommit) {
+                let node = this.pointers[branch.lastLocalCommit];
+                if (!node) {
+                    continue;
+                }
+                if (!node?.branchIds) {
+                    node.branchIds = [];
+                }
+                node.branchIds.push(branch.branchId);
+                node.isInBranchLineage = true;
+                for (let i = node.idx - 1; i >= 0; i--) {
+                    if (node.parent) {
+                        node = this.pointers[node.parent];
+                        node.isInBranchLineage = true;
+                        node.branchIds?.push(branch.branchId);
+                    }
                 }
             }
         }
-        const currentRepoState = await this.datasource.readCurrentRepoState(this.repoId);
-        if (currentRepoState.commit) {
-            const currentNode = this.pointers[currentRepoState.commit];
+        for (const branch of this.branchesMetaState.userBranches) {
+            if (branch.lastLocalCommit) {
+                let node = this.pointers[branch.lastLocalCommit];
+                if (!node) {
+                    continue;
+                }
+                node.isInUserBranchLineage = true;
+                for (let i = node.idx - 1; i >= 0; i--) {
+                    if (node.parent) {
+                        node = this.pointers[node.parent];
+                        node.isInUserBranchLineage = true;
+                    }
+                }
+            }
+        }
+        if (this?.repoState?.commit) {
+            const currentNode = this.pointers[this.repoState.commit];
             currentNode.isCurrent = true;
         }
     }
@@ -135,4 +144,33 @@ const getPotentialBaseBranchesForSha = (sha, branches, pointerMap = {}) => {
     return out;
 };
 exports.getPotentialBaseBranchesForSha = getPotentialBaseBranchesForSha;
+const getTargetBranchId = (branches, branchIds) => {
+    const topologicalBranchMap = (0, exports.getTopologicalBranchMap)(branches);
+    let longestTopOrder = null;
+    let shortestTopOrder = null;
+    for (const branchId of branchIds) {
+        const topOrder = getBranchTopOrder(branchId, topologicalBranchMap);
+        if (!longestTopOrder || !shortestTopOrder) {
+            longestTopOrder = [branchId, topOrder.length];
+            shortestTopOrder = [branchId, topOrder.length];
+            continue;
+        }
+        if (topOrder.length > longestTopOrder[1]) {
+            longestTopOrder = [branchId, topOrder.length];
+            continue;
+        }
+        if (topOrder.length < shortestTopOrder[1]) {
+            shortestTopOrder = [branchId, topOrder.length];
+            continue;
+        }
+    }
+    if (!longestTopOrder || !shortestTopOrder) {
+        return null;
+    }
+    if (longestTopOrder[1] == shortestTopOrder[1]) {
+        return null;
+    }
+    return shortestTopOrder[0];
+};
+exports.getTargetBranchId = getTargetBranchId;
 //# sourceMappingURL=sourcegraph.js.map

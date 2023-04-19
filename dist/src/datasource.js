@@ -319,7 +319,6 @@ const readBranch = async (repoId, branchId) => {
         };
     }
     catch (e) {
-        console.log("E", e);
         return null;
     }
 };
@@ -521,10 +520,16 @@ const saveCheckpoint = async (repoId, sha, commitState) => {
 /**
  * STASH
  */
-const readStash = async (repoId, sha) => {
+const getStashName = (repoState) => {
+    if (repoState.isInMergeConflict) {
+        return `conclict:${repoState.merge.direction}-from:${repoState?.merge?.fromSha}-into:${repoState?.merge?.intoSha}.json`;
+    }
+    return repoState?.commit ? `${repoState?.commit}.json` : `null_stash.json`;
+};
+const readStash = async (repoId, repoState) => {
     try {
         const stashDir = path_1.default.join(filestructure_1.vReposPath, repoId, "stash");
-        const stashName = sha ? `${sha}.json` : `null_stash.json`;
+        const stashName = getStashName(repoState);
         const stashPath = path_1.default.join(stashDir, stashName);
         const existsStash = await (0, filestructure_1.existsAsync)(stashPath);
         let stash = [];
@@ -538,10 +543,10 @@ const readStash = async (repoId, sha) => {
         return null;
     }
 };
-const saveStash = async (repoId, sha, stashState) => {
+const saveStash = async (repoId, repoState, stashState) => {
     try {
         const stashDir = path_1.default.join(filestructure_1.vReposPath, repoId, "stash");
-        const stashName = sha ? `${sha}.json` : `null_stash.json`;
+        const stashName = getStashName(repoState);
         const stashPath = path_1.default.join(stashDir, stashName);
         await fs_1.default.promises.writeFile(stashPath, JSON.stringify(stashState));
         return stashState;

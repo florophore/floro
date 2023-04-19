@@ -1,5 +1,4 @@
-import { DataSource } from "./datasource";
-import { Branch, CommitHistory } from "./repo";
+import { Branch, BranchesMetaState, CommitHistory, RepoState } from "./repo";
 
 export interface SourceCommitNode extends CommitHistory {
     children?: Array<SourceCommitNode>;
@@ -17,73 +16,85 @@ export interface SourceCommitNode extends CommitHistory {
 
 export class SourceGraph {
 
-    private datasource: DataSource;
     private roots: Array<SourceCommitNode> = [];
     private pointers: {[sha: string]: SourceCommitNode} = {};
-    private repoId: string;
+    private commits: Array<SourceCommitNode>;
+    private branchesMetaState: BranchesMetaState;
+    private repoState?: RepoState;
 
     constructor(
-        datasource: DataSource,
-        repoId: string
+        commits: Array<SourceCommitNode>,
+        branchesMetaState: BranchesMetaState,
+        repoState?: RepoState,
     ) {
-        this.datasource = datasource;
-        this.repoId = repoId;
+        this.commits = commits;
+        this.branchesMetaState = branchesMetaState;
+        this.repoState = repoState;
+        this.buildGraph();
     }
 
-    public async buildGraph() {
-        const commits = (await this.datasource.readCommits(this.repoId)).sort(
+    private buildGraph() {
+        const commits = this.commits.sort(
           (a, b) => {
             return a.idx - b.idx;
           }
         );
         this.roots = commits.filter(v => v.idx == 0);
         for (const commit of commits) {
-            this.pointers[commit.sha] = commit;
+            if (commit.sha) {
+                this.pointers[commit.sha] = commit;
+            }
         }
         for (const commit of commits) {
             if (commit.idx == 0) {
                 continue;
             }
-            if (!this.pointers[commit.sha]?.children?.includes(commit)) {
-                this.pointers[commit.parent].children.push(commit);
+
+            if (commit.sha && commit.parent) {
+                if (!this.pointers[commit.sha]?.children?.includes(commit)) {
+                    this.pointers?.[commit.parent]?.children?.push(commit);
+                }
             }
         }
-        const branchesMetaState = await this.datasource.readBranchesMetaState(this.repoId);
-        for (let branch of branchesMetaState.allBranches) {
-            let node = this.pointers[branch.lastLocalCommit];
-            if (!node) {
-                continue;
-            }
-            if (!node?.branchIds) {
-                node.branchIds = [];
-            }
-            node.branchIds.push(branch.branchId);
-            node.isInBranchLineage = true;
-            for (let i = node.idx -1; i >= 0; i--) {
-                if (node.parent) {
-                    node = this.pointers[node.parent];
-                    node.isInBranchLineage = true;
-                    node.branchIds.push(branch.branchId);
+        for (const branch of this.branchesMetaState.allBranches) {
+            if (branch.lastLocalCommit) {
+
+                let node = this.pointers[branch.lastLocalCommit];
+                if (!node) {
+                    continue;
+                }
+                if (!node?.branchIds) {
+                    node.branchIds = [];
+                }
+                node.branchIds.push(branch.branchId);
+                node.isInBranchLineage = true;
+                for (let i = node.idx -1; i >= 0; i--) {
+                    if (node.parent) {
+                        node = this.pointers[node.parent];
+                        node.isInBranchLineage = true;
+                        node.branchIds?.push(branch.branchId);
+                    }
                 }
             }
         }
 
-        for (let branch of branchesMetaState.userBranches) {
-            let node = this.pointers[branch.lastLocalCommit];
-            if (!node) {
-                continue;
-            }
-            node.isInUserBranchLineage = true;
-            for (let i = node.idx -1; i >= 0; i--) {
-                if (node.parent) {
-                    node = this.pointers[node.parent];
-                    node.isInUserBranchLineage = true;
+        for (const branch of this.branchesMetaState.userBranches) {
+            if (branch.lastLocalCommit) {
+                let node = this.pointers[branch.lastLocalCommit];
+                if (!node) {
+                    continue;
+                }
+                node.isInUserBranchLineage = true;
+                for (let i = node.idx -1; i >= 0; i--) {
+                    if (node.parent) {
+                        node = this.pointers[node.parent];
+                        node.isInUserBranchLineage = true;
+                    }
                 }
             }
         }
-        const currentRepoState = await this.datasource.readCurrentRepoState(this.repoId);
-        if (currentRepoState.commit) {
-            const currentNode = this.pointers[currentRepoState.commit];
+        if (this?.repoState?.commit) {
+            const currentNode = this.pointers[this.repoState.commit];
             currentNode.isCurrent = true;
         }
     }
@@ -174,3 +185,35 @@ export const getPotentialBaseBranchesForSha = (
   }
   return out;
 }
+
+export const getTargetBranchId = (
+  branches: Array<Branch>,
+  branchIds: Array<string>
+): string | null => {
+  const topologicalBranchMap = getTopologicalBranchMap(branches);
+  let longestTopOrder: [string, number] | null = null;
+  let shortestTopOrder: [string, number] | null = null;
+  for (const branchId of branchIds) {
+    const topOrder = getBranchTopOrder(branchId, topologicalBranchMap);
+    if (!longestTopOrder || !shortestTopOrder) {
+      longestTopOrder = [branchId, topOrder.length];
+      shortestTopOrder = [branchId, topOrder.length];
+      continue;
+    }
+    if (topOrder.length > longestTopOrder[1]) {
+      longestTopOrder = [branchId, topOrder.length];
+      continue;
+    }
+    if (topOrder.length < shortestTopOrder[1]) {
+      shortestTopOrder = [branchId, topOrder.length];
+      continue;
+    }
+  }
+  if (!longestTopOrder || !shortestTopOrder) {
+    return null;
+  }
+  if (longestTopOrder[1] == shortestTopOrder[1]) {
+    return null;
+  }
+  return shortestTopOrder[0];
+};

@@ -5,6 +5,7 @@ import { CommitData, Diff, StringDiff } from "./versioncontrol";
 import { SourceCommitNode } from "./sourcegraph";
 export interface Comparison {
     against: "wip" | "branch" | "sha" | "merge";
+    comparisonDirection: "forward" | "backward";
     branch: string | null;
     commit: string | null;
 }
@@ -146,16 +147,15 @@ export interface ApiResponse {
     branch?: Branch;
     baseBranch?: Branch;
     lastCommit?: CommitData;
+    mergeCommit?: CommitData;
     canPopStashedChanges?: boolean;
     stashSize?: number;
 }
 export interface SourceGraphResponse {
-    pointers: {
-        [sha: string]: SourceCommitNode;
-    };
-    rootNodes: Array<SourceCommitNode>;
+    commits: Array<SourceCommitNode>;
     branches: Array<Branch>;
     branchesMetaState: BranchesMetaState;
+    repoState?: RepoState;
 }
 export declare const EMPTY_COMMIT_STATE: ApplicationKVState;
 export declare const EMPTY_RENDERED_APPLICATION_STATE: RenderedApplicationState;
@@ -191,6 +191,7 @@ export declare const updateCurrentWithNewBranch: (datasource: DataSource, repoId
 export declare const updateCurrentBranch: (datasource: DataSource, repoId: string, branchId: string) => Promise<RepoState | null>;
 export declare const getPluginsToRunUpdatesOn: (pastPlugins: Array<PluginElement>, nextPlugins: Array<PluginElement>) => PluginElement[];
 export declare const changeCommandMode: (datasource: DataSource, repoId: string, commandMode: "view" | "edit" | "compare") => Promise<RepoState>;
+export declare const getComparisonDirection: (datasource: DataSource, repoId: string, against: "branch" | "sha", branchId?: string | null, sha?: string | null) => Promise<"forward" | "backward">;
 export declare const updateComparison: (datasource: DataSource, repoId: string, against: "wip" | "branch" | "sha", branchId?: string | null, sha?: string | null) => Promise<RepoState>;
 export declare const buildStateStore: (datasource: DataSource, appKvState: ApplicationKVState) => Promise<{
     [key: string]: object;
@@ -233,7 +234,7 @@ export declare const getCanAutoMergeOnUnStagedState: (datasource: DataSource, re
 export declare const getCanAutoMergeOnTopCurrentState: (datasource: DataSource, repoId: string, mergeSha: string) => Promise<boolean>;
 export declare const getApiDiff: (beforeState: ApplicationKVState, afterState: ApplicationKVState, stateDiff: StateDiff) => ApiDiff;
 export declare const getInvalidStates: (datasource: DataSource, appKvState: ApplicationKVState) => Promise<ApiStoreInvalidity>;
-export declare const getIsWip: (unstagedState: ApplicationKVState, applicationKVState: ApplicationKVState) => boolean;
+export declare const getIsWip: (datasource: DataSource, repoId: string, repoState: RepoState, unstagedState: ApplicationKVState, applicationKVState: ApplicationKVState) => Promise<boolean>;
 export declare const getBranchFromRepoState: (repoId: string, datasource: DataSource, repoState: RepoState) => Promise<Branch>;
 export declare const getBaseBranchFromBranch: (repoId: string, datasource: DataSource, branch: Branch) => Promise<Branch>;
 export declare const getLastCommitFromRepoState: (repoId: string, datasource: DataSource, repoState: RepoState) => Promise<CommitData>;
@@ -247,4 +248,4 @@ export declare const getApiDiffFromComparisonState: (repoId: string, datasource:
     };
 }>;
 export declare const renderApiReponse: (repoId: string, datasource: DataSource, renderedApplicationState: RenderedApplicationState, applicationKVState: ApplicationKVState, repoState: RepoState) => Promise<ApiResponse>;
-export declare const renderSourceGraph: (repoId: string, datasource: DataSource) => Promise<SourceGraphResponse>;
+export declare const renderSourceGraphInputs: (repoId: string, datasource: DataSource) => Promise<SourceGraphResponse>;

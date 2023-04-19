@@ -100,12 +100,12 @@ export interface DataSource {
 
   readStash?(
     repoId: string,
-    sha: string | null
+    repoState: RepoState,
   ): Promise<Array<ApplicationKVState>>;
 
   saveStash?(
     repoId: string,
-    sha: string | null,
+    repoState: RepoState,
     stashState: Array<ApplicationKVState>
   ): Promise<Array<ApplicationKVState>>;
 
@@ -490,7 +490,6 @@ const readBranch = async (
       baseBranchId: branch?.baseBranchId ?? null
     };
   } catch (e) {
-    console.log("E", e)
     return null;
   }
 };
@@ -745,13 +744,20 @@ const saveCheckpoint = async (
  * STASH
  */
 
+const getStashName = (repoState: RepoState) => {
+  if (repoState.isInMergeConflict) {
+    return `conclict:${repoState.merge.direction}-from:${repoState?.merge?.fromSha}-into:${repoState?.merge?.intoSha}.json`;
+  }
+  return repoState?.commit ? `${repoState?.commit}.json` : `null_stash.json`;
+}
+
 const readStash = async (
   repoId: string,
-  sha: string | null
+  repoState: RepoState
 ): Promise<Array<ApplicationKVState>> => {
   try {
     const stashDir = path.join(vReposPath, repoId, "stash");
-    const stashName = sha ? `${sha}.json` : `null_stash.json`;
+    const stashName = getStashName(repoState);
     const stashPath = path.join(stashDir, stashName);
     const existsStash = await existsAsync(stashPath);
     let stash = [];
@@ -767,12 +773,12 @@ const readStash = async (
 
 const saveStash = async (
   repoId: string,
-  sha: string | null,
+  repoState: RepoState,
   stashState: Array<ApplicationKVState>
 ) => {
   try {
     const stashDir = path.join(vReposPath, repoId, "stash");
-    const stashName = sha ? `${sha}.json` : `null_stash.json`;
+    const stashName = getStashName(repoState);
     const stashPath = path.join(stashDir, stashName);
     await fs.promises.writeFile(stashPath, JSON.stringify(stashState));
     return stashState;

@@ -24,8 +24,8 @@ export interface DataSource {
     deleteHotCheckpoint?(repoId: string): Promise<boolean>;
     readRenderedState?(repoId: string): Promise<RenderedApplicationState>;
     saveRenderedState?(repoId: string, commitState: RenderedApplicationState): Promise<RenderedApplicationState>;
-    readStash?(repoId: string, sha: string | null): Promise<Array<ApplicationKVState>>;
-    saveStash?(repoId: string, sha: string | null, stashState: Array<ApplicationKVState>): Promise<Array<ApplicationKVState>>;
+    readStash?(repoId: string, repoState: RepoState): Promise<Array<ApplicationKVState>>;
+    saveStash?(repoId: string, repoState: RepoState, stashState: Array<ApplicationKVState>): Promise<Array<ApplicationKVState>>;
     readBranchesMetaState?(repoId: string): Promise<BranchesMetaState>;
     saveBranchesMetaState?(repoId: string, branchesMetaState: BranchesMetaState): Promise<BranchesMetaState>;
     checkBinary?(binaryId: string): Promise<boolean>;
@@ -64,8 +64,8 @@ export declare const makeDataSource: (datasource?: DataSource) => {
     deleteHotCheckpoint?: (repoId: string) => Promise<boolean>;
     readRenderedState?: (repoId: string) => Promise<RenderedApplicationState>;
     saveRenderedState?: (repoId: string, commitState: RenderedApplicationState) => Promise<RenderedApplicationState>;
-    readStash?: (repoId: string, sha: string | null) => Promise<Array<ApplicationKVState>>;
-    saveStash?: (repoId: string, sha: string | null, stashState: Array<ApplicationKVState>) => Promise<Array<ApplicationKVState>>;
+    readStash?: (repoId: string, repoState: RepoState) => Promise<Array<ApplicationKVState>>;
+    saveStash?: (repoId: string, repoState: RepoState, stashState: Array<ApplicationKVState>) => Promise<Array<ApplicationKVState>>;
     readBranchesMetaState?: (repoId: string) => Promise<BranchesMetaState>;
     saveBranchesMetaState?: (repoId: string, branchesMetaState: BranchesMetaState) => Promise<BranchesMetaState>;
     checkBinary?: (binaryId: string) => Promise<boolean>;
@@ -92,8 +92,8 @@ export declare const makeMemoizedDataSource: (dataSourceOverride?: DataSource) =
     deleteHotCheckpoint?: (repoId: string) => Promise<boolean>;
     readRenderedState?: (repoId: string) => Promise<RenderedApplicationState>;
     saveRenderedState?: (repoId: string, commitState: RenderedApplicationState) => Promise<RenderedApplicationState>;
-    readStash?: (repoId: string, sha: string | null) => Promise<Array<ApplicationKVState>>;
-    saveStash?: (repoId: string, sha: string | null, stashState: Array<ApplicationKVState>) => Promise<Array<ApplicationKVState>>;
+    readStash?: (repoId: string, repoState: RepoState) => Promise<Array<ApplicationKVState>>;
+    saveStash?: (repoId: string, repoState: RepoState, stashState: Array<ApplicationKVState>) => Promise<Array<ApplicationKVState>>;
     readBranchesMetaState?: (repoId: string) => Promise<BranchesMetaState>;
     saveBranchesMetaState?: (repoId: string, branchesMetaState: BranchesMetaState) => Promise<BranchesMetaState>;
     checkBinary?: (binaryId: string) => Promise<boolean>;

@@ -11,7 +11,7 @@ const versioncontrol_1 = require("./versioncontrol");
 const plugins_1 = require("./plugins");
 const licensecodes_1 = require("./licensecodes");
 const sourcegraph_1 = require("./sourcegraph");
-exports.ILLEGAL_BRANCH_NAMES = new Set(["none", "main"]);
+exports.ILLEGAL_BRANCH_NAMES = new Set(["none"]);
 const writeRepoDescription = async (datasource, repoId, description) => {
     if (!repoId) {
         return null;
@@ -157,13 +157,14 @@ const updateLocalBranch = async (datasource, repoId, branchName, branchHeadSha, 
         if (!canSwitch) {
             return null;
         }
-        const sourcegraph = new sourcegraph_1.SourceGraph(datasource, repoId);
-        await sourcegraph.buildGraph();
+        const commits = await datasource.readCommits(repoId);
+        const branchesMetaState = await datasource.readBranchesMetaState(repoId);
+        const sourcegraph = new sourcegraph_1.SourceGraph(commits, branchesMetaState, repoState);
         const pointers = sourcegraph.getPointers();
         const branches = await datasource.readBranches(repoId);
         const potentialBaseBranches = (0, sourcegraph_1.getPotentialBaseBranchesForSha)(branchHeadSha, branches, pointers)?.filter(v => v.id != originalBranch.id);
         const baseBranchIds = potentialBaseBranches?.map(b => b.id);
-        if (!baseBranchIds.includes(baseBranchId)) {
+        if (baseBranchId && !baseBranchIds.includes(baseBranchId)) {
             return null;
         }
         const branchId = (0, repo_1.getBranchIdFromName)(branchName);
@@ -183,7 +184,7 @@ const updateLocalBranch = async (datasource, repoId, branchName, branchHeadSha, 
             return null;
         }
         const unstagedState = await (0, repo_1.getUnstagedCommitState)(datasource, repoId);
-        const isWIP = (0, repo_1.getIsWip)(unstagedState, currentKVState);
+        const isWIP = await (0, repo_1.getIsWip)(datasource, repoId, repoState, unstagedState, currentKVState);
         const newCurrentKVState = !isWIP ? headState : await (0, repo_1.getMergedCommitState)(datasource, headState, // theirs
         currentKVState, // yours
         unstagedState // origin
@@ -261,8 +262,10 @@ const createRepoBranch = async (datasource, repoId, branchName, branchHead, base
         if (!branch) {
             return null;
         }
-        const sourcegraph = new sourcegraph_1.SourceGraph(datasource, repoId);
-        await sourcegraph.buildGraph();
+        const commits = await datasource.readCommits(repoId);
+        const branchesMetaState = await datasource.readBranchesMetaState(repoId);
+        const repoState = await datasource.readCurrentRepoState(repoId);
+        const sourcegraph = new sourcegraph_1.SourceGraph(commits, branchesMetaState, repoState);
         const pointers = sourcegraph.getPointers();
         const potentialBaseBranches = (0, sourcegraph_1.getPotentialBaseBranchesForSha)(branchHead, branches, pointers);
         const baseBranchIds = potentialBaseBranches?.map(b => b.id);
@@ -353,8 +356,9 @@ const switchRepoBranch = async (datasource, repoId, branchId) => {
         }
         const currentAppState = await (0, repo_1.getApplicationState)(datasource, repoId);
         const currentKVState = await (0, repo_1.convertRenderedCommitStateToKv)(datasource, currentAppState);
+        const repoState = await datasource.readCurrentRepoState(repoId);
         const unstagedState = await (0, repo_1.getUnstagedCommitState)(datasource, repoId);
-        const isWIP = (0, repo_1.getIsWip)(unstagedState, currentKVState);
+        const isWIP = await (0, repo_1.getIsWip)(datasource, repoId, repoState, unstagedState, currentKVState);
         const newCurrentKVState = !isWIP ? headState : await (0, repo_1.getMergedCommitState)(datasource, headState, // theirs
         currentKVState, // yours
         unstagedState // origin
@@ -999,57 +1003,33 @@ const mergeCommit = async (datasource, repoId, fromSha) => {
         const { fromCommitState, intoCommitState, originCommit } = commitStateResult;
         const canAutoCommitMergeStates = await (0, repo_1.canAutoMergeCommitStates)(datasource, fromCommitState, intoCommitState, originCommit);
         const originSha = await (0, repo_1.getDivergenceOriginSha)(datasource, repoId, fromSha, currentRepoState.commit);
-        if (originSha == fromSha) {
+        if (originSha == currentRepoState.commit) {
+            const currentAppState = await (0, repo_1.getApplicationState)(datasource, repoId);
+            const currentKVState = await (0, repo_1.convertRenderedCommitStateToKv)(datasource, currentAppState);
+            const unstagedState = await (0, repo_1.getUnstagedCommitState)(datasource, repoId);
+            const isWIP = await (0, repo_1.getIsWip)(datasource, repoId, currentRepoState, unstagedState, currentKVState);
+            const canSwitch = !isWIP || (await (0, exports.canSwitchShasWithWIP)(datasource, repoId, fromSha));
+            if (canSwitch) {
+                if (currentRepoState.branch) {
+                    const branchState = await datasource.readBranch(repoId, currentRepoState.branch);
+                    await (0, exports.updateLocalBranch)(datasource, repoId, branchState.name, fromSha, branchState.baseBranchId);
+                }
+                else {
+                    // BRANCHLESS CASE
+                    await (0, repo_1.updateCurrentCommitSHA)(datasource, repoId, fromSha, false);
+                }
+                return await (0, repo_1.getApplicationState)(datasource, repoId);
+            }
             return null;
         }
         const canAutoMergeOnTopOfCurrentState = await (0, repo_1.getCanAutoMergeOnTopCurrentState)(datasource, repoId, fromSha);
-        // OR IF IS AN ANCESTOR
-        if ((canAutoCommitMergeStates || originSha == currentRepoState.commit) && canAutoMergeOnTopOfCurrentState) {
+        if (canAutoCommitMergeStates && canAutoMergeOnTopOfCurrentState) {
             const currentAppState = await (0, repo_1.getApplicationState)(datasource, repoId);
             const currentKVState = await (0, repo_1.convertRenderedCommitStateToKv)(datasource, currentAppState);
             const unstagedState = await (0, repo_1.getUnstagedCommitState)(datasource, repoId);
             const currentDiff = (0, repo_1.getStateDiffFromCommitStates)(unstagedState, currentKVState);
             const history = await (0, repo_1.getHistory)(datasource, repoId, currentRepoState.commit);
             const mergeState = await (0, repo_1.getMergedCommitState)(datasource, fromCommitState, intoCommitState, originCommit);
-            // just switch head of branch or update to that merge
-            if (originSha == currentRepoState.commit) {
-                if (currentRepoState.branch) {
-                    const branchState = await datasource.readBranch(repoId, currentRepoState.branch);
-                    await datasource.saveBranch(repoId, currentRepoState.branch, {
-                        ...branchState,
-                        lastCommit: fromSha
-                    });
-                    const branchMetaState = await datasource.readBranchesMetaState(repoId);
-                    branchMetaState.allBranches = branchMetaState.allBranches.map((branch) => {
-                        if (branch.branchId == branchState.id) {
-                            branch.lastLocalCommit = fromSha;
-                        }
-                        return branch;
-                    });
-                    branchMetaState.userBranches = branchMetaState.userBranches.map((branch) => {
-                        if (branch.branchId == branchState.id) {
-                            branch.lastLocalCommit = fromSha;
-                        }
-                        return branch;
-                    });
-                    await datasource.saveBranchesMetaState(repoId, branchMetaState);
-                    await (0, repo_1.updateCurrentCommitSHA)(datasource, repoId, fromSha, false);
-                }
-                else {
-                    await (0, repo_1.updateCurrentCommitSHA)(datasource, repoId, fromSha, false);
-                }
-                if (!(0, repo_1.diffIsEmpty)(currentDiff)) {
-                    const mergeCurrState = await (0, repo_1.getMergedCommitState)(datasource, mergeState, currentKVState, intoCommitState);
-                    const currentAfterRestorationRendered = await (0, repo_1.convertCommitStateToRenderedState)(datasource, mergeCurrState);
-                    const state = await datasource.saveRenderedState(repoId, currentAfterRestorationRendered);
-                    return state;
-                }
-                else {
-                    const renderedState = await (0, repo_1.convertCommitStateToRenderedState)(datasource, mergeState);
-                    const state = await datasource.saveRenderedState(repoId, renderedState);
-                    return state;
-                }
-            }
             const origin = originSha
                 ? await datasource.readCommit(repoId, originSha)
                 : null;
@@ -1167,6 +1147,7 @@ const mergeCommit = async (datasource, repoId, fromSha) => {
                 commandMode: "compare",
                 comparison: {
                     against: "merge",
+                    comparisonDirection: "forward",
                     branch: null,
                     commit: null,
                 }
@@ -1232,6 +1213,13 @@ const abortMerge = async (datasource, repoId) => {
         }
         const updated = {
             ...currentRepoState,
+            commandMode: "compare",
+            comparison: {
+                against: "wip",
+                comparisonDirection: "forward",
+                branch: null,
+                commit: null,
+            },
             isInMergeConflict: false,
             merge: null,
         };
@@ -1303,8 +1291,8 @@ const resolveMerge = async (datasource, repoId) => {
         }
         const currentAppState = await (0, repo_1.getApplicationState)(datasource, repoId);
         const currentKVState = await (0, repo_1.convertRenderedCommitStateToKv)(datasource, currentAppState);
-        const unstagedState = await (0, repo_1.getUnstagedCommitState)(datasource, repoId);
-        const mergeDiff = (0, repo_1.getStateDiffFromCommitStates)(unstagedState, currentKVState);
+        const fromCommitState = await (0, repo_1.getCommitState)(datasource, repoId, fromSha);
+        const mergeDiff = (0, repo_1.getStateDiffFromCommitStates)(fromCommitState, currentKVState);
         const mergeCommit = {
             parent: rebaseList[rebaseList.length - 1].sha,
             historicalParent: rebaseList[rebaseList.length - 1].sha,
@@ -1344,7 +1332,20 @@ const resolveMerge = async (datasource, repoId) => {
             });
             await datasource.saveBranchesMetaState(repoId, branchMetaState);
         }
-        await (0, repo_1.updateCurrentCommitSHA)(datasource, repoId, mergeCommit.sha, false);
+        const repoState = await (0, repo_1.updateCurrentCommitSHA)(datasource, repoId, mergeCommit.sha, true);
+        const updated = {
+            ...repoState,
+            isInMergeConflict: false,
+            merge: null,
+            commandMode: "compare",
+            comparison: {
+                against: "wip",
+                comparisonDirection: "forward",
+                branch: null,
+                commit: null,
+            },
+        };
+        await datasource.saveCurrentRepoState(repoId, updated);
         return currentAppState;
     }
     catch (e) {
@@ -1782,9 +1783,9 @@ const stashChanges = async (datasource, repoId) => {
         if ((0, repo_1.diffIsEmpty)(currentDiff)) {
             return null;
         }
-        const stashList = await datasource.readStash(repoId, currentRepoState.commit);
+        const stashList = await datasource.readStash(repoId, currentRepoState);
         stashList.push(currentKVState);
-        await datasource.saveStash(repoId, currentRepoState.commit, stashList);
+        await datasource.saveStash(repoId, currentRepoState, stashList);
         const renderedState = await (0, repo_1.convertCommitStateToRenderedState)(datasource, unstagedState);
         return await datasource.saveRenderedState(repoId, renderedState);
     }
@@ -1803,7 +1804,7 @@ const getStashSize = async (datasource, repoId) => {
     }
     try {
         const currentRepoState = await datasource.readCurrentRepoState(repoId);
-        const stashList = await datasource.readStash(repoId, currentRepoState.commit);
+        const stashList = await datasource.readStash(repoId, currentRepoState);
         return stashList.length;
     }
     catch (e) {
@@ -1824,7 +1825,7 @@ const getCanPopStashedChanges = async (datasource, repoId) => {
         const currentAppState = await (0, repo_1.getApplicationState)(datasource, repoId);
         const currentKVState = await (0, repo_1.convertRenderedCommitStateToKv)(datasource, currentAppState);
         const unstagedState = await (0, repo_1.getUnstagedCommitState)(datasource, repoId);
-        const stashList = await datasource.readStash(repoId, currentRepoState.commit);
+        const stashList = await datasource.readStash(repoId, currentRepoState);
         if (stashList.length == 0) {
             return false;
         }
@@ -1853,7 +1854,7 @@ const popStashedChanges = async (datasource, repoId) => {
         const currentAppState = await (0, repo_1.getApplicationState)(datasource, repoId);
         const currentKVState = await (0, repo_1.convertRenderedCommitStateToKv)(datasource, currentAppState);
         const unstagedState = await (0, repo_1.getUnstagedCommitState)(datasource, repoId);
-        const stashList = await datasource.readStash(repoId, currentRepoState.commit);
+        const stashList = await datasource.readStash(repoId, currentRepoState);
         if (stashList.length == 0) {
             return null;
         }
@@ -1869,7 +1870,7 @@ const popStashedChanges = async (datasource, repoId) => {
         currentKVState, // yours
         unstagedState // origin
         );
-        await datasource.saveStash(repoId, currentRepoState.commit, stashList);
+        await datasource.saveStash(repoId, currentRepoState, stashList);
         const renderedState = await (0, repo_1.convertCommitStateToRenderedState)(datasource, appliedStash);
         return await datasource.saveRenderedState(repoId, renderedState);
     }
@@ -1893,8 +1894,9 @@ const applyStashedChange = async (datasource, repoId, index) => {
         const currentRepoState = await datasource.readCurrentRepoState(repoId);
         const currentAppState = await (0, repo_1.getApplicationState)(datasource, repoId);
         const currentKVState = await (0, repo_1.convertRenderedCommitStateToKv)(datasource, currentAppState);
+        // we have to test for merge conflict here
         const unstagedState = await (0, repo_1.getUnstagedCommitState)(datasource, repoId);
-        const stashList = await datasource.readStash(repoId, currentRepoState.commit);
+        const stashList = await datasource.readStash(repoId, currentRepoState);
         if (stashList.length == 0) {
             return null;
         }
@@ -1916,7 +1918,7 @@ const applyStashedChange = async (datasource, repoId, index) => {
         currentKVState, // yours
         unstagedState // origin
         );
-        await datasource.saveStash(repoId, currentRepoState.commit, stashList);
+        await datasource.saveStash(repoId, currentRepoState, stashList);
         const renderedState = await (0, repo_1.convertCommitStateToRenderedState)(datasource, appliedStash);
         return await datasource.saveRenderedState(repoId, renderedState);
     }
@@ -1934,6 +1936,7 @@ const discardCurrentChanges = async (datasource, repoId) => {
         return null;
     }
     try {
+        // we have to test for merge conflict here
         const unstagedState = await (0, repo_1.getUnstagedCommitState)(datasource, repoId);
         const renderedState = await (0, repo_1.convertCommitStateToRenderedState)(datasource, unstagedState);
         return await datasource.saveRenderedState(repoId, renderedState);
@@ -1966,10 +1969,11 @@ const canSwitchShasWithWIP = async (datasource, repoId, toSha) => {
         if (!toState) {
             return false;
         }
+        const repoState = await datasource.readCurrentRepoState(repoId);
         const unstagedState = await (0, repo_1.getUnstagedCommitState)(datasource, repoId);
         const currentAppState = await (0, repo_1.getApplicationState)(datasource, repoId);
         const currentKVState = await (0, repo_1.convertRenderedCommitStateToKv)(datasource, currentAppState);
-        const isWIP = await (0, repo_1.getIsWip)(unstagedState, currentKVState);
+        const isWIP = await (0, repo_1.getIsWip)(datasource, repoId, repoState, unstagedState, currentKVState);
         if (!isWIP) {
             return true;
         }
