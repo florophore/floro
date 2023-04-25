@@ -4647,6 +4647,7 @@ interface PluginState {
   compareFrom: "none" | "before" | "after";
   applicationState: SchemaRoot | null;
   apiStoreInvalidity: {[key: string]: Array<string>};
+  conflictList: Array<string>;
   changeset: Array<string>;
 }
 
@@ -4657,6 +4658,7 @@ interface IFloroContext {
   changeset: Set<string>;
   apiStoreInvalidity: {[key: string]: Array<string>};
   apiStoreInvaliditySets: {[key: string]: Set<string>};
+  conflictSet: Set<string>;
   hasLoaded: boolean;
   saveState: <T extends keyof SchemaRoot>(pluginName: T, state: SchemaRoot|null) => string | null;
   setPluginState: (state: PluginState) => void;
@@ -4671,6 +4673,7 @@ const FloroContext = createContext({
   changeset: new Set([]),
   apiStoreInvalidity: {},
   apiStoreInvaliditySets: {},
+  conflictSet: new Set([]),
   hasLoaded: false,
   saveState: (_state: null) => null,
   setPluginState: (_state: PluginState) => {},
@@ -4679,6 +4682,7 @@ const FloroContext = createContext({
     compareFrom: "none",
     applicationState: null,
     apiStoreInvalidity: {},
+    conflictList: [],
     changeset: [],
   },
   loadingIds: new Set([]),
@@ -4718,6 +4722,7 @@ export const FloroProvider = (props: Props) => {
     compareFrom: "none",
     applicationState: null,
     apiStoreInvalidity: {},
+    conflictList: [],
     changeset: [],
   });
   const [hasLoaded, setHasLoaded] = useState(false);
@@ -4737,6 +4742,10 @@ export const FloroProvider = (props: Props) => {
   const changeset = useMemo(() => {
     return new Set(pluginState.changeset);
   }, [pluginState.changeset]);
+
+  const conflictSet = useMemo(() => {
+    return new Set(pluginState.conflictList ?? []);
+  }, [pluginState.conflictList]);
 
   useEffect(() => {
     const commandToggleListeners = (event: KeyboardEvent) => {
@@ -4876,6 +4885,7 @@ export const FloroProvider = (props: Props) => {
         apiStoreInvalidity,
         apiStoreInvaliditySets,
         changeset,
+        conflictSet,
         commandMode,
         compareFrom,
         hasLoaded,
@@ -5087,4 +5097,30 @@ export function useWasRemoved(query: PartialDiffableQuery|DiffableQuery, fuzzy =
     }
     return containsDiffable(ctx.changeset, query, false);
   }, [ctx.changeset, query, fuzzy, ctx.compareFrom, ctx.commandMode])
+};`;
+
+export const drawUseHasConflictFunction = (
+  diffables: Array<Array<string|DiffableElement>>
+) => {
+  let code = "";
+  for (let diffable of diffables) {
+    const wildcard = renderDiffableToWildcard(diffable);
+    code += `export function useHasConflict(query: PointerTypes['${wildcard}'], fuzzy?: boolean): boolean;\n`;
+  }
+  code += USE_HAS_CONFLICT_FUNCTION + "\n";
+  return code;
+}
+
+export const USE_HAS_CONFLICT_FUNCTION = `
+export function useHasConflict(query: PartialDiffableQuery|DiffableQuery, fuzzy = true): boolean {
+  const ctx = useFloroContext();
+  return useMemo(() => {
+    if (ctx.commandMode != "compare") {
+      return false;
+    }
+    if (fuzzy) {
+      return containsDiffable(ctx.conflictSet, query, true);
+    }
+    return containsDiffable(ctx.conflictSet, query, false);
+  }, [ctx.conflictSet, query, fuzzy, ctx.commandMode])
 };`;

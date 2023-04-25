@@ -35,28 +35,16 @@ import {
   getApplicationState,
   getCanAutoMergeOnTopCurrentState,
   getCanAutoMergeOnUnStagedState,
-  renderApiReponse,
-  renderSourceGraphInputs,
   updateComparison,
 } from "./repo";
 import {
   getCurrentRepoBranch,
   getRepoBranches,
-  readBranchHistory,
-  readBranchState,
-  readCommitHistory,
-  readCommitState,
-  readCurrentHistory,
-  readCurrentState,
-  readLastCommit,
-  readRepoCommit,
   switchRepoBranch,
   readSettings,
   writeRepoCommit,
   writeRepoDescription,
   writeRepoLicenses,
-  readRepoLicenses,
-  checkoutSha,
   updatePlugins,
   updatePluginState,
   canSwitchShasWithWIP,
@@ -70,6 +58,16 @@ import {
   updateMergeDirection,
   abortMerge,
   resolveMerge,
+  updateCurrentWithSHA,
+  renderApiReponse,
+  renderSourceGraphInputs,
+  getCanCherryPickRevision,
+  getCanAmendRevision,
+  getCanAutofixReversion,
+  cherryPickRevision,
+  revertCommit,
+  amendRevision,
+  autofixReversion,
 } from "./repoapi";
 import { makeMemoizedDataSource, readDevPluginManifest, readDevPlugins, readDevPluginVersions } from "./datasource";
 import busboy from 'connect-busboy';
@@ -450,6 +448,84 @@ app.get(
   }
 );
 
+app.get(
+  "/repo/:repoId/sha/:sha/cancherrypick",
+  cors(corsOptionsDelegate),
+  async (req, res): Promise<void> => {
+    const repoId = req.params["repoId"];
+    if (!repoId) {
+      res.sendStatus(404);
+      return;
+    }
+    const sha = req.params["sha"];
+    try {
+      const canCherryPick = await getCanCherryPickRevision(datasource, repoId, sha);
+      if (canCherryPick == null) {
+        res.sendStatus(400);
+        return;
+      }
+      res.send({
+        canCherryPick,
+       });
+    } catch(e) {
+      res.sendStatus(400);
+      return;
+    }
+  }
+);
+
+app.get(
+  "/repo/:repoId/sha/:sha/canamend",
+  cors(corsOptionsDelegate),
+  async (req, res): Promise<void> => {
+    const repoId = req.params["repoId"];
+    if (!repoId) {
+      res.sendStatus(404);
+      return;
+    }
+    const sha = req.params["sha"];
+    try {
+      const canAmend = await getCanAmendRevision(datasource, repoId, sha);
+      if (canAmend == null) {
+        res.sendStatus(400);
+        return;
+      }
+      res.send({
+        canAmend,
+       });
+    } catch(e) {
+      res.sendStatus(400);
+      return;
+    }
+  }
+);
+
+app.get(
+  "/repo/:repoId/sha/:sha/canautofix",
+  cors(corsOptionsDelegate),
+  async (req, res): Promise<void> => {
+    const repoId = req.params["repoId"];
+    if (!repoId) {
+      res.sendStatus(404);
+      return;
+    }
+    const sha = req.params["sha"];
+    try {
+      const canAutoFix = await getCanAutofixReversion(datasource, repoId, sha);
+      if (canAutoFix == null) {
+        res.sendStatus(400);
+        return;
+      }
+      res.send({
+        canAutoFix,
+       });
+    } catch(e) {
+      res.sendStatus(400);
+      return;
+    }
+  }
+);
+
 app.post(
   "/repo/:repoId/sha/:sha/merge",
   cors(corsOptionsDelegate),
@@ -607,6 +683,199 @@ app.post(
 );
 
 app.post(
+  "/repo/:repoId/sha/:sha/cherrypick",
+  cors(corsOptionsDelegate),
+  async (req, res): Promise<void> => {
+    const repoId = req.params["repoId"];
+    const sha = req.params["sha"];
+    if (!repoId || !sha) {
+      res.sendStatus(404);
+      return;
+    }
+    try {
+
+      const renderedState = await cherryPickRevision(datasource, repoId, sha);
+      if (!renderedState) {
+        res.sendStatus(400);
+        return;
+      }
+      const repoState =await changeCommandMode(datasource, repoId, "compare");
+      const applicationState = await convertRenderedCommitStateToKv(
+        datasource,
+        renderedState
+      );
+      const apiResponse = await renderApiReponse(
+        repoId,
+        datasource,
+        renderedState,
+        applicationState,
+        repoState
+      );
+
+      const sourceGraphResponse = await renderSourceGraphInputs(repoId, datasource);
+      res.send({
+        apiResponse,
+        sourceGraphResponse
+      });
+    } catch(e) {
+      res.sendStatus(400);
+      return null;
+    }
+  }
+);
+
+app.post(
+  "/repo/:repoId/sha/:sha/revert",
+  cors(corsOptionsDelegate),
+  async (req, res): Promise<void> => {
+    const repoId = req.params["repoId"];
+    const sha = req.params["sha"];
+    if (!repoId || !sha) {
+      res.sendStatus(404);
+      return;
+    }
+    try {
+
+      const currentRepoState = await datasource?.readCurrentRepoState(repoId);
+      const renderedState = await revertCommit(datasource, repoId, sha);
+      if (!renderedState) {
+        res.sendStatus(400);
+        return;
+      }
+      await changeCommandMode(datasource, repoId, "compare");
+      const repoState = await updateComparison(
+        datasource,
+        repoId,
+        "sha",
+        null,
+        currentRepoState.commit
+      );
+      const applicationState = await convertRenderedCommitStateToKv(
+        datasource,
+        renderedState
+      );
+      const apiResponse = await renderApiReponse(
+        repoId,
+        datasource,
+        renderedState,
+        applicationState,
+        repoState
+      );
+
+      const sourceGraphResponse = await renderSourceGraphInputs(repoId, datasource);
+      res.send({
+        apiResponse,
+        sourceGraphResponse
+      });
+    } catch(e) {
+      res.sendStatus(400);
+      return null;
+    }
+  }
+);
+
+
+app.post(
+  "/repo/:repoId/sha/:sha/amend",
+  cors(corsOptionsDelegate),
+  async (req, res): Promise<void> => {
+    const repoId = req.params["repoId"];
+    const sha = req.params["sha"];
+    const message = req.body["message"] ?? "";
+    if (!repoId || !sha) {
+      res.sendStatus(404);
+      return;
+    }
+    try {
+      const renderedState = await amendRevision(
+        datasource,
+        repoId,
+        sha,
+        message
+      );
+      if (!renderedState) {
+        res.sendStatus(400);
+        return;
+      }
+      const repoState = await datasource.readCurrentRepoState(repoId);
+      const applicationState = await convertRenderedCommitStateToKv(
+        datasource,
+        renderedState
+      );
+      const apiResponse = await renderApiReponse(
+        repoId,
+        datasource,
+        renderedState,
+        applicationState,
+        repoState
+      );
+
+      const sourceGraphResponse = await renderSourceGraphInputs(repoId, datasource);
+      res.send({
+        apiResponse,
+        sourceGraphResponse
+      });
+    } catch(e) {
+      res.sendStatus(400);
+      return null;
+    }
+  }
+);
+
+app.post(
+  "/repo/:repoId/sha/:sha/autofix",
+  cors(corsOptionsDelegate),
+  async (req, res): Promise<void> => {
+    const repoId = req.params["repoId"];
+    const sha = req.params["sha"];
+    if (!repoId || !sha) {
+      res.sendStatus(404);
+      return;
+    }
+    try {
+      const currentRepoState = await datasource.readCurrentRepoState(repoId);
+      const renderedState = await autofixReversion(
+        datasource,
+        repoId,
+        sha
+      );
+      if (!renderedState) {
+        res.sendStatus(400);
+        return;
+      }
+      await changeCommandMode(datasource, repoId, "compare");
+      const repoState = await updateComparison(
+        datasource,
+        repoId,
+        "sha",
+        null,
+        currentRepoState.commit
+      );
+      const applicationState = await convertRenderedCommitStateToKv(
+        datasource,
+        renderedState
+      );
+      const apiResponse = await renderApiReponse(
+        repoId,
+        datasource,
+        renderedState,
+        applicationState,
+        repoState
+      );
+
+      const sourceGraphResponse = await renderSourceGraphInputs(repoId, datasource);
+      res.send({
+        apiResponse,
+        sourceGraphResponse
+      });
+    } catch(e) {
+      res.sendStatus(400);
+      return null;
+    }
+  }
+);
+
+app.post(
   "/repo/:repoId/stash",
   cors(corsOptionsDelegate),
   async (req, res): Promise<void> => {
@@ -749,6 +1018,7 @@ app.post(
     }
   }
 );
+
 app.post(
   "/repo/:repoId/branch/update",
   cors(corsOptionsDelegate),
@@ -924,13 +1194,51 @@ app.post(
   cors(corsOptionsDelegate),
   async (req, res): Promise<void> => {
     const repoId = req.params["repoId"];
-    const sha = req.params["sha"];
-    const state = await checkoutSha(datasource, repoId, sha);
-    if (!state) {
-      res.sendStatus(400);
+    if (!repoId) {
+      res.sendStatus(404);
       return;
     }
-    res.send(state);
+    const sha = req.params["sha"];
+    const commit = sha ? await datasource.readCommit(repoId, sha) : null;
+    try {
+      if (!commit) {
+        res.sendStatus(400);
+        return;
+      }
+      const repoState = await updateCurrentWithSHA(
+        datasource,
+        repoId,
+        sha,
+        false
+      );
+
+      if (repoState == null) {
+        res.sendStatus(400);
+        return;
+      }
+
+      const renderedState = await getApplicationState(datasource, repoId);
+      const applicationState = await convertRenderedCommitStateToKv(
+        datasource,
+        renderedState
+      );
+      const apiResponse = await renderApiReponse(
+        repoId,
+        datasource,
+        renderedState,
+        applicationState,
+        repoState
+      );
+
+      const sourceGraphResponse = await renderSourceGraphInputs(repoId, datasource);
+      res.send({
+        apiResponse,
+        sourceGraphResponse
+      });
+    } catch(e) {
+      res.sendStatus(400);
+      return null;
+    }
   }
 );
 
@@ -1467,151 +1775,6 @@ app.post(
       return;
     }
     res.send(apiResponse);
-  }
-);
-
-app.get(
-  "/repo/:repoId/licenses",
-  cors(corsOptionsDelegate),
-  async (req, res): Promise<void> => {
-    const repoId = req.params["repoId"];
-    const licenses = await readRepoLicenses(datasource, repoId);
-    if (!licenses) {
-      res.sendStatus(400);
-      return;
-    }
-    res.send(licenses);
-  }
-);
-
-app.get(
-  "/repo/:repoId/state",
-  cors(corsOptionsDelegate),
-  async (req, res): Promise<void> => {
-    const repoId = req.params["repoId"];
-    const state = await readCurrentState(datasource, repoId);
-    if (!state) {
-      res.sendStatus(400);
-      return;
-    }
-    res.send(state);
-  }
-);
-
-app.get(
-  "/repo/:repoId/commit/:sha/state",
-  cors(corsOptionsDelegate),
-  async (req, res): Promise<void> => {
-    const repoId = req.params["repoId"];
-    const state = readCommitState(datasource, repoId);
-    if (!state) {
-      res.sendStatus(400);
-      return;
-    }
-    res.send(state);
-  }
-);
-
-app.get(
-  "/repo/:repoId/branch/:branch/state",
-  cors(corsOptionsDelegate),
-  async (req, res): Promise<void> => {
-    const repoId = req.params["repoId"];
-    const branchName = req.params["branch"];
-    const state = readBranchState(datasource, repoId, branchName);
-    if (!state) {
-      res.sendStatus(400);
-      return;
-    }
-    res.send(state);
-  }
-);
-
-app.get(
-  "/repo/:repoId/history",
-  cors(corsOptionsDelegate),
-  async (req, res): Promise<void> => {
-    const repoId = req.params["repoId"];
-    const history = readCurrentHistory(datasource, repoId);
-    if (!history) {
-      res.sendStatus(400);
-      return;
-    }
-    res.send(history);
-  }
-);
-
-app.get(
-  "/repo/:repoId/branch/:branch/history",
-  cors(corsOptionsDelegate),
-  async (req, res): Promise<void> => {
-    const repoId = req.params["repoId"];
-    const branchName = req.params["branch"];
-    const history = readBranchHistory(datasource, repoId, branchName);
-    if (!history) {
-      res.sendStatus(400);
-      return;
-    }
-    res.send(history);
-  }
-);
-
-app.get(
-  "/repo/:repoId/commit/:sha/history",
-  cors(corsOptionsDelegate),
-  async (req, res): Promise<void> => {
-    const repoId = req.params["repoId"];
-    const sha = req.params["sha"];
-    const history = readCommitHistory(datasource, repoId, sha);
-    if (!history) {
-      res.sendStatus(400);
-      return;
-    }
-    res.send(history);
-  }
-);
-
-app.get(
-  "/repo/:repoId/lastcommit",
-  cors(corsOptionsDelegate),
-  async (req, res): Promise<void> => {
-    const repoId = req.params["repoId"];
-    const commit = await readLastCommit(datasource, repoId);
-    if (!commit) {
-      res.sendStatus(400);
-      return;
-    }
-    res.send(commit);
-  }
-);
-
-app.get(
-  "/repo/:repoId/commit/:sha",
-  cors(corsOptionsDelegate),
-  async (req, res): Promise<void> => {
-    const repoId = req.params["repoId"];
-    const sha = req.params["sha"];
-    const commit = await readRepoCommit(datasource, repoId, sha);
-    if (!commit) {
-      res.sendStatus(400);
-      return;
-    }
-    res.send(commit);
-  }
-);
-
-app.post(
-  "/repo/:repoId/commit",
-  cors(corsOptionsDelegate),
-  async (req, res): Promise<void> => {
-    const repoId = req.params["repoId"];
-    const message = req.body?.["message"];
-    const commit = await writeRepoCommit(datasource, repoId, message);
-    if (!commit) {
-      res.sendStatus(400);
-      return;
-    }
-    res.send(commit);
   }
 );
 

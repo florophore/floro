@@ -39,6 +39,7 @@ import {
   drawUseWasAddedFunction,
   drawUseWasRemovedFunction,
   drawUseIsFloroInvalidFunction,
+  drawUseHasConflictFunction,
 } from "./plugins";
 import clc from "cli-color";
 import semver from "semver";
@@ -780,5 +781,8 @@ export const generateTypeScriptAPI = async (
 
   const useWasRemovedCode = drawUseWasRemovedFunction(diffableListWithPartials);
   code += useWasRemovedCode;
+
+  const useHasConflictCode = drawUseHasConflictFunction(diffableListWithPartials);
+  code += useHasConflictCode;
   return code;
 };
