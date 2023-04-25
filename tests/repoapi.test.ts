@@ -3,13 +3,12 @@ import { DataSource, makeMemoizedDataSource } from "../src/datasource";
 import { buildFloroFilestructure, userHome } from "../src/filestructure";
 import { Manifest, PluginElement } from "../src/plugins";
 import {
-  getApplicationState,
   getCurrentCommitSha,
   getCommitState,
   convertCommitStateToRenderedState,
 } from "../src/repo";
 import {
-  checkoutSha,
+  getApplicationState,
   readCommitState,
   readCurrentState,
   readRepoDescription,
@@ -27,6 +26,7 @@ import {
   autofixReversion,
   cherryPickRevision,
   createRepoBranch,
+  updateCurrentCommitSHA
 } from "../src/repoapi";
 import {
   createBlankRepo,
@@ -616,7 +616,7 @@ describe("repoapi", () => {
       };
       await updatePluginState(datasource, "abc", "A", state2);
       const commitB = await writeRepoCommit(datasource, "abc", "B");
-      await checkoutSha(datasource, "abc", commitA.sha);
+      await updateCurrentCommitSHA(datasource, "abc", commitA.sha, false);
       await createRepoBranch(datasource, "abc", "feature-branch");
       await switchRepoBranch(datasource, "abc", "feature-branch");
 
@@ -685,70 +685,61 @@ describe("repoapi", () => {
         ],
       };
       await updatePluginState(datasource, "abc", "A", state4);
-      const commitD = await writeRepoCommit(datasource, "abc", "D");
-
-      const state5 = {
-        aSet: [
-          {
-            mainKey: "key0",
-            someProp: {
-              value: 0,
-            },
-          },
-          {
-            mainKey: "key1",
-            someProp: {
-              value: 1,
-            },
-          },
-          {
-            mainKey: "key2",
-            someProp: {
-              value: 2,
-            },
-          },
-          {
-            mainKey: "key3",
-            someProp: {
-              value: 36,
-            },
-          },
-          {
-            mainKey: "key7",
-            someProp: {
-              value: 7,
-            },
-          },
-        ],
-      };
-
-      await updatePluginState(datasource, "abc", "A", state5);
+      await writeRepoCommit(datasource, "abc", "D");
 
       const mergeStateOut = await mergeCommit(datasource, "abc", commitB.sha);
+      expect(mergeStateOut).toEqual({
+        description: [],
+        licenses: [],
+        plugins: [
+          {
+            key: "A",
+            value: "0.0.0",
+          },
+        ],
+        store: {
+          A: {
+            aSet: [
+              {
+                mainKey: "key1",
+                someProp: {
+                  value: 1,
+                },
+              },
+              {
+                mainKey: "key1a",
+                someProp: {
+                  value: 11,
+                },
+              },
+              {
+                mainKey: "key3",
+                someProp: {
+                  value: 3,
+                },
+              },
+              {
+                mainKey: "key4",
+                someProp: {
+                  value: 4,
+                },
+              },
+            ],
+          },
+        },
+        binaries: [],
+      });
+      const repoState = await datasource.readCurrentRepoState("abc");
       const mergeSha = await getCurrentCommitSha(datasource, "abc");
-
-      const commitE = await writeRepoCommit(datasource, "abc", "E");
-      const eState = await getCommitState(datasource, "abc", commitE.sha);
-      const eStateRendered = await convertCommitStateToRenderedState(
-        datasource,
-        eState
-      );
-
-      expect(eStateRendered).toEqual(mergeStateOut);
-      await switchRepoBranch(datasource, "abc", "main");
-      const mainMergeOut = await mergeCommit(datasource, "abc", mergeSha);
-      const mainMergedSha = await getCurrentCommitSha(datasource, "abc");
-
-      const mainMergeState = await getCommitState(
-        datasource,
-        "abc",
-        mainMergedSha
-      );
-      const mainMergeRendered = await convertCommitStateToRenderedState(
-        datasource,
-        mainMergeState
-      );
-      expect(mainMergeOut).toEqual(mainMergeRendered);
+      expect(repoState).toEqual({
+        branch: "feature-branch",
+        commit:
+          mergeSha,
+        isInMergeConflict: false,
+        merge: null,
+        commandMode: "view",
+        comparison: null,
+      });
     });
 
     test("creates a conflict if cant automerge and aborts", async () => {
@@ -851,9 +842,7 @@ describe("repoapi", () => {
       };
       await updatePluginState(datasource, "abc", "A", state2);
       const commitB = await writeRepoCommit(datasource, "abc", "B");
-      await checkoutSha(datasource, "abc", commitA.sha);
-      await createRepoBranch(datasource, "abc", "feature-branch");
-      await switchRepoBranch(datasource, "abc", "feature-branch");
+      await createRepoBranch(datasource, "abc", "feature-branch", commitA.sha, "main", true);
 
       const state3 = {
         aSet: [
@@ -1122,9 +1111,7 @@ describe("repoapi", () => {
       };
       await updatePluginState(datasource, "abc", "A", state2);
       const commitB = await writeRepoCommit(datasource, "abc", "B");
-      await checkoutSha(datasource, "abc", commitA.sha);
-      await createRepoBranch(datasource, "abc", "feature-branch");
-      await switchRepoBranch(datasource, "abc", "feature-branch");
+      await createRepoBranch(datasource, "abc", "feature-branch", commitA.sha, "main", true);
 
       const state3 = {
         aSet: [

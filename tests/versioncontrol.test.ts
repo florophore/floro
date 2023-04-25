@@ -3,7 +3,6 @@ import {
   getDiff,
   getTextDiff,
   getMergeSequence,
-  canAutoMerge,
 } from "../src/versioncontrol";
 
 describe("versioncontrol", () => {
@@ -93,7 +92,7 @@ describe("versioncontrol", () => {
       const C = "BC".split("");
       const merge = getMergeSequence(A, B, C).join("");
       expect(merge).toEqual("DABC");
-      const canMerge = canAutoMerge(A, B, C);
+      const canMerge = getMergeSequence(A, B, C, "theirs").join("") == getMergeSequence(A, B, C, "yours").join("");
       expect(canMerge).toBe(false);
     });
 
@@ -103,7 +102,7 @@ describe("versioncontrol", () => {
       const C = "ABC".split("");
       const merge = getMergeSequence(A, B, C).join("");
       expect(merge).toEqual("DABC");
-      const canMerge = canAutoMerge(A, B, C);
+      const canMerge = getMergeSequence(A, B, C, "theirs").join("") == getMergeSequence(A, B, C, "yours").join("");
       expect(canMerge).toBe(true);
     });
 
@@ -113,7 +112,7 @@ describe("versioncontrol", () => {
       const C = "ABCDFSJK".split("");
       const merge = getMergeSequence(A, B, C).join("");
       expect(merge).toEqual("RXALDFSJKZ");
-      const canMerge = canAutoMerge(A, B, C);
+      const canMerge = getMergeSequence(A, B, C, "theirs").join("") == getMergeSequence(A, B, C, "yours").join("");
       expect(canMerge).toBe(true);
     });
 
@@ -123,7 +122,7 @@ describe("versioncontrol", () => {
       const C = "ABCDFSJKL".split("");
       const merge = getMergeSequence(A, B, C).join("");
       expect(merge).toEqual("RXALDFSJKZL");
-      const canMerge = canAutoMerge(A, B, C);
+      const canMerge = getMergeSequence(A, B, C, "theirs").join("") == getMergeSequence(A, B, C, "yours").join("");
       expect(canMerge).toBe(false);
       expect(getMergeSequence(A, B, C, "theirs").join("")).toEqual(
         "RXALDFSJKLZ"
@@ -136,7 +135,7 @@ describe("versioncontrol", () => {
       const C = "DF".split("");
       const merge = getMergeSequence(A, B, C).join("");
       expect(merge).toEqual("DTPF");
-      const canMerge = canAutoMerge(A, B, C);
+      const canMerge = getMergeSequence(A, B, C, "theirs").join("") == getMergeSequence(A, B, C, "yours").join("");
       expect(canMerge).toBe(true);
     });
 
@@ -146,7 +145,7 @@ describe("versioncontrol", () => {
       const C = "DXF".split("");
       const merge = getMergeSequence(A, B, C).join("");
       expect(merge).toEqual("DTPXF");
-      const canMerge = canAutoMerge(A, B, C);
+      const canMerge = getMergeSequence(A, B, C, "theirs").join("") == getMergeSequence(A, B, C, "yours").join("");
       expect(canMerge).toBe(false);
       expect(getMergeSequence(A, B, C, "theirs").join("")).toEqual("DXTPF");
     });

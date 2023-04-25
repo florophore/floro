@@ -39,7 +39,7 @@ import {
   hashString,
   StringDiff,
 } from "./versioncontrol";
-import { SourceCommitNode, SourceGraph, getTargetBranchId } from "./sourcegraph";
+import { SourceCommitNode } from "./sourcegraph";
 
 export interface Comparison {
   against: "wip" | "branch" | "sha" | "merge";
@@ -391,6 +391,7 @@ export const canCommit = async (
   const commit = await datasource.readCommit(repoId, currentSha);
   if (commit) {
     // ensure safe
+    // check that the index is really + 1
   }
   const currentState = await datasource.readCurrentRepoState(repoId);
   if (!currentState) {
@@ -643,37 +644,6 @@ export const getUnstagedCommitState = async (
   return commitState;
 };
 
-export const getApplicationState = async (
-  datasource: DataSource,
-  repoId: string
-): Promise<RenderedApplicationState> => {
-  return await datasource.readRenderedState(repoId);
-};
-
-export const convertRenderedCommitStateToKv = async (
-  datasource: DataSource,
-  renderedAppState: RenderedApplicationState
-): Promise<ApplicationKVState> => {
-  const out: ApplicationKVState = {
-    description: [],
-    licenses: [],
-    plugins: [],
-    store: undefined,
-    binaries: [],
-  };
-  for (const prop in renderedAppState) {
-    if (prop == "store") {
-      out[prop] = await convertRenderedStateStoreToKV(
-        datasource,
-        renderedAppState
-      );
-      continue;
-    }
-    out[prop] = renderedAppState[prop];
-  }
-  return out;
-};
-
 
 export const updateCurrentWithNewBranch = async (
   datasource: DataSource,
@@ -746,247 +716,6 @@ export const getPluginsToRunUpdatesOn = (
   });
 };
 
-const getDefaultComparison = async (
-  datasource: DataSource,
-  repoId: string,
-  repoState: RepoState
-): Promise<Comparison> => {
-  const renderedState = await getApplicationState(datasource, repoId);
-  const applicationKVState = await convertRenderedCommitStateToKv(
-    datasource,
-    renderedState
-  );
-  const unstagedState = await getUnstagedCommitState(datasource, repoId);
-  const isWIP =
-    unstagedState &&
-    (await getIsWip(
-      datasource,
-      repoId,
-      repoState,
-      unstagedState,
-      applicationKVState
-    ));
-  if (repoState.isInMergeConflict) {
-    return {
-      against: "merge",
-      comparisonDirection: "forward",
-      branch: null,
-      commit: null,
-    };
-  }
-  if (isWIP) {
-    return {
-      against: "wip",
-      comparisonDirection: "forward",
-      branch: null,
-      commit: null,
-    };
-  }
-  if (repoState?.branch) {
-    const currentBranch = await datasource?.readBranch(
-      repoId,
-      repoState?.branch
-    );
-    if (currentBranch && currentBranch?.baseBranchId) {
-      const baseBranch = currentBranch?.baseBranchId
-        ? await datasource?.readBranch(repoId, currentBranch?.baseBranchId)
-        : null;
-      const comparisonDirection = await getComparisonDirection(datasource, repoId, "branch", baseBranch?.id);
-      if (baseBranch?.id) {
-        return {
-          against: "branch",
-          comparisonDirection,
-          branch: baseBranch?.id,
-          commit: null,
-        };
-      }
-    }
-  }
-  if (repoState?.commit) {
-    const currentCommit = await datasource?.readCommit(
-      repoId,
-      repoState?.commit
-    );
-    if (currentCommit && currentCommit?.parent) {
-      const previousCommit = currentCommit?.parent
-        ? await datasource?.readCommit(repoId, currentCommit?.parent)
-        : null;
-      if (previousCommit?.sha) {
-        return {
-          against: "sha",
-          comparisonDirection: "forward",
-          branch: null,
-          commit: previousCommit.sha,
-        };
-      }
-    }
-  }
-
-  return {
-    against: "wip",
-    comparisonDirection: "forward",
-    branch: null,
-    commit: null,
-  };
-};
-
-export const changeCommandMode = async (datasource: DataSource, repoId: string, commandMode: "view"|"edit"|"compare") => {
-  try {
-    const currentRepoState = await datasource.readCurrentRepoState(repoId);
-    const nextRepoState: RepoState = {
-      ...currentRepoState,
-      commandMode,
-      comparison:
-        commandMode == "compare"
-          ? await getDefaultComparison(datasource, repoId, currentRepoState)
-          : null,
-    };
-    await datasource.saveCurrentRepoState(repoId, nextRepoState);
-    return nextRepoState;
-  } catch (e) {
-    return null;
-  }
-}
-
-export const getComparisonDirection = async (
-  datasource: DataSource,
-  repoId: string,
-  against: "branch" | "sha",
-  branchId?: string|null,
-  sha?: string|null,
-): Promise<"forward"|"backward"> => {
-  if (against == "branch" && branchId) {
-    const branch = await datasource.readBranch(repoId, branchId);
-    if (branch?.lastCommit) {
-      return await getComparisonDirection(
-        datasource,
-        repoId,
-        "sha",
-        null,
-        branch?.lastCommit
-      );
-    }
-  }
-  if (sha) {
-    const commit = await datasource?.readCommit(repoId, sha);
-    if (!commit?.sha) {
-      return "forward";
-    }
-    const currentRepoState = await datasource.readCurrentRepoState(repoId);
-    if (!currentRepoState?.commit)
-    if (commit?.sha == currentRepoState.commit) {
-      return "forward";
-    }
-
-    const commits = await datasource.readCommits(repoId);
-    const branchesMetaState = await datasource.readBranchesMetaState(repoId);
-    const branches = await datasource.readBranches(repoId);
-    const sourcegraph = new SourceGraph(commits, branchesMetaState, currentRepoState);
-    const pointerMap = sourcegraph?.getPointers();
-    const currentPointer = pointerMap[currentRepoState?.commit];
-    const comparisonPointer = pointerMap[commit?.sha];
-    const currentTopBranchId = getTargetBranchId(branches, currentPointer.branchIds);
-    const comparisonTopBranchId = getTargetBranchId(branches, comparisonPointer.branchIds);
-    if (currentTopBranchId != comparisonTopBranchId) {
-      return "forward";
-    }
-    const topBranch = await datasource?.readBranch(repoId, currentTopBranchId);
-    if (!topBranch?.lastCommit) {
-      return "forward";
-    }
-    const currentOriginSha = await getDivergenceOriginSha(
-      datasource,
-      repoId,
-      topBranch?.lastCommit,
-      currentPointer.sha
-    );
-    if (!currentOriginSha) {
-      return "forward";
-    }
-
-    const comparisonOriginSha = await getDivergenceOriginSha(
-      datasource,
-      repoId,
-      topBranch?.lastCommit,
-      comparisonPointer.sha
-    );
-    if (!comparisonOriginSha) {
-      return "forward";
-    }
-
-    const currentOrigin = await datasource?.readCommit(repoId, currentOriginSha);
-    if (!currentOrigin) {
-      return "forward";
-    }
-    const comparisonOrigin = await datasource?.readCommit(repoId, comparisonOriginSha);
-    if (!comparisonOrigin) {
-      return "forward";
-    }
-    if (currentOrigin?.idx < comparisonOrigin?.idx) {
-      return "backward";
-    }
-  }
-
-  return "forward";
-}
-
-export const updateComparison = async (
-  datasource: DataSource,
-  repoId: string,
-  against: "wip" | "branch" | "sha",
-  branchId?: string|null,
-  sha?: string|null,
-) => {
-
-  try {
-    const currentRepoState = await datasource.readCurrentRepoState(repoId);
-    if (!currentRepoState || currentRepoState?.commandMode != "compare") {
-      return null;
-    }
-    if (against == "wip") {
-      const nextRepoState: RepoState = {
-        ...currentRepoState,
-        comparison: {
-          against,
-          comparisonDirection: "forward",
-          branch: null,
-          commit: null,
-        }
-      };
-      return await datasource.saveCurrentRepoState(repoId, nextRepoState);
-    }
-    if (against == "branch") {
-      const comparisonDirection = await getComparisonDirection(datasource, repoId, against, branchId)
-      const nextRepoState: RepoState = {
-        ...currentRepoState,
-        comparison: {
-          against,
-          comparisonDirection,
-          branch: branchId ?? null,
-          commit: null,
-        }
-      };
-      return await datasource.saveCurrentRepoState(repoId, nextRepoState);
-    }
-    if (against == "sha") {
-      const comparisonDirection = await getComparisonDirection(datasource, repoId, against, null, sha);
-      const nextRepoState: RepoState = {
-        ...currentRepoState,
-        comparison: {
-          against,
-          comparisonDirection,
-          branch: null,
-          commit: sha ?? null,
-        }
-      };
-      return await datasource.saveCurrentRepoState(repoId, nextRepoState);
-    }
-    return null;
-  } catch(e) {
-    return null;
-  }
-}
-
 export const buildStateStore = async (
   datasource: DataSource,
   appKvState: ApplicationKVState
@@ -1020,28 +749,6 @@ export const convertStateStoreToKV = async (
       schemaMap,
       pluginManifest.name,
       stateStore
-    );
-    out[pluginManifest.name] = kv;
-  }
-  return out;
-};
-
-export const convertRenderedStateStoreToKV = async (
-  datasource: DataSource,
-  renderedAppState: RenderedApplicationState
-): Promise<RawStore> => {
-  let out = {};
-  const manifests = await getPluginManifests(
-    datasource,
-    renderedAppState.plugins
-  );
-  for (const pluginManifest of manifests) {
-    const schemaMap = await getSchemaMapForManifest(datasource, pluginManifest);
-    const kv = await getKVStateForPlugin(
-      datasource,
-      schemaMap,
-      pluginManifest.name,
-      renderedAppState.store
     );
     out[pluginManifest.name] = kv;
   }
@@ -1390,62 +1097,6 @@ export const getMergedCommitState = async (
   }
 };
 
-export const getCanAutoMergeOnUnStagedState = async (
-  datasource: DataSource,
-  repoId: string,
-  mergeSha: string
-) => {
-  try {
-  const unstagedState = await getUnstagedCommitState(datasource, repoId);
-    const repoState = await datasource.readCurrentRepoState(repoId);
-    const mergeState = await getCommitState(datasource, repoId, mergeSha);
-    const { originCommit } = await getMergeCommitStates(
-      datasource,
-      repoId,
-      repoState.commit,
-      mergeSha
-    );
-    return await canAutoMergeCommitStates(
-      datasource,
-      unstagedState,
-      mergeState,
-      originCommit
-    );
-  } catch (e) {
-    return null;
-  }
-};
-
-export const getCanAutoMergeOnTopCurrentState = async (
-  datasource: DataSource,
-  repoId: string,
-  mergeSha: string
-) => {
-  try {
-    const currentRenderedState = await datasource.readRenderedState(repoId);
-    const currentAppKVstate = await convertRenderedCommitStateToKv(
-      datasource,
-      currentRenderedState
-    );
-    const repoState = await datasource.readCurrentRepoState(repoId);
-    const mergeState = await getCommitState(datasource, repoId, mergeSha);
-    const { originCommit } = await getMergeCommitStates(
-      datasource,
-      repoId,
-      repoState.commit,
-      mergeSha
-    );
-    return await canAutoMergeCommitStates(
-      datasource,
-      currentAppKVstate,
-      mergeState,
-      originCommit
-    );
-  } catch (e) {
-    return null;
-  }
-};
-
 export const getConflictResolution = (
   resolveDiff: StateDiff,
   conflictList: ConflictList
@@ -1684,23 +1335,6 @@ export const getInvalidStates = async (
   }
   return store;
 }
-
-export const getIsWip = async (
-  datasource: DataSource,
-  repoId: string,
-  repoState: RepoState,
-  unstagedState: ApplicationKVState,
-  applicationKVState: ApplicationKVState,
-
-) => {
-  if (repoState?.isInMergeConflict) {
-      const diff = await getMergeConflictDiff(datasource, repoId);
-      return !diffIsEmpty(diff);
-  }
-  const diff = getStateDiffFromCommitStates(unstagedState, applicationKVState);
-  return !diffIsEmpty(diff);
-}
-
 export const getBranchFromRepoState = async (
   repoId: string,
   datasource: DataSource,
@@ -1824,57 +1458,3 @@ export const getApiDiffFromComparisonState = async (
     apiDiff: getApiDiff(unstagedState, applicationKVState, diff)
   };
 }
-
-export const getMergeConflictDiff = async (
-  datasource: DataSource,
-  repoId: string
-) => {
-  if (!repoId) {
-    return null;
-  }
-  const exists = await datasource.repoExists(repoId);
-  if (!exists) {
-    return null;
-  }
-  try {
-    const currentRepoState = await datasource.readCurrentRepoState(repoId);
-    if (!currentRepoState.isInMergeConflict) {
-      return null;
-    }
-
-    const currentAppState = await getApplicationState(datasource, repoId);
-    const currentKVState = await convertRenderedCommitStateToKv(
-      datasource,
-      currentAppState
-    );
-    if (currentRepoState.merge.mergeState) {
-      return getStateDiffFromCommitStates(currentRepoState.merge.mergeState, currentKVState);
-    }
-
-    const fromCommitState = await getCommitState(
-      datasource,
-      repoId,
-      currentRepoState.merge.fromSha
-    );
-    const intoCommitState = await getCommitState(
-      datasource,
-      repoId,
-      currentRepoState.merge.intoSha
-    );
-    const originCommitState = await getCommitState(
-      datasource,
-      repoId,
-      currentRepoState.merge.originSha
-    );
-    const mergeState = await getMergedCommitState(
-      datasource,
-      fromCommitState,
-      intoCommitState,
-      originCommitState,
-      currentRepoState.merge.direction
-    );
-    return getStateDiffFromCommitStates(mergeState, currentKVState);
-  } catch (e) {
-    return null;
-  }
-};

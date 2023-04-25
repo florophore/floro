@@ -300,54 +300,6 @@ export const getMergeSequence = (
   return merge;
 };
 
-export const canAutoMerge = (
-  origin: Array<string>,
-  from: Array<string>,
-  into: Array<string>
-): boolean => {
-  if (from.length == 0 && into.length == 0) {
-    return true;
-  }
-  const lcs = getGreatestCommonLCS(origin, from, into);
-  if (lcs.length == 0) {
-    return canAutoMergeSubSequence(from, into);
-  }
-
-  const originOffsets = getLCSBoundaryOffsets(origin, lcs);
-  const originSequences = getLCSOffsetMergeSeqments(origin, originOffsets);
-  const fromOffsets = getLCSBoundaryOffsets(from, lcs);
-  const fromSequences = getLCSOffsetMergeSeqments(from, fromOffsets);
-  const fromReconciledSequences = getReconciledSequence(
-    originSequences,
-    fromSequences
-  );
-  const intoOffsets = getLCSBoundaryOffsets(into, lcs);
-  const intoSequences = getLCSOffsetMergeSeqments(into, intoOffsets);
-  const intoReconciledSequences = getReconciledSequence(
-    originSequences,
-    intoSequences
-  );
-  let index = 0;
-  if (lcs.length == 0) return false;
-  while (index <= lcs.length) {
-    if (
-      fromReconciledSequences[index].length > 0 &&
-      intoReconciledSequences[index].length > 0
-    ) {
-      if (
-        !canAutoMergeSubSequence(
-          fromReconciledSequences[index],
-          intoReconciledSequences[index]
-        )
-      ) {
-        return false;
-      }
-    }
-    index++;
-  }
-  return true;
-};
-
 // yours prioritizes into (you) from (them)
 const getMergeSubSequence = (
   from: Array<string>,
@@ -389,33 +341,6 @@ const getMergeSubSequence = (
   }
   const merge = mergeSequences.flatMap((v) => v);
   return merge;
-};
-
-const canAutoMergeSubSequence = (
-  from: Array<string>,
-  into: Array<string>
-): boolean => {
-  if (from.length == 0 && into.length == 0) {
-    return true;
-  }
-  const lcs = getLCS(from, into);
-  if (lcs.length == 0) {
-    return false;
-  }
-
-  const fromOffsets = getLCSBoundaryOffsets(from, lcs);
-  const fromSequences = getLCSOffsetMergeSeqments(from, fromOffsets);
-  const intoOffsets = getLCSBoundaryOffsets(into, lcs);
-  const intoSequences = getLCSOffsetMergeSeqments(into, intoOffsets);
-  let index = 0;
-  if (lcs.length == 0) return false;
-  while (index <= lcs.length) {
-    if (fromSequences[index].length > 0 && intoSequences[index].length > 0) {
-      return false;
-    }
-    index++;
-  }
-  return true;
 };
 
 const getGreatestCommonLCS = (

@@ -29,15 +29,12 @@ import macaddres from "macaddress";
 import sha256 from "crypto-js/sha256";
 import HexEncode from "crypto-js/enc-hex";
 import {
-  changeCommandMode,
   cloneRepo,
-  convertRenderedCommitStateToKv,
-  getApplicationState,
-  getCanAutoMergeOnTopCurrentState,
-  getCanAutoMergeOnUnStagedState,
-  updateComparison,
 } from "./repo";
 import {
+  convertRenderedCommitStateToKv,
+  getApplicationState,
+  updateComparison,
   getCurrentRepoBranch,
   getRepoBranches,
   switchRepoBranch,
@@ -54,6 +51,8 @@ import {
   popStashedChanges,
   discardCurrentChanges,
   updateLocalBranch,
+  getCanAutoMergeOnTopCurrentState,
+  getCanAutoMergeOnUnStagedState,
   mergeCommit,
   updateMergeDirection,
   abortMerge,
@@ -68,6 +67,7 @@ import {
   revertCommit,
   amendRevision,
   autofixReversion,
+  changeCommandMode,
 } from "./repoapi";
 import { makeMemoizedDataSource, readDevPluginManifest, readDevPlugins, readDevPluginVersions } from "./datasource";
 import busboy from 'connect-busboy';
