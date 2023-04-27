@@ -73,9 +73,9 @@ export const getKVHashes = (obj: {
   };
 };
 
-export const getKVHash = (obj: { key: string; value: {[key: string]: number | string | boolean | Array<number | string | boolean>}|string }): string => {
+export const getKVHash = (obj: {key: string, value: string|object}): string => {
   if (typeof obj.value == "string") {
-    return fastHash(obj.key + obj.value);
+    return fastHash(obj.key as string + obj.value as string);
   }
   return fastHash(obj.key + JSON.stringify(obj.value));
 };

@@ -38,6 +38,7 @@ import {
   getApiDiffFromComparisonState,
   RawStore,
   Comparison,
+  uniqueKVObj,
 } from "./repo";
 import {
   CommitData,
@@ -87,8 +88,9 @@ export const writeRepoDescription = async (
   try {
     const renderedState = await datasource.readRenderedState(repoId);
     renderedState.description = splitTextForDiff(description);
-    await datasource.saveRenderedState(repoId, renderedState);
-    return renderedState;
+    const sanitizedRenderedState = await sanitizeApplicationKV(datasource, renderedState);
+    await datasource.saveRenderedState(repoId, sanitizedRenderedState);
+    return sanitizedRenderedState;
   } catch (e) {
     return null;
   }
@@ -124,27 +126,9 @@ export const writeRepoLicenses = async (
     }
     const renderedState = await datasource.readRenderedState(repoId);
     renderedState.licenses = licenses;
-    await datasource.saveRenderedState(repoId, renderedState);
-    return renderedState;
-  } catch (e) {
-    return null;
-  }
-};
-
-export const readRepoLicenses = async (
-  datasource: DataSource,
-  repoId?: string
-): Promise<Array<{ key: string; value: string }>> => {
-  if (!repoId) {
-    return null;
-  }
-  const exists = await datasource.repoExists(repoId);
-  if (!exists) {
-    return null;
-  }
-  try {
-    const renderedState = await datasource.readRenderedState(repoId);
-    return renderedState.licenses;
+    const sanitizedRenderedState = await sanitizeApplicationKV(datasource, renderedState);
+    await datasource.saveRenderedState(repoId, sanitizedRenderedState);
+    return sanitizedRenderedState;
   } catch (e) {
     return null;
   }
@@ -183,6 +167,7 @@ export const getCurrentRepoBranch = async (
     return null;
   }
 };
+
 export const getRepoBranches = async (
   datasource: DataSource,
   repoId?: string
@@ -491,7 +476,8 @@ export const createRepoBranch = async (
       );
     }
     if (newRenderedState) {
-      await datasource.saveRenderedState(repoId, newRenderedState);
+      const sanitizedRenderedState = await sanitizeApplicationKV(datasource, newRenderedState);
+      await datasource.saveRenderedState(repoId, sanitizedRenderedState);
     }
     return repoState;
   } catch (e) {
@@ -569,7 +555,8 @@ export const switchRepoBranch = async (
     }
 
     await datasource.saveBranchesMetaState(repoId, branchMetaState);
-    await datasource.saveRenderedState(repoId, newRenderedState);
+    const sanitizedRenderedState = await sanitizeApplicationKV(datasource, newRenderedState);
+    await datasource.saveRenderedState(repoId, sanitizedRenderedState);
     return await updateCurrentBranch(datasource, repoId, branchId);
   } catch (e) {
     return null;
@@ -676,7 +663,8 @@ export const deleteLocalBranch = async (
     }
 
     if (newRenderedState) {
-      await datasource.saveRenderedState(repoId, newRenderedState);
+      const sanitizedRenderedState = await sanitizeApplicationKV(datasource, newRenderedState);
+      await datasource.saveRenderedState(repoId, sanitizedRenderedState);
     }
     await datasource.deleteBranch(repoId, branchId);
     return repoState;
@@ -1173,7 +1161,8 @@ export const updatePlugins = async (
     let store = currentRenderedState.store;
     for (let { key } of lexicallyOrderedPlugins) {
       if (!store[key]) {
-        store[key] = {};
+        const manifest = updatedManifests.find(m => m.name == key);
+        store[key] = (manifest?.seed as object) ?? {};
       }
     }
     const schemaMap = manifestListToSchemaMap(updatedManifests);
@@ -1183,7 +1172,8 @@ export const updatePlugins = async (
     currentRenderedState.store = store;
     currentRenderedState.plugins = sortedUpdatedPlugins;
     currentRenderedState.binaries = uniqueStrings(binaries);
-    await datasource.saveRenderedState(repoId, currentRenderedState);
+    const sanitizedRenderedState = await sanitizeApplicationKV(datasource, currentRenderedState);
+    await datasource.saveRenderedState(repoId, sanitizedRenderedState);
     return currentRenderedState;
   } catch (e) {
     return null;
@@ -1240,8 +1230,22 @@ export const updatePluginState = async (
     renderedState.binaries = uniqueStrings(
       await collectFileRefs(datasource, schemaMap, renderedState.store)
     );
-    await datasource.saveRenderedState(repoId, renderedState);
-    return renderedState;
+    const sanitiziedRenderedState = await sanitizeApplicationKV(datasource, renderedState);
+    sanitiziedRenderedState.store = await cascadePluginState(
+      datasource,
+      schemaMap,
+      stateStore
+    );
+    sanitiziedRenderedState.store = await nullifyMissingFileRefs(
+      datasource,
+      schemaMap,
+      renderedState.store
+    );
+    sanitiziedRenderedState.binaries = uniqueStrings(
+      await collectFileRefs(datasource, schemaMap, renderedState.store)
+    );
+    await datasource.saveRenderedState(repoId, sanitiziedRenderedState);
+    return sanitiziedRenderedState;
   } catch (e) {
     return null;
   }
@@ -1370,12 +1374,12 @@ export const mergeCommit = async (
         : getBaseDivergenceSha(history, origin);
 
       const mergeDiff = getStateDiffFromCommitStates(
-        fromCommitState,
+        intoCommitState,
         mergeState
       );
       const baseCommit = await getCommitState(datasource, repoId, baseSha);
       const baseDiff = getStateDiffFromCommitStates(
-        intoCommitState,
+        fromCommitState,
         baseCommit
       );
       const baseCommitData = await datasource.readCommit(repoId, baseSha);
@@ -1475,9 +1479,10 @@ export const mergeCommit = async (
         );
         const currentAfterRestorationRendered =
           await convertCommitStateToRenderedState(datasource, mergeCurrState);
+        const sanitizedCurrentAfterRestorationRendered = await sanitizeApplicationKV(datasource, currentAfterRestorationRendered);
         const state = await datasource.saveRenderedState(
           repoId,
-          currentAfterRestorationRendered
+          sanitizedCurrentAfterRestorationRendered
         );
         return state;
       } else {
@@ -1485,7 +1490,9 @@ export const mergeCommit = async (
           datasource,
           mergeState
         );
-        const state = await datasource.saveRenderedState(repoId, renderedState);
+
+        const sanitizedRenderedState = await sanitizeApplicationKV(datasource, renderedState);
+        const state = await datasource.saveRenderedState(repoId, sanitizedRenderedState);
         return state;
       }
     } else {
@@ -1555,7 +1562,8 @@ export const mergeCommit = async (
         datasource,
         mergeState
       );
-      await datasource.saveRenderedState(repoId, renderedState);
+      const sanitizedRenderedState = await sanitizeApplicationKV(datasource, renderedState);
+      await datasource.saveRenderedState(repoId, sanitizedRenderedState);
       return renderedState;
     }
   } catch (e) {
@@ -1627,7 +1635,8 @@ export const updateMergeDirection = async (
       datasource,
       mergeState
     );
-    await datasource.saveRenderedState(repoId, renderedState);
+    const sanitizedRenderedState = await sanitizeApplicationKV(datasource, renderedState);
+    await datasource.saveRenderedState(repoId, sanitizedRenderedState);
     return renderedState;
   } catch (e) {
     return null;
@@ -1669,7 +1678,8 @@ export const abortMerge = async (datasource: DataSource, repoId: string) => {
       datasource,
       appState
     );
-    await datasource.saveRenderedState(repoId, renderedState);
+    const sanitiziedRenderedState = await sanitizeApplicationKV(datasource, renderedState);
+    await datasource.saveRenderedState(repoId, sanitiziedRenderedState);
     return renderedState;
   } catch (e) {
     return null;
@@ -1698,6 +1708,7 @@ export const resolveMerge = async (datasource: DataSource, repoId: string) => {
     const fromSha = currentRepoState.merge.fromSha;
 
     const intoCommitState = await getCommitState(datasource, repoId, intoSha);
+    const fromCommitState = await getCommitState(datasource, repoId, fromSha);
     const history = await getHistory(
       datasource,
       repoId,
@@ -1712,7 +1723,7 @@ export const resolveMerge = async (datasource: DataSource, repoId: string) => {
       : getBaseDivergenceSha(history, origin);
 
     const baseCommit = await getCommitState(datasource, repoId, baseSha);
-    const baseDiff = getStateDiffFromCommitStates(intoCommitState, baseCommit);
+    const baseDiff = getStateDiffFromCommitStates(fromCommitState, baseCommit);
     const baseCommitData = await datasource.readCommit(repoId, baseSha);
     const mergeCommitData = await datasource.readCommit(repoId, fromSha);
     const mergeBaseCommit: CommitData = {
@@ -1746,9 +1757,8 @@ export const resolveMerge = async (datasource: DataSource, repoId: string) => {
       datasource,
       currentAppState
     );
-    const fromCommitState = await getCommitState(datasource, repoId, fromSha);
     const mergeDiff = getStateDiffFromCommitStates(
-      fromCommitState,
+      intoCommitState,
       currentKVState
     );
     const mergeCommit: CommitData = {
@@ -1906,14 +1916,16 @@ export const stashChanges = async (datasource: DataSource, repoId: string) => {
     if (diffIsEmpty(currentDiff)) {
       return null;
     }
-    const stashList = await datasource.readStash(repoId, currentRepoState);
-    stashList.push(currentKVState);
+    const stashList = await datasource.readStash(repoId, currentRepoState) ?? [];
+    stashList?.push(currentKVState);
     await datasource.saveStash(repoId, currentRepoState, stashList);
     const renderedState = await convertCommitStateToRenderedState(
       datasource,
       unstagedState
     );
-    return await datasource.saveRenderedState(repoId, renderedState);
+
+    const sanitiziedRenderedState = await sanitizeApplicationKV(datasource, renderedState);
+    return await datasource.saveRenderedState(repoId, sanitiziedRenderedState);
   } catch (e) {
     return null;
   }
@@ -2019,7 +2031,9 @@ export const popStashedChanges = async (
       datasource,
       appliedStash
     );
-    return await datasource.saveRenderedState(repoId, renderedState);
+
+    const sanitiziedRenderedState = await sanitizeApplicationKV(datasource, renderedState);
+    return await datasource.saveRenderedState(repoId, sanitiziedRenderedState);
   } catch (e) {
     return null;
   }
@@ -2083,7 +2097,9 @@ export const applyStashedChange = async (
       datasource,
       appliedStash
     );
-    return await datasource.saveRenderedState(repoId, renderedState);
+
+    const sanitiziedRenderedState = await sanitizeApplicationKV(datasource, renderedState);
+    return await datasource.saveRenderedState(repoId, sanitiziedRenderedState);
   } catch (e) {
     return null;
   }
@@ -2107,7 +2123,9 @@ export const discardCurrentChanges = async (
       datasource,
       unstagedState
     );
-    return await datasource.saveRenderedState(repoId, renderedState);
+
+    const sanitiziedRenderedState = await sanitizeApplicationKV(datasource, renderedState);
+    return await datasource.saveRenderedState(repoId, sanitiziedRenderedState);
   } catch (e) {
     return null;
   }
@@ -2299,7 +2317,9 @@ export const revertCommit = async (
       datasource,
       reversionState
     );
-    const state = await datasource.saveRenderedState(repoId, renderedState);
+
+    const sanitiziedRenderedState = await sanitizeApplicationKV(datasource, renderedState);
+    const state = datasource.saveRenderedState(repoId, sanitiziedRenderedState);
     return state;
   } catch (e) {
     return null;
@@ -2535,7 +2555,9 @@ export const autofixReversion = async (
       datasource,
       autoFixState
     );
-    const state = await datasource.saveRenderedState(repoId, renderedState);
+
+    const sanitiziedRenderedState = await sanitizeApplicationKV(datasource, renderedState);
+    const state = await datasource.saveRenderedState(repoId, sanitiziedRenderedState);
     return state;
   } catch (e) {
     return null;
@@ -2612,7 +2634,8 @@ export const cherryPickRevision = async (
       datasource,
       updatedState
     );
-    return await datasource.saveRenderedState(repoId, renderedState);
+    const sanitiziedRenderedState = await sanitizeApplicationKV(datasource, renderedState);
+    return await datasource.saveRenderedState(repoId, sanitiziedRenderedState);
   } catch (e) {
     return null;
   }
@@ -2922,7 +2945,8 @@ export const rollbackCommit = async (
       datasource,
       parentKVState
     );
-    return await datasource.saveRenderedState(repoId, renderedState);
+    const sanitizedRenderedState = await sanitizeApplicationKV(datasource, renderedState);
+    return await datasource.saveRenderedState(repoId, sanitizedRenderedState);
   } catch (e) {
     return null;
   }
@@ -3055,7 +3079,7 @@ export const renderApiReponse = async (
   );
   const manifests = await getPluginManifests(
     datasource,
-    renderedApplicationState.plugins
+    renderedApplicationState?.plugins
   );
   const schemaMap = manifestListToSchemaMap(manifests);
   const branch = await getBranchFromRepoState(repoId, datasource, repoState);
@@ -3399,6 +3423,19 @@ export const convertRenderedStateStoreToKV = async (
   return out;
 };
 
+
+export const sanitizeApplicationKV = async (
+  datasource: DataSource,
+  renderedAppState: RenderedApplicationState
+): Promise<RenderedApplicationState> => {
+  const unrendered = await convertRenderedCommitStateToKv(datasource, renderedAppState);
+  const rendered =  await convertCommitStateToRenderedState(datasource, unrendered);
+  rendered.plugins = uniqueKVObj(rendered.plugins);
+  rendered.licenses = uniqueKVObj(rendered.licenses);
+  rendered.binaries = uniqueStrings(rendered.binaries);
+  return rendered;
+}
+
 export const getDefaultComparison = async (
   datasource: DataSource,
   repoId: string,
@@ -3508,7 +3545,9 @@ export const getComparisonDirection = async (
       return "forward";
     }
     const currentRepoState = await datasource.readCurrentRepoState(repoId);
-    if (!currentRepoState?.commit)
+    if (!currentRepoState?.commit) {
+      return "forward";
+    }
     if (commit?.sha == currentRepoState.commit) {
       return "forward";
     }

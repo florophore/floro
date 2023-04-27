@@ -52,6 +52,7 @@ export interface Manifest {
   };
   types: TypeStruct;
   store: TypeStruct;
+  seed?: unknown;
 }
 
 const primitives = new Set(["int", "float", "boolean", "string", "file"]);
@@ -147,9 +148,9 @@ export const getPluginManifests = async (
   disableDownloads = false
 ): Promise<Array<Manifest>> => {
   const manifests = await Promise.all(
-    pluginList.map(({ key: pluginName, value: pluginVersion }) => {
+    pluginList?.map?.(({ key: pluginName, value: pluginVersion }) => {
       return datasource.getPluginManifest(pluginName, pluginVersion, disableDownloads);
-    })
+    }) ?? []
   );
   return manifests?.filter((manifest: Manifest | null) => {
     if (manifest == null) {
@@ -801,12 +802,33 @@ export const validatePluginManifest = async (
     if (hasValidPropsType.status == "error") {
       return hasValidPropsType;
     }
-    return isSchemaValid(
+    const validSchema =  isSchemaValid(
       rootSchemaMap,
       schemaMap,
       rootSchemaMap,
       expandedTypes
     );
+    if (validSchema.status == "ok") {
+      if (manifest?.seed) {
+        const seedMap = {};
+        for (let pluginName in schemaMap) {
+          seedMap[pluginName] = schemaMap[pluginName]?.seed ?? {};
+        }
+        const seedIsValid = await validatePluginState(
+          datasource,
+          schemaMap,
+          seedMap,
+          manifest.name
+        );
+        if (!seedIsValid) {
+          return {
+            status: "error",
+            message: "Invalid seed state",
+          };
+        }
+      }
+    }
+    return validSchema;
   } catch (e) {
     return {
       status: "error",
@@ -830,7 +852,7 @@ const constructRootSchema = (
         primitives.has(struct[prop]?.values as string)
       ) {
         out[prop].type = struct[prop].type;
-        out[prop].emptyable = struct[prop]?.emptyable ?? true;
+        out[prop].emptyable = struct[prop]?.emptyable === undefined ? true : struct[prop]?.emptyable;
         out[prop].values = struct[prop].values;
         continue;
       }
@@ -840,7 +862,7 @@ const constructRootSchema = (
         schema.types[struct[prop]?.values as string]
       ) {
         out[prop].type = struct[prop].type;
-        out[prop].emptyable = struct[prop]?.emptyable ?? true;
+        out[prop].emptyable = struct[prop]?.emptyable === undefined ? true : struct[prop]?.emptyable;
         out[prop].values = constructRootSchema(
           schema,
           schema.types[struct[prop]?.values as string] as TypeStruct,
@@ -850,7 +872,7 @@ const constructRootSchema = (
       }
       if (typeof struct[prop]?.values != "string") {
         out[prop].type = struct[prop].type;
-        out[prop].emptyable = struct[prop]?.emptyable ?? true;
+        out[prop].emptyable = struct[prop]?.emptyable === undefined ? true : struct[prop]?.emptyable;
         out[prop].values = constructRootSchema(
           schema,
           (struct[prop]?.values ?? {}) as TypeStruct,
@@ -865,7 +887,7 @@ const constructRootSchema = (
         primitives.has(struct[prop]?.values as string)
       ) {
         out[prop].type = struct[prop].type;
-        out[prop].emptyable = struct[prop]?.emptyable ?? true;
+        out[prop].emptyable = struct[prop]?.emptyable === undefined ? true : struct[prop]?.emptyable;
         out[prop].values = struct[prop].values;
         continue;
       }
@@ -875,7 +897,7 @@ const constructRootSchema = (
         schema.types[struct[prop]?.values as string]
       ) {
         out[prop].type = struct[prop].type;
-        out[prop].emptyable = struct[prop]?.emptyable ?? true;
+        out[prop].emptyable = struct[prop]?.emptyable === undefined ? true : struct[prop]?.emptyable;
         out[prop].values = constructRootSchema(
           schema,
           {
@@ -892,7 +914,7 @@ const constructRootSchema = (
 
       if (typeof struct[prop]?.values != "string") {
         out[prop].type = struct[prop].type;
-        out[prop].emptyable = struct[prop]?.emptyable ?? true;
+        out[prop].emptyable = struct[prop]?.emptyable === undefined ? true : struct[prop]?.emptyable;
         out[prop].values = constructRootSchema(
           schema,
           {
@@ -1026,7 +1048,7 @@ const defaultMissingSchemaState = (
       typeof struct[prop]?.values == "object"
     ) {
       out[prop] =
-        (state?.[prop] ?? [])?.map((value: object) => {
+        (state?.[prop] ?? [])?.map?.((value: object) => {
           return defaultMissingSchemaState(
             struct[prop]?.values as TypeStruct,
             value as object,
@@ -1054,7 +1076,7 @@ const defaultMissingSchemaState = (
     if (struct[prop]) {
       out[prop] = defaultMissingSchemaState(
         struct[prop] as TypeStruct,
-        state[prop] ?? {},
+        state?.[prop] ?? {},
         stateMap
       );
     }
@@ -1164,7 +1186,7 @@ const sanitizePrimitivesWithSchema = (struct: TypeStruct, state: object) => {
       continue;
     }
     if (struct[prop]?.type == "int") {
-      if (typeof state[prop] == "number" && !Number.isNaN(state[prop])) {
+      if (typeof state?.[prop] == "number" && !Number.isNaN(state[prop])) {
         out[prop] = Math.floor(state[prop]);
         continue;
       }
@@ -1173,8 +1195,8 @@ const sanitizePrimitivesWithSchema = (struct: TypeStruct, state: object) => {
     }
 
     if (struct[prop]?.type == "float") {
-      if (typeof state[prop] == "number" && !Number.isNaN(state[prop])) {
-        out[prop] = state[prop];
+      if (typeof state?.[prop] == "number" && !Number.isNaN(state[prop])) {
+        out[prop] = state?.[prop];
         continue;
       }
       out[prop] = null;
@@ -1182,8 +1204,8 @@ const sanitizePrimitivesWithSchema = (struct: TypeStruct, state: object) => {
     }
 
     if (struct[prop]?.type == "boolean") {
-      if (typeof state[prop] == "boolean") {
-        out[prop] = state[prop];
+      if (typeof state?.[prop] == "boolean") {
+        out[prop] = state?.[prop];
         continue;
       }
       out[prop] = null;
@@ -1191,8 +1213,8 @@ const sanitizePrimitivesWithSchema = (struct: TypeStruct, state: object) => {
     }
 
     if (struct[prop]?.type == "string") {
-      if (typeof state[prop] == "string") {
-        out[prop] = state[prop];
+      if (typeof state?.[prop] == "string") {
+        out[prop] = state?.[prop];
         continue;
       }
       out[prop] = null;
@@ -1200,8 +1222,8 @@ const sanitizePrimitivesWithSchema = (struct: TypeStruct, state: object) => {
     }
 
     if (struct[prop]?.type == "file") {
-      if (typeof state[prop] == "string") {
-        out[prop] = state[prop];
+      if (typeof state?.[prop] == "string") {
+        out[prop] = state?.[prop];
         continue;
       }
       out[prop] = null;
@@ -1210,12 +1232,12 @@ const sanitizePrimitivesWithSchema = (struct: TypeStruct, state: object) => {
 
     if (!struct[prop]?.type) {
       out[prop] = sanitizePrimitivesWithSchema(
-        struct[prop] as TypeStruct,
-        state[prop] ?? {}
+        struct?.[prop] as TypeStruct,
+        state?.[prop] ?? {}
       );
       continue;
     }
-    out[prop] = state[prop] ?? null;
+    out[prop] = state?.[prop] ?? null;
   }
   return out;
 };
@@ -1741,7 +1763,7 @@ const iterateSchemaTypes = (
     out[prop] = {};
     if (types[prop]?.type === "set" || types[prop]?.type === "array") {
       out[prop].type = types[prop]?.type;
-      out[prop].emptyable = types[prop]?.emptyable ?? true;
+      out[prop].emptyable = types[prop]?.emptyable === undefined ? true : types[prop].emptyable;
       if (
         typeof types[prop].values == "string" &&
         primitives.has(types[prop].values as string)
@@ -2795,6 +2817,60 @@ export const validatePluginState = async (
   return true;
 };
 
+export const getInvalidRootStates = async (
+  datasource: DataSource,
+  schemaMap: { [key: string]: Manifest },
+  kvs: Array<DiffElement>,
+  pluginName: string
+) => {
+  const out = [];
+  const rootSchemaMap = (await getRootSchemaMap(datasource, schemaMap)) ?? {};
+  const { key, value } = kvs[0];
+  const subSchema = getSchemaAtPath(rootSchemaMap[pluginName], key);
+
+  for (const prop in subSchema) {
+    if (subSchema[prop]?.type == "array" || subSchema[prop]?.type == "set") {
+      if (subSchema[prop]?.emptyable === false) {
+        let containsList = false;
+        for (let j  = 1; j < kvs.length; ++j) {
+          const { key: nextKey } = kvs[j];
+          if (nextKey.startsWith(key + "." + prop)) {
+            containsList = true;
+            break;
+          }
+          if (!nextKey.startsWith(key)) {
+            break;
+          }
+        }
+        if (!containsList) {
+          out.push(key + "." + prop);
+        }
+      }
+      continue;
+    }
+    if (
+      subSchema[prop]?.type &&
+      (!subSchema[prop]?.nullable || subSchema[prop]?.isKey) &&
+      (value[prop] == null ||
+        ((subSchema[prop]?.type == "string" ||
+          subSchema[prop]?.type == "file") &&
+          value[prop] == ""))
+    ) {
+      out.push(key + "." + prop);
+      continue;
+    }
+
+    if (subSchema[prop]?.type == "file") {
+      const exists = await datasource.checkBinary(value[prop]);
+      if (!exists) {
+        out.push(key + "." + prop);
+        continue;
+      }
+    }
+  }
+  return out;
+}
+
 export const getPluginInvalidStateIndices = async (
   datasource: DataSource,
   schemaMap: { [key: string]: Manifest },
@@ -2808,9 +2884,19 @@ export const getPluginInvalidStateIndices = async (
     const subSchema = getSchemaAtPath(rootSchemaMap[pluginName], key);
     for (const prop in subSchema) {
       if (subSchema[prop]?.type == "array" || subSchema[prop]?.type == "set") {
-        if (!subSchema[prop]?.emptyable) {
-          const referencedObject = value;
-          if ((referencedObject?.[prop]?.length ?? 0) == 0) {
+        if (subSchema[prop]?.emptyable === false) {
+          let containsList = false;
+          for (let j  = i + 1; j < kvs.length; ++j) {
+            const { key: nextKey } = kvs[j];
+            if (nextKey.startsWith(key + "." + prop)) {
+              containsList = true;
+              break;
+            }
+            if (!nextKey.startsWith(key)) {
+              break;
+            }
+          }
+          if (!containsList) {
             out.push(i);
           }
         }
@@ -2984,7 +3070,7 @@ export const isTopologicalSubsetValid = async (
     const subSchema = getSchemaAtPath(oldRootSchemaMap[pluginName], key);
     for (const prop in subSchema) {
       if (subSchema[prop]?.type == "array" || subSchema[prop]?.type == "set") {
-        if (!subSchema[prop]?.emptyable) {
+        if (subSchema[prop]?.emptyable === false) {
           const referencedObject = getObjectInStateMap(newStateMap, key);
           if ((referencedObject?.[prop]?.length ?? 0) == 0) {
             return false;
@@ -3064,11 +3150,13 @@ export const isSchemaValid = (
           ) &&
           !primitives.has((schemaMapValueProp?.type as string) ?? "")
         ) {
+
           return {
             status: "error",
             message: `Invalid value type '${schemaMapValueProp.type}. Found' at '${formattedPath}'.`,
           };
         }
+
         return {
           status: "error",
           message: `Invalid value type for prop '${prop}'. Found at '${formattedPath}'.`,
@@ -3420,7 +3508,7 @@ export const invalidSchemaPropsCheck = (
   path: Array<string> = []
 ): SchemaValidationResponse => {
   for (const prop in typeStruct) {
-    if (!rootSchema[prop]) {
+    if (rootSchema[prop] === undefined) {
       const formattedPath = [...path, prop].join(".");
       return {
         status: "error",
@@ -3691,7 +3779,9 @@ export const getDiffablesList = (
     )
     out.push(...result);
   }
-  return out;
+  return out.sort((a, b) => {
+    return b.length - a.length;
+  });
 }
 
 export const getDiffablesListForTypestruct = (
@@ -4394,7 +4484,9 @@ export const drawGetReferencedObject = (
   argMap: { [key: string]: Array<Array<string>> },
   useReact = false
 ): string => {
-  const wildcards = Object.keys(argMap).map(replaceRefVarsWithWildcards);
+  const wildcards = Object.keys(argMap).map(replaceRefVarsWithWildcards)?.sort((a, b) => {
+    return b.length - a.length;
+  });
   let code = "";
   code += GENERATED_CODE_FUNCTIONS;
   code += "\n";
@@ -5123,4 +5215,108 @@ export function useHasConflict(query: PartialDiffableQuery|DiffableQuery, fuzzy 
     }
     return containsDiffable(ctx.conflictSet, query, false);
   }, [ctx.conflictSet, query, fuzzy, ctx.commandMode])
+};`;
+
+
+export const drawUseWasChangedFunction = (
+  diffables: Array<Array<string|DiffableElement>>
+) => {
+  let code = "";
+  for (let diffable of diffables) {
+    const wildcard = renderDiffableToWildcard(diffable);
+    code += `export function useWasChanged(query: PointerTypes['${wildcard}'], fuzzy?: boolean): boolean;\n`;
+  }
+  code += USE_WAS_CHANGED_FUNCTION + "\n";
+  return code;
+}
+
+export const USE_WAS_CHANGED_FUNCTION = `
+export function useWasChanged(query: PartialDiffableQuery|DiffableQuery, fuzzy = true): boolean {
+  const ctx = useFloroContext();
+  const wasAdded = useMemo(() => {
+    if (ctx.commandMode != "compare" || ctx.compareFrom != "after") {
+      return false;
+    }
+    if (fuzzy) {
+      return containsDiffable(ctx.changeset, query, true);
+    }
+    return containsDiffable(ctx.changeset, query, false);
+  }, [ctx.changeset, query, fuzzy, ctx.compareFrom, ctx.commandMode])
+
+  const wasRemoved = useMemo(() => {
+    if (ctx.commandMode != "compare" || ctx.compareFrom != "before") {
+      return false;
+    }
+    if (fuzzy) {
+      return containsDiffable(ctx.changeset, query, true);
+    }
+    return containsDiffable(ctx.changeset, query, false);
+  }, [ctx.changeset, query, fuzzy, ctx.compareFrom, ctx.commandMode])
+  return wasAdded || wasRemoved;
+};`;
+
+
+export const drawUseHasIndicationFunction = (
+  diffables: Array<Array<string|DiffableElement>>
+) => {
+  let code = "";
+  for (let diffable of diffables) {
+    const wildcard = renderDiffableToWildcard(diffable);
+    code += `export function useHasIndication(query: PointerTypes['${wildcard}'], fuzzy?: boolean): boolean;\n`;
+  }
+  code += USE_HAS_INDICATION_FUNCTION + "\n";
+  return code;
+}
+
+export const USE_HAS_INDICATION_FUNCTION = `
+export function useHasIndication(query: PartialDiffableQuery|DiffableQuery, fuzzy = true): boolean {
+  const ctx = useFloroContext();
+
+  const pluginName = useMemo(() => getPluginNameFromQuery(query), [query]);
+  const invalidQueriesSet = useMemo(() => {
+    if (!pluginName) {
+      return new Set() as Set<PartialDiffableQuery | DiffableQuery>;
+    }
+    return (
+      ctx.apiStoreInvaliditySets?.[pluginName] ??
+      (new Set() as Set<PartialDiffableQuery | DiffableQuery>)
+    );
+  }, [ctx.apiStoreInvaliditySets, pluginName]);
+  const isInvalid = useMemo(() => {
+    if (fuzzy) {
+      return containsDiffable(invalidQueriesSet, query, true);
+    }
+    return containsDiffable(invalidQueriesSet, query, false);
+  }, [invalidQueriesSet, query, fuzzy])
+
+  const wasAdded = useMemo(() => {
+    if (ctx.commandMode != "compare" || ctx.compareFrom != "after") {
+      return false;
+    }
+    if (fuzzy) {
+      return containsDiffable(ctx.changeset, query, true);
+    }
+    return containsDiffable(ctx.changeset, query, false);
+  }, [ctx.changeset, query, fuzzy, ctx.compareFrom, ctx.commandMode])
+
+  const wasRemoved = useMemo(() => {
+    if (ctx.commandMode != "compare" || ctx.compareFrom != "before") {
+      return false;
+    }
+    if (fuzzy) {
+      return containsDiffable(ctx.changeset, query, true);
+    }
+    return containsDiffable(ctx.changeset, query, false);
+  }, [ctx.changeset, query, fuzzy, ctx.compareFrom, ctx.commandMode])
+
+  const hasConflict = useMemo(() => {
+    if (ctx.commandMode != "compare") {
+      return false;
+    }
+    if (fuzzy) {
+      return containsDiffable(ctx.conflictSet, query, true);
+    }
+    return containsDiffable(ctx.conflictSet, query, false);
+  }, [ctx.conflictSet, query, fuzzy, ctx.commandMode])
+  return isInvalid || wasAdded || wasRemoved || hasConflict;
 };`;

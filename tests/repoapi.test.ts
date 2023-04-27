@@ -6,6 +6,10 @@ import {
   getCurrentCommitSha,
   getCommitState,
   convertCommitStateToRenderedState,
+  ApplicationKVState,
+  applyStateDiffToCommitState,
+  uniqueKV,
+  uniqueKVObj,
 } from "../src/repo";
 import {
   getApplicationState,
@@ -26,13 +30,15 @@ import {
   autofixReversion,
   cherryPickRevision,
   createRepoBranch,
-  updateCurrentCommitSHA
+  updateCurrentCommitSHA,
+  convertRenderedCommitStateToKv
 } from "../src/repoapi";
 import {
   createBlankRepo,
   makeSignedInUser,
   makeTestPlugin,
 } from "./helpers/fsmocks";
+import { applyDiff } from "../src/versioncontrol";
 
 jest.mock("fs");
 jest.mock("fs/promises");
@@ -733,8 +739,7 @@ describe("repoapi", () => {
       const mergeSha = await getCurrentCommitSha(datasource, "abc");
       expect(repoState).toEqual({
         branch: "feature-branch",
-        commit:
-          mergeSha,
+        commit: mergeSha,
         isInMergeConflict: false,
         merge: null,
         commandMode: "view",
@@ -842,7 +847,14 @@ describe("repoapi", () => {
       };
       await updatePluginState(datasource, "abc", "A", state2);
       const commitB = await writeRepoCommit(datasource, "abc", "B");
-      await createRepoBranch(datasource, "abc", "feature-branch", commitA.sha, "main", true);
+      await createRepoBranch(
+        datasource,
+        "abc",
+        "feature-branch",
+        commitA.sha,
+        "main",
+        true
+      );
 
       const state3 = {
         aSet: [
@@ -1111,7 +1123,14 @@ describe("repoapi", () => {
       };
       await updatePluginState(datasource, "abc", "A", state2);
       const commitB = await writeRepoCommit(datasource, "abc", "B");
-      await createRepoBranch(datasource, "abc", "feature-branch", commitA.sha, "main", true);
+      await createRepoBranch(
+        datasource,
+        "abc",
+        "feature-branch",
+        commitA.sha,
+        "main",
+        true
+      );
 
       const state3 = {
         aSet: [

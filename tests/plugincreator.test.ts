@@ -628,6 +628,7 @@ describe("plugincreator", () => {
         store: {
           bObjects: {
             type: "set",
+            emptyable: false,
             values: {
               mainKey: {
                 type: "string",

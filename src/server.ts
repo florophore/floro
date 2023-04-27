@@ -1987,6 +1987,7 @@ for (let plugin in pluginsJSON.plugins) {
       secure: true,
       ws: false,
       changeOrigin: false,
+      logLevel: "silent"
     });
     app.use(proxy);
   }

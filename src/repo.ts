@@ -15,6 +15,7 @@ import { broadcastAllDevices } from "./multiplexer";
 import {
   cascadePluginState,
   collectFileRefs,
+  getInvalidRootStates,
   getKVStateForPlugin,
   getPluginInvalidStateIndices,
   getPluginManifests,
@@ -69,7 +70,7 @@ export interface RepoSetting {
 }
 
 export interface RawStore {
-  [name: string]: Array<{ key: string; value: string }>;
+  [name: string]: Array<{ key: string; value: { key: string; value: {[key: string]: number | string | boolean | Array<number | string | boolean>}|string } }>;
 }
 
 export interface ApplicationKVState {
@@ -878,6 +879,20 @@ export const uniqueKV = (
   return out;
 };
 
+export const uniqueKVObj = <T,> (
+  kvList: Array<{ key: string; value: T }>
+): Array<{ key: string; value: T }> => {
+  let out: Array<{ key: string; value: T }> = [];
+  let seen = new Set();
+  for (let { key, value } of kvList) {
+    if (!seen.has(key)) {
+      seen.add(key);
+      out.push({ key, value });
+    }
+  }
+  return out;
+};
+
 export const uniqueStrings = (
   strings: Array<string>
 ): Array<string> => {
@@ -916,8 +931,8 @@ export const getStateDiffFromCommitStates = (
     },
   };
   const pluginsToTraverse = Array.from([
-    ...Object.keys(beforeKVState.store),
-    ...Object.keys(afterKVState.store),
+    ...Object.keys(beforeKVState?.store ?? {}),
+    ...Object.keys(afterKVState?.store ?? {}),
   ]);
   for (const prop in afterKVState) {
     if (prop == "store") {
@@ -1331,7 +1346,18 @@ export const getInvalidStates = async (
     const indexedKvs = reIndexSchemaArrays(
       appKvState?.store?.[pluginName] ?? []
     );
-    store[pluginName] = invalidStateIndices.map(i => indexedKvs[i]);
+
+    const invalidRootStates = await getInvalidRootStates(
+      datasource,
+      schemaMap,
+      appKvState.store[pluginName],
+      pluginName
+    );
+    const invalidStates = [
+      ...invalidRootStates,
+      ...invalidStateIndices.map((i) => indexedKvs[i]),
+    ];
+    store[pluginName] = invalidStates;
   }
   return store;
 }

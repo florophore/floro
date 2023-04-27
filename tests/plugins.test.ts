@@ -13,6 +13,7 @@ import {
   getPluginInvalidStateIndices,
   nullifyMissingFileRefs,
   collectFileRefs,
+  getInvalidRootStates,
 } from "../src/plugins";
 import { makeSignedInUser, makeTestPlugin } from "./helpers/fsmocks";
 import { SIMPLE_PLUGIN_MANIFEST } from "./helpers/pluginmocks";
@@ -2216,6 +2217,147 @@ describe("plugins", () => {
         A_PLUGIN_MANIFEST.name
       );
       expect(invalidStates).toEqual([2, 4, 6]);
+    });
+
+
+    test("collects invalid references for emptyable", async () => {
+      const A_PLUGIN_MANIFEST = {
+        version: "0.0.0",
+        name: "a-plugin",
+        displayName: "A",
+        icon: {
+          light: "./palette-plugin-icon.svg",
+          dark: "./palette-plugin-icon.svg",
+        },
+        imports: {},
+        types: {
+          typeA: {
+            name: {
+              type: "string",
+              isKey: true,
+            },
+            nullableProp: {
+              type: "int",
+              nullable: true,
+            },
+            nonNullableProp: {
+              type: "int",
+              nullable: false,
+            },
+            list: {
+              type: "array",
+              values: "string",
+            },
+            subList: {
+              type: "array",
+              emptyable: false,
+              values: {
+                someProp: {
+                  type: "string",
+                },
+              },
+            },
+          },
+        },
+        store: {
+          aObjects: {
+            type: "set",
+            values: "typeA",
+          },
+          files: {
+            type: "set",
+            emptyable: false,
+            values: {
+              file: {
+                type: "file",
+                isKey: true,
+              },
+            },
+          },
+        },
+      };
+
+      const schemaMap: { [key: string]: Manifest } = {
+        "a-plugin": A_PLUGIN_MANIFEST as Manifest,
+      };
+
+      const invalidStateMap = {
+        [A_PLUGIN_MANIFEST.name]: {
+          aObjects: [
+            {
+              name: "test",
+              nonNullableProp: 3.14,
+              nullableProp: 13,
+              list: ["ok", "1"],
+              subList: [
+              ],
+            },
+            {
+              name: "test2",
+              nonNullableProp: 3.14,
+              nullableProp: 13,
+              list: ["ok", "1"],
+              subList: [
+                {
+                  someProp: "I'M OKAy",
+                },
+              ],
+            },
+            {
+              name: "test3",
+              nonNullableProp: 3.14,
+              nullableProp: 13,
+              list: ["ok", "1"],
+              subList: [
+              ],
+            },
+          ],
+          files: [
+          ],
+        },
+      };
+
+      const kvs = await getKVStateForPlugin(
+        {
+          ...datasource,
+          getPluginManifest: async (pluginName) => {
+            return schemaMap[pluginName];
+          },
+        },
+        schemaMap,
+        A_PLUGIN_MANIFEST.name,
+        invalidStateMap
+      );
+      const invalidStates = await getPluginInvalidStateIndices(
+        {
+          ...datasource,
+          checkBinary: async (binaryId) => {
+            if (binaryId == "A") {
+              return true;
+            }
+            return false;
+          },
+        },
+        schemaMap,
+        kvs,
+        A_PLUGIN_MANIFEST.name
+      );
+      const invalidRootStates = await getInvalidRootStates(
+        {
+          ...datasource,
+          checkBinary: async (binaryId) => {
+            if (binaryId == "A") {
+              return true;
+            }
+            return false;
+          },
+        },
+        schemaMap,
+        kvs,
+        A_PLUGIN_MANIFEST.name
+      );
+      expect(invalidRootStates).toEqual([ '$(a-plugin).files']);
+      expect(invalidStates).toEqual([ 1, 4 ]);
     });
 
     test("returns false when state is invalid", async () => {
