@@ -14,6 +14,8 @@ import {
   nullifyMissingFileRefs,
   collectFileRefs,
   getInvalidRootStates,
+  enforceBoundedSets,
+  defaultVoidedState,
 } from "../src/plugins";
 import { makeSignedInUser, makeTestPlugin } from "./helpers/fsmocks";
 import { SIMPLE_PLUGIN_MANIFEST } from "./helpers/pluginmocks";
@@ -44,7 +46,7 @@ describe("plugins", () => {
       );
       expect(manifest).toEqual({
         ...SIMPLE_PLUGIN_MANIFEST,
-        version: "dev@0.0.0"
+        version: "dev@0.0.0",
       });
     });
 
@@ -781,6 +783,8 @@ describe("plugins", () => {
       expect(rootSchemaMap).toEqual({
         "a-plugin": {
           aObjects: {
+            bounded: false,
+            manualOrdering: false,
             type: "set",
             emptyable: true,
             values: {
@@ -793,6 +797,8 @@ describe("plugins", () => {
         },
         "b-plugin": {
           bObjects: {
+            bounded: false,
+            manualOrdering: false,
             type: "set",
             emptyable: true,
             values: {
@@ -808,6 +814,8 @@ describe("plugins", () => {
                 onDelete: "delete",
               },
               nestedSet: {
+                bounded: false,
+                manualOrdering: false,
                 type: "set",
                 emptyable: true,
                 values: {
@@ -822,6 +830,8 @@ describe("plugins", () => {
         },
         "c-plugin": {
           cObjects: {
+            bounded: false,
+            manualOrdering: false,
             type: "set",
             emptyable: true,
             values: {
@@ -1247,7 +1257,7 @@ describe("plugins", () => {
         stateMap
       );
 
-      expect(beforeFiles).toEqual(['A', 'B']);
+      expect(beforeFiles).toEqual(["A", "B"]);
       const result = await nullifyMissingFileRefs(
         {
           ...datasource,
@@ -1276,7 +1286,7 @@ describe("plugins", () => {
         stateMap
       );
 
-      expect(afterFiles).toEqual(['B']);
+      expect(afterFiles).toEqual(["B"]);
       expect(result).toEqual({
         "a-plugin": {
           aObjects: [
@@ -2033,6 +2043,467 @@ describe("plugins", () => {
     });
   });
 
+  describe("enforceBoundedSets", () => {
+    test("sucessfully enforces bounded sets", async () => {
+      const PLUGIN_PALETTE_MANIFEST: Manifest = {
+        name: "palette",
+        version: "0.0.0",
+        displayName: "palette",
+        icon: "",
+        imports: {},
+        types: {
+          Color: {
+            colorId: {
+              type: "string",
+              isKey: true,
+            },
+            name: {
+              type: "string",
+            },
+          },
+          Shade: {
+            shadeId: {
+              type: "string",
+              isKey: true,
+            },
+            name: {
+              type: "string",
+            },
+          },
+        },
+        store: {
+          colors: {
+            type: "set",
+            values: "Color",
+          },
+          shades: {
+            type: "set",
+            values: "Shade",
+          },
+          palette: {
+            type: "set",
+            bounded: true,
+            values: {
+              id: {
+                type: "ref<$.colors.values>",
+                isKey: true,
+              },
+              paletteColors: {
+                type: "set",
+                bounded: true,
+                values: {
+                  id: {
+                    type: "ref<$.shades.values>",
+                    isKey: true,
+                  },
+                  hexcode: {
+                    type: "string",
+                  },
+                  alpha: {
+                    type: "int",
+                    default: 255,
+                  },
+                },
+              },
+            },
+          },
+        },
+      };
+      makeTestPlugin(PLUGIN_PALETTE_MANIFEST);
+
+      const unenforcedUnboundedState = {
+        shades: [
+          {
+            shadeId: "light",
+            name: "Light",
+          },
+          {
+            shadeId: "regular",
+            name: "Regular",
+          },
+          {
+            shadeId: "dark",
+            name: "Dark",
+          },
+        ],
+        colors: [
+          {
+            colorId: "white",
+            name: "White",
+          },
+          {
+            colorId: "red",
+            name: "Red",
+          },
+        ],
+        palette: [
+          {
+            paletteColors: [
+              {
+                alpha: 255,
+                hexcode: "#AA2227",
+                id: "$(palette).shades.shadeId<dark>",
+              },
+              {
+                alpha: 255,
+                hexcode: "#CC2F35",
+                id: "$(palette).shades.shadeId<regular>",
+              },
+            ],
+            id: "$(palette).colors.colorId<red>",
+          },
+          {
+            paletteColors: [
+              {
+                alpha: 255,
+                id: "$(palette).shades.shadeId<dark>",
+              },
+              {
+                alpha: 255,
+                id: "$(palette).shades.shadeId<light>",
+              },
+              {
+                alpha: 255,
+                hexcode: "#FFFFFF",
+                id: "$(palette).shades.shadeId<regular>",
+              },
+            ],
+            id: "$(palette).colors.colorId<white>",
+          },
+        ],
+      };
+
+      const schemaMap: { [key: string]: Manifest } = {
+        [PLUGIN_PALETTE_MANIFEST.name]: PLUGIN_PALETTE_MANIFEST as Manifest,
+      };
+
+      const stateMap = {
+        [PLUGIN_PALETTE_MANIFEST.name]: unenforcedUnboundedState,
+      };
+
+      const sanitizedState = await defaultVoidedState(
+        {
+          ...datasource,
+          getPluginManifest: async (pluginName) => {
+            return schemaMap[pluginName];
+          },
+        },
+        schemaMap,
+        stateMap
+      );
+      await enforceBoundedSets(
+        {
+          ...datasource,
+          getPluginManifest: async (pluginName) => {
+            return schemaMap[pluginName];
+          },
+        },
+        schemaMap,
+        sanitizedState
+      );
+      expect(sanitizedState).toEqual({
+        palette: {
+          colors: [
+            {
+              colorId: "white",
+              name: "White",
+            },
+            {
+              colorId: "red",
+              name: "Red",
+            },
+          ],
+          palette: [
+            {
+              id: "$(palette).colors.colorId<white>",
+              paletteColors: [
+                {
+                  alpha: 255,
+                  hexcode: null,
+                  id: "$(palette).shades.shadeId<light>",
+                },
+                {
+                  alpha: 255,
+                  hexcode: "#FFFFFF",
+                  id: "$(palette).shades.shadeId<regular>",
+                },
+                {
+                  alpha: 255,
+                  hexcode: null,
+                  id: "$(palette).shades.shadeId<dark>",
+                },
+              ],
+            },
+            {
+              id: "$(palette).colors.colorId<red>",
+              paletteColors: [
+                {
+                  alpha: 255,
+                  hexcode: null,
+                  id: "$(palette).shades.shadeId<light>",
+                },
+                {
+                  alpha: 255,
+                  hexcode: "#CC2F35",
+                  id: "$(palette).shades.shadeId<regular>",
+                },
+                {
+                  alpha: 255,
+                  hexcode: "#AA2227",
+                  id: "$(palette).shades.shadeId<dark>",
+                },
+              ],
+            },
+          ],
+          shades: [
+            {
+              name: "Light",
+              shadeId: "light",
+            },
+            {
+              name: "Regular",
+              shadeId: "regular",
+            },
+            {
+              name: "Dark",
+              shadeId: "dark",
+            },
+          ],
+        },
+      });
+    });
+
+    test("sucessfully enforces bounded sets but does not reorder manual ordered bounded sets", async () => {
+      const PLUGIN_PALETTE_MANIFEST: Manifest = {
+        name: "palette",
+        version: "0.0.0",
+        displayName: "palette",
+        icon: "",
+        imports: {},
+        types: {
+          Color: {
+            colorId: {
+              type: "string",
+              isKey: true,
+            },
+            name: {
+              type: "string",
+            },
+          },
+          Shade: {
+            shadeId: {
+              type: "string",
+              isKey: true,
+            },
+            name: {
+              type: "string",
+            },
+          },
+        },
+        store: {
+          colors: {
+            type: "set",
+            values: "Color",
+          },
+          shades: {
+            type: "set",
+            values: "Shade",
+          },
+          palette: {
+            type: "set",
+            bounded: true,
+            values: {
+              id: {
+                type: "ref<$.colors.values>",
+                isKey: true,
+              },
+              paletteColors: {
+                type: "set",
+                bounded: true,
+                manualOrdering: true,
+                values: {
+                  id: {
+                    type: "ref<$.shades.values>",
+                    isKey: true,
+                  },
+                  hexcode: {
+                    type: "string",
+                  },
+                  alpha: {
+                    type: "int",
+                    default: 255,
+                  },
+                },
+              },
+            },
+          },
+        },
+      };
+      makeTestPlugin(PLUGIN_PALETTE_MANIFEST);
+
+      const unenforcedUnboundedState = {
+        shades: [
+          {
+            shadeId: "light",
+            name: "Light",
+          },
+          {
+            shadeId: "regular",
+            name: "Regular",
+          },
+          {
+            shadeId: "dark",
+            name: "Dark",
+          },
+        ],
+        colors: [
+          {
+            colorId: "white",
+            name: "White",
+          },
+          {
+            colorId: "red",
+            name: "Red",
+          },
+        ],
+        palette: [
+          {
+            paletteColors: [
+              {
+                alpha: 255,
+                hexcode: "#AA2227",
+                id: "$(palette).shades.shadeId<dark>",
+              },
+              {
+                alpha: 255,
+                hexcode: "#CC2F35",
+                id: "$(palette).shades.shadeId<regular>",
+              },
+            ],
+            id: "$(palette).colors.colorId<red>",
+          },
+          {
+            paletteColors: [
+              {
+                alpha: 255,
+                id: "$(palette).shades.shadeId<dark>",
+              },
+              {
+                alpha: 255,
+                id: "$(palette).shades.shadeId<light>",
+              },
+              {
+                alpha: 255,
+                hexcode: "#FFFFFF",
+                id: "$(palette).shades.shadeId<regular>",
+              },
+            ],
+            id: "$(palette).colors.colorId<white>",
+          },
+        ],
+      };
+
+      const schemaMap: { [key: string]: Manifest } = {
+        [PLUGIN_PALETTE_MANIFEST.name]: PLUGIN_PALETTE_MANIFEST as Manifest,
+      };
+
+      const stateMap = {
+        [PLUGIN_PALETTE_MANIFEST.name]: unenforcedUnboundedState,
+      };
+
+      const sanitizedState = await defaultVoidedState(
+        {
+          ...datasource,
+          getPluginManifest: async (pluginName) => {
+            return schemaMap[pluginName];
+          },
+        },
+        schemaMap,
+        stateMap
+      );
+      await enforceBoundedSets(
+        {
+          ...datasource,
+          getPluginManifest: async (pluginName) => {
+            return schemaMap[pluginName];
+          },
+        },
+        schemaMap,
+        sanitizedState
+      );
+      expect(sanitizedState).toEqual({
+        palette: {
+          colors: [
+            {
+              colorId: "white",
+              name: "White",
+            },
+            {
+              colorId: "red",
+              name: "Red",
+            },
+          ],
+          palette: [
+            {
+              id: "$(palette).colors.colorId<white>",
+              paletteColors: [
+                {
+                  alpha: 255,
+                  hexcode: null,
+                  id: "$(palette).shades.shadeId<dark>",
+                },
+                {
+                  alpha: 255,
+                  hexcode: null,
+                  id: "$(palette).shades.shadeId<light>",
+                },
+                {
+                  alpha: 255,
+                  hexcode: "#FFFFFF",
+                  id: "$(palette).shades.shadeId<regular>",
+                },
+              ],
+            },
+            {
+              id: "$(palette).colors.colorId<red>",
+              paletteColors: [
+                {
+                  alpha: 255,
+                  hexcode: "#AA2227",
+                  id: "$(palette).shades.shadeId<dark>",
+                },
+                {
+                  alpha: 255,
+                  hexcode: "#CC2F35",
+                  id: "$(palette).shades.shadeId<regular>",
+                },
+                {
+                  alpha: 255,
+                  hexcode: null,
+                  id: "$(palette).shades.shadeId<light>",
+                },
+              ],
+            },
+          ],
+          shades: [
+            {
+              name: "Light",
+              shadeId: "light",
+            },
+            {
+              name: "Regular",
+              shadeId: "regular",
+            },
+            {
+              name: "Dark",
+              shadeId: "dark",
+            },
+          ],
+        },
+      });
+    });
+  });
+
   describe("state validation", () => {
     test("returns true when state is valid", async () => {
       const A_PLUGIN_MANIFEST = {
@@ -2219,7 +2690,6 @@ describe("plugins", () => {
       expect(invalidStates).toEqual([2, 4, 6]);
     });
 
-
     test("collects invalid references for emptyable", async () => {
       const A_PLUGIN_MANIFEST = {
         version: "0.0.0",
@@ -2289,8 +2759,7 @@ describe("plugins", () => {
               nonNullableProp: 3.14,
               nullableProp: 13,
               list: ["ok", "1"],
-              subList: [
-              ],
+              subList: [],
             },
             {
               name: "test2",
@@ -2308,12 +2777,10 @@ describe("plugins", () => {
               nonNullableProp: 3.14,
               nullableProp: 13,
               list: ["ok", "1"],
-              subList: [
-              ],
+              subList: [],
             },
           ],
-          files: [
-          ],
+          files: [],
         },
       };
 
@@ -2356,8 +2823,8 @@ describe("plugins", () => {
         kvs,
         A_PLUGIN_MANIFEST.name
       );
-      expect(invalidRootStates).toEqual([ '$(a-plugin).files']);
-      expect(invalidStates).toEqual([ 1, 4 ]);
+      expect(invalidRootStates).toEqual(["$(a-plugin).files"]);
+      expect(invalidStates).toEqual([1, 4]);
     });
 
     test("returns false when state is invalid", async () => {

@@ -853,7 +853,7 @@ describe("plugincreator", () => {
       expect(result).toEqual({
         status: "error",
         message:
-          "Invalid key 'mainKey'. Key types cannot be nullable. Found at '$(A).aObjects.mainKey'.",
+          "Invalid key 'mainKey'. Key types cannot be nullable. Found at '$(A).aObjects.values.mainKey'.",
       });
     });
 
@@ -895,7 +895,7 @@ describe("plugincreator", () => {
       expect(result).toEqual({
         status: "error",
         message:
-          "Invalid key 'mainKey'. Key types that are refs cannot have a cascaded onDelete values of nullify. Found at '$(A).aObjects.mainKey'.",
+          "Invalid key 'mainKey'. Key types that are refs cannot have a cascaded onDelete values of nullify. Found at '$(A).aObjects.values.mainKey'.",
       });
     });
 
@@ -927,7 +927,7 @@ describe("plugincreator", () => {
       expect(result).toEqual({
         status: "error",
         message:
-          "Invalid reference pointer '$(A).aObjects.values'. Keys that are constrained ref types cannot be schematically self-referential. Found at '$(A).aObjects.mainKey'."
+          "Invalid reference pointer '$(A).aObjects.values'. Keys that are constrained ref types cannot be schematically self-referential. Found at '$(A).aObjects.values.mainKey'."
       });
     });
 
@@ -963,6 +963,860 @@ describe("plugincreator", () => {
           "Invalid prop in schema. Remove or change 'nullable=true' from '$(A).aObjects'. Found at '$(A).aObjects.nullable'.",
       });
     });
+
+    test("validates valid bounded sets", async () => {
+
+      const PLUGIN_A_MANIFEST: Manifest = {
+        name: "A",
+        version: "0.0.0",
+        displayName: "A",
+        icon: "",
+        imports: {},
+        types: {
+          Color: {
+            name: {
+              type: "string",
+              isKey: true,
+            },
+          },
+          Shade: {
+            name: {
+              type: "string",
+              isKey: true,
+            },
+          },
+        },
+        store: {
+          colors: {
+            type: "set",
+            values: "Color",
+          },
+          shades: {
+            type: "set",
+            values: "Color",
+          },
+          palette: {
+            type: "set",
+            bounded: true,
+            values: {
+              id: {
+                type: "ref<$.colors.values>",
+                isKey: true,
+              },
+              name: {
+                type: "string",
+              },
+              paletteColors: {
+                type: "set",
+                bounded: true,
+                values: {
+                  id: {
+                    type: "ref<$.shades.values>",
+                    isKey: true,
+                  },
+                  value: {
+                    type: "string",
+                  }
+                }
+              }
+            }
+          }
+        },
+      };
+      makeTestPlugin(PLUGIN_A_MANIFEST);
+      const result = await validatePluginManifest(
+        datasource,
+        PLUGIN_A_MANIFEST
+      );
+      expect(result).toEqual({
+        status: "ok",
+      });
+    });
+
+    test("prevents unconstrained refs on bounded sets", async () => {
+
+      const PLUGIN_A_MANIFEST: Manifest = {
+        name: "A",
+        version: "0.0.0",
+        displayName: "A",
+        icon: "",
+        imports: {},
+        types: {
+          Color: {
+            name: {
+              type: "string",
+              isKey: true,
+            },
+          }
+        },
+        store: {
+          colors: {
+            type: "set",
+            values: {
+              name: {
+                type: "string",
+                isKey: true,
+              },
+            },
+          },
+          shades: {
+            type: "set",
+            values: {
+              name: {
+                type: "string",
+                isKey: true,
+              },
+            },
+          },
+          palette: {
+            type: "set",
+            bounded: true,
+            values: {
+              id: {
+                type: "ref<Color>",
+                isKey: true,
+              },
+              name: {
+                type: "string",
+              },
+              paletteColors: {
+                type: "set",
+                bounded: true,
+                values: {
+                  id: {
+                    type: "ref<$.shades.values>",
+                    isKey: true,
+                  },
+                  value: {
+                    type: "string",
+                  }
+                }
+              }
+            }
+          }
+        },
+      };
+      makeTestPlugin(PLUGIN_A_MANIFEST);
+      const result = await validatePluginManifest(
+        datasource,
+        PLUGIN_A_MANIFEST
+      );
+      expect(result).toEqual({
+        status: "error",
+        message:
+          "Invalid bounded set unconstrainted reference key 'A.Color'. Unconstrained references cannot be keys of a bounded set. Found at '$(A).palette.values.id'.",
+      });
+    });
+
+    describe("defaults", () => {
+      test("throw error on null default", async () => {
+        const PLUGIN_A_MANIFEST: Manifest = {
+          name: "A",
+          version: "0.0.0",
+          displayName: "A",
+          icon: "",
+          imports: {},
+          types: {},
+          store: {
+            aObjects: {
+              type: "set",
+              values: {
+                mainKey: {
+                  type: "string",
+                  isKey: true,
+                },
+                thing: {
+                  type: "string",
+                  default: null,
+                },
+              }
+            },
+          },
+        };
+        makeTestPlugin(PLUGIN_A_MANIFEST);
+        const result = await validatePluginManifest(
+          datasource,
+          PLUGIN_A_MANIFEST
+        );
+        expect(result).toEqual({
+          status: "error",
+          message:
+            "Invalid default value type for prop 'thing'. Default values can not be null or undefined. Found at '$(A).aObjects.values.thing'.",
+        });
+      });
+
+      test("valid on ok int", async () => {
+        const PLUGIN_A_MANIFEST: Manifest = {
+          name: "A",
+          version: "0.0.0",
+          displayName: "A",
+          icon: "",
+          imports: {},
+          types: {},
+          store: {
+            aObjects: {
+              type: "set",
+              values: {
+                mainKey: {
+                  type: "string",
+                  isKey: true,
+                },
+                thing: {
+                  type: "int",
+                  default: 2,
+                },
+              }
+            },
+          },
+        };
+        makeTestPlugin(PLUGIN_A_MANIFEST);
+        const result = await validatePluginManifest(
+          datasource,
+          PLUGIN_A_MANIFEST
+        );
+        expect(result).toEqual({
+          status: "ok",
+        });
+      });
+
+      test("throw error on bad int", async () => {
+        const PLUGIN_A_MANIFEST: Manifest = {
+          name: "A",
+          version: "0.0.0",
+          displayName: "A",
+          icon: "",
+          imports: {},
+          types: {},
+          store: {
+            aObjects: {
+              type: "set",
+              values: {
+                mainKey: {
+                  type: "string",
+                  isKey: true,
+                },
+                thing: {
+                  type: "int",
+                  default: 2.5,
+                },
+              }
+            },
+          },
+        };
+        makeTestPlugin(PLUGIN_A_MANIFEST);
+        const result = await validatePluginManifest(
+          datasource,
+          PLUGIN_A_MANIFEST
+        );
+        expect(result).toEqual({
+          status: "error",
+          message:
+            "Invalid default value type for prop 'thing'. Defaults can only be used for int, float, boolean, string, and arrays and sets of those types, as well as refs. Found at '$(A).aObjects.values.thing'.",
+        });
+      });
+
+
+      test("valid on ok float", async () => {
+        const PLUGIN_A_MANIFEST: Manifest = {
+          name: "A",
+          version: "0.0.0",
+          displayName: "A",
+          icon: "",
+          imports: {},
+          types: {},
+          store: {
+            aObjects: {
+              type: "set",
+              values: {
+                mainKey: {
+                  type: "string",
+                  isKey: true,
+                },
+                thing: {
+                  type: "float",
+                  default: 3.14,
+                },
+              }
+            },
+          },
+        };
+        makeTestPlugin(PLUGIN_A_MANIFEST);
+        const result = await validatePluginManifest(
+          datasource,
+          PLUGIN_A_MANIFEST
+        );
+        expect(result).toEqual({
+          status: "ok",
+        });
+      });
+
+      test("throw error on bad float", async () => {
+        const PLUGIN_A_MANIFEST: Manifest = {
+          name: "A",
+          version: "0.0.0",
+          displayName: "A",
+          icon: "",
+          imports: {},
+          types: {},
+          store: {
+            aObjects: {
+              type: "set",
+              values: {
+                mainKey: {
+                  type: "string",
+                  isKey: true,
+                },
+                thing: {
+                  type: "float",
+                  default: "3.14",
+                },
+              }
+            },
+          },
+        };
+        makeTestPlugin(PLUGIN_A_MANIFEST);
+        const result = await validatePluginManifest(
+          datasource,
+          PLUGIN_A_MANIFEST
+        );
+        expect(result).toEqual({
+          status: "error",
+          message:
+            "Invalid default value type for prop 'thing'. Defaults can only be used for int, float, boolean, string, and arrays and sets of those types, as well as refs. Found at '$(A).aObjects.values.thing'.",
+        });
+      });
+
+      test("valid on ok boolean", async () => {
+        const PLUGIN_A_MANIFEST: Manifest = {
+          name: "A",
+          version: "0.0.0",
+          displayName: "A",
+          icon: "",
+          imports: {},
+          types: {},
+          store: {
+            aObjects: {
+              type: "set",
+              values: {
+                mainKey: {
+                  type: "string",
+                  isKey: true,
+                },
+                thing: {
+                  type: "boolean",
+                  default: false,
+                },
+              }
+            },
+          },
+        };
+        makeTestPlugin(PLUGIN_A_MANIFEST);
+        const result = await validatePluginManifest(
+          datasource,
+          PLUGIN_A_MANIFEST
+        );
+        expect(result).toEqual({
+          status: "ok",
+        });
+      });
+
+      test("throw error on bad boolean", async () => {
+        const PLUGIN_A_MANIFEST: Manifest = {
+          name: "A",
+          version: "0.0.0",
+          displayName: "A",
+          icon: "",
+          imports: {},
+          types: {},
+          store: {
+            aObjects: {
+              type: "set",
+              values: {
+                mainKey: {
+                  type: "string",
+                  isKey: true,
+                },
+                thing: {
+                  type: "boolean",
+                  default: "TRUE"
+                },
+              }
+            },
+          },
+        };
+        makeTestPlugin(PLUGIN_A_MANIFEST);
+        const result = await validatePluginManifest(
+          datasource,
+          PLUGIN_A_MANIFEST
+        );
+        expect(result).toEqual({
+          status: "error",
+          message:
+            "Invalid default value type for prop 'thing'. Defaults can only be used for int, float, boolean, string, and arrays and sets of those types, as well as refs. Found at '$(A).aObjects.values.thing'.",
+        });
+      });
+
+      test("valid on ok string", async () => {
+        const PLUGIN_A_MANIFEST: Manifest = {
+          name: "A",
+          version: "0.0.0",
+          displayName: "A",
+          icon: "",
+          imports: {},
+          types: {},
+          store: {
+            aObjects: {
+              type: "set",
+              values: {
+                mainKey: {
+                  type: "string",
+                  isKey: true,
+                },
+                thing: {
+                  type: "string",
+                  default: "this is a string",
+                },
+              }
+            },
+          },
+        };
+        makeTestPlugin(PLUGIN_A_MANIFEST);
+        const result = await validatePluginManifest(
+          datasource,
+          PLUGIN_A_MANIFEST
+        );
+        expect(result).toEqual({
+          status: "ok",
+        });
+      });
+
+      test("throw error on bad string", async () => {
+        const PLUGIN_A_MANIFEST: Manifest = {
+          name: "A",
+          version: "0.0.0",
+          displayName: "A",
+          icon: "",
+          imports: {},
+          types: {},
+          store: {
+            aObjects: {
+              type: "set",
+              values: {
+                mainKey: {
+                  type: "string",
+                  isKey: true,
+                },
+                thing: {
+                  type: "string",
+                  default: 1234
+                },
+              }
+            },
+          },
+        };
+        makeTestPlugin(PLUGIN_A_MANIFEST);
+        const result = await validatePluginManifest(
+          datasource,
+          PLUGIN_A_MANIFEST
+        );
+        expect(result).toEqual({
+          status: "error",
+          message:
+            "Invalid default value type for prop 'thing'. Defaults can only be used for int, float, boolean, string, and arrays and sets of those types, as well as refs. Found at '$(A).aObjects.values.thing'.",
+        });
+      });
+
+      test("valid on ok set of string", async () => {
+        const PLUGIN_A_MANIFEST: Manifest = {
+          name: "A",
+          version: "0.0.0",
+          displayName: "A",
+          icon: "",
+          imports: {},
+          types: {},
+          store: {
+            aObjects: {
+              type: "set",
+              values: {
+                mainKey: {
+                  type: "string",
+                  isKey: true,
+                },
+                thing: {
+                  type: "set",
+                  values: "string",
+                  default: ["a", "b", "c"],
+                },
+              }
+            },
+          },
+        };
+        makeTestPlugin(PLUGIN_A_MANIFEST);
+        const result = await validatePluginManifest(
+          datasource,
+          PLUGIN_A_MANIFEST
+        );
+        expect(result).toEqual({
+          status: "ok",
+        });
+      });
+
+      test("throw error on bad set of string", async () => {
+        const PLUGIN_A_MANIFEST: Manifest = {
+          name: "A",
+          version: "0.0.0",
+          displayName: "A",
+          icon: "",
+          imports: {},
+          types: {},
+          store: {
+            aObjects: {
+              type: "set",
+              values: {
+                mainKey: {
+                  type: "string",
+                  isKey: true,
+                },
+                thing: {
+                  type: "set",
+                  values: "string",
+                  default: ["a", "b", 789],
+                },
+              }
+            },
+          },
+        };
+        makeTestPlugin(PLUGIN_A_MANIFEST);
+        const result = await validatePluginManifest(
+          datasource,
+          PLUGIN_A_MANIFEST
+        );
+        expect(result).toEqual({
+          status: "error",
+          message:
+            "Invalid default value type for element in default set of 'thing'. Not a string. Found at '$(A).aObjects.values.thing'.",
+        });
+      });
+
+      test("valid on ok set of int", async () => {
+        const PLUGIN_A_MANIFEST: Manifest = {
+          name: "A",
+          version: "0.0.0",
+          displayName: "A",
+          icon: "",
+          imports: {},
+          types: {},
+          store: {
+            aObjects: {
+              type: "set",
+              values: {
+                mainKey: {
+                  type: "string",
+                  isKey: true,
+                },
+                thing: {
+                  type: "set",
+                  values: "int",
+                  default: [1, 2, 3],
+                },
+              }
+            },
+          },
+        };
+        makeTestPlugin(PLUGIN_A_MANIFEST);
+        const result = await validatePluginManifest(
+          datasource,
+          PLUGIN_A_MANIFEST
+        );
+        expect(result).toEqual({
+          status: "ok",
+        });
+      });
+
+      test("throw error on bad set of int", async () => {
+        const PLUGIN_A_MANIFEST: Manifest = {
+          name: "A",
+          version: "0.0.0",
+          displayName: "A",
+          icon: "",
+          imports: {},
+          types: {},
+          store: {
+            aObjects: {
+              type: "set",
+              values: {
+                mainKey: {
+                  type: "string",
+                  isKey: true,
+                },
+                thing: {
+                  type: "set",
+                  values: "int",
+                  default: [0, 2.4, 789],
+                },
+              }
+            },
+          },
+        };
+        makeTestPlugin(PLUGIN_A_MANIFEST);
+        const result = await validatePluginManifest(
+          datasource,
+          PLUGIN_A_MANIFEST
+        );
+        expect(result).toEqual({
+          status: "error",
+          message:
+            "Invalid default value type for element in default set of 'thing'. Not an int. Found at '$(A).aObjects.values.thing'.",
+        });
+      });
+
+      test("throw error on null element in set", async () => {
+        const PLUGIN_A_MANIFEST: Manifest = {
+          name: "A",
+          version: "0.0.0",
+          displayName: "A",
+          icon: "",
+          imports: {},
+          types: {},
+          store: {
+            aObjects: {
+              type: "set",
+              values: {
+                mainKey: {
+                  type: "string",
+                  isKey: true,
+                },
+                thing: {
+                  type: "set",
+                  values: "int",
+                  default: [0, null, 789],
+                },
+              }
+            },
+          },
+        };
+        makeTestPlugin(PLUGIN_A_MANIFEST);
+        const result = await validatePluginManifest(
+          datasource,
+          PLUGIN_A_MANIFEST
+        );
+        expect(result).toEqual({
+          status: "error",
+          message:
+            "Invalid default value type for prop 'thing'. Default value elements can not be null or undefined. Found at '$(A).aObjects.values.thing'.",
+        });
+      });
+
+      test("valid on ok set of boolean", async () => {
+        const PLUGIN_A_MANIFEST: Manifest = {
+          name: "A",
+          version: "0.0.0",
+          displayName: "A",
+          icon: "",
+          imports: {},
+          types: {},
+          store: {
+            aObjects: {
+              type: "set",
+              values: {
+                mainKey: {
+                  type: "string",
+                  isKey: true,
+                },
+                thing: {
+                  type: "set",
+                  values: "boolean",
+                  default: [true, false, true],
+                },
+              }
+            },
+          },
+        };
+        makeTestPlugin(PLUGIN_A_MANIFEST);
+        const result = await validatePluginManifest(
+          datasource,
+          PLUGIN_A_MANIFEST
+        );
+        expect(result).toEqual({
+          status: "ok",
+        });
+      });
+
+      test("throw error on bad set of boolean", async () => {
+        const PLUGIN_A_MANIFEST: Manifest = {
+          name: "A",
+          version: "0.0.0",
+          displayName: "A",
+          icon: "",
+          imports: {},
+          types: {},
+          store: {
+            aObjects: {
+              type: "set",
+              values: {
+                mainKey: {
+                  type: "string",
+                  isKey: true,
+                },
+                thing: {
+                  type: "set",
+                  values: "boolean",
+                  default: [true, "FALSE"],
+                },
+              }
+            },
+          },
+        };
+        makeTestPlugin(PLUGIN_A_MANIFEST);
+        const result = await validatePluginManifest(
+          datasource,
+          PLUGIN_A_MANIFEST
+        );
+        expect(result).toEqual({
+          status: "error",
+          message:
+            "Invalid default value type for element in default set of 'thing'. Not a boolean. Found at '$(A).aObjects.values.thing'.",
+        });
+      });
+
+
+      test("allow for a valid constrained reference default", async () => {
+        const PLUGIN_A_MANIFEST: Manifest = {
+          name: "A",
+          version: "0.0.0",
+          displayName: "A",
+          icon: "",
+          imports: {},
+          types: {},
+          store: {
+            aObjects: {
+              type: "set",
+              values: {
+                mainKey: {
+                  type: "string",
+                  isKey: true,
+                },
+              }
+            },
+            bObjects: {
+              type: "set",
+              values: {
+                bKey: {
+                  type: "string",
+                  isKey: true,
+                },
+                aRef: {
+                  type: "ref<$.aObjects.values>",
+                  default: "$(A).aObjects.mainKey<test>"
+                }
+              }
+            },
+          },
+        };
+        makeTestPlugin(PLUGIN_A_MANIFEST);
+        const result = await validatePluginManifest(
+          datasource,
+          PLUGIN_A_MANIFEST
+        );
+        expect(result).toEqual({
+          status: "ok",
+        });
+      });
+
+
+      test("allow for a valid unconstrained reference default", async () => {
+        const PLUGIN_A_MANIFEST: Manifest = {
+          name: "A",
+          version: "0.0.0",
+          displayName: "A",
+          icon: "",
+          imports: {},
+          types: {
+            AType: {
+              mainKey: {
+                type: "string",
+                isKey: true,
+              },
+            }
+          },
+          store: {
+            aObjects: {
+              type: "set",
+              values: "AType"
+            },
+            bObjects: {
+              type: "set",
+              values: {
+                bKey: {
+                  type: "string",
+                  isKey: true,
+                },
+                aRef: {
+                  type: "ref<AType>",
+                  default: "$(A).aObjects.mainKey<test>"
+                }
+              }
+            },
+          },
+        };
+        makeTestPlugin(PLUGIN_A_MANIFEST);
+        const result = await validatePluginManifest(
+          datasource,
+          PLUGIN_A_MANIFEST
+        );
+        expect(result).toEqual({
+          status: "ok",
+        });
+      });
+
+      test("throw on invalid unconstrained reference default", async () => {
+        const PLUGIN_A_MANIFEST: Manifest = {
+          name: "A",
+          version: "0.0.0",
+          displayName: "A",
+          icon: "",
+          imports: {},
+          types: {
+            AType: {
+              mainKey: {
+                type: "string",
+                isKey: true,
+              },
+            }
+          },
+          store: {
+            aObjects: {
+              type: "set",
+              values: "AType"
+            },
+            bObjects: {
+              type: "set",
+              values: {
+                bKey: {
+                  type: "string",
+                  isKey: true,
+                },
+                aRef: {
+                  type: "ref<AType>",
+                  default: "$(A).bObjects.bKey<fail>"
+                }
+              }
+            },
+          },
+        };
+        makeTestPlugin(PLUGIN_A_MANIFEST);
+        const result = await validatePluginManifest(
+          datasource,
+          PLUGIN_A_MANIFEST
+        );
+        expect(result).toEqual({
+          status: "error",
+          message:
+            "Invalid default referenced pointer type 'A.AType'. Corresponding pointer type does not match, found at '$(A).bObjects.values.aRef'.",
+        });
+      });
+    });
+
   });
 
   describe("codegen", () => {

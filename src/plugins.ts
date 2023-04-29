@@ -21,7 +21,10 @@ export interface ManifestNode {
   refType?: string;
   nullable?: boolean;
   emptyable?: boolean;
+  bounded?: boolean;
+  manualOrdering?: boolean;
   onDelete?: "delete" | "nullify";
+  default?: unknown|Array<unknown>;
 }
 
 export interface TypeStruct {
@@ -854,6 +857,9 @@ const constructRootSchema = (
         out[prop].type = struct[prop].type;
         out[prop].emptyable = struct[prop]?.emptyable === undefined ? true : struct[prop]?.emptyable;
         out[prop].values = struct[prop].values;
+        if (struct[prop].hasOwnProperty("default")) {
+          out[prop].default = struct[prop].default;
+        }
         continue;
       }
 
@@ -863,6 +869,8 @@ const constructRootSchema = (
       ) {
         out[prop].type = struct[prop].type;
         out[prop].emptyable = struct[prop]?.emptyable === undefined ? true : struct[prop]?.emptyable;
+        out[prop].bounded = struct[prop]?.bounded ?? false;
+        out[prop].manualOrdering = struct[prop]?.manualOrdering ?? false;
         out[prop].values = constructRootSchema(
           schema,
           schema.types[struct[prop]?.values as string] as TypeStruct,
@@ -873,6 +881,8 @@ const constructRootSchema = (
       if (typeof struct[prop]?.values != "string") {
         out[prop].type = struct[prop].type;
         out[prop].emptyable = struct[prop]?.emptyable === undefined ? true : struct[prop]?.emptyable;
+        out[prop].bounded = struct[prop]?.bounded ?? false;
+        out[prop].manualOrdering = struct[prop]?.manualOrdering ?? false;
         out[prop].values = constructRootSchema(
           schema,
           (struct[prop]?.values ?? {}) as TypeStruct,
@@ -889,6 +899,9 @@ const constructRootSchema = (
         out[prop].type = struct[prop].type;
         out[prop].emptyable = struct[prop]?.emptyable === undefined ? true : struct[prop]?.emptyable;
         out[prop].values = struct[prop].values;
+        if (struct[prop].hasOwnProperty("default")) {
+          out[prop].default = struct[prop].default;
+        }
         continue;
       }
 
@@ -944,6 +957,9 @@ const constructRootSchema = (
         out[prop].refKeyType = typeName;
         out[prop].onDelete = struct[prop]?.onDelete ?? "delete";
         out[prop].nullable = struct[prop]?.nullable ?? false;
+        if (struct[prop]?.hasOwnProperty("default")) {
+          out[prop].default = struct[prop]?.default;
+        }
       } else {
         if ((typeName ?? "")?.startsWith("$")) {
           out[prop].type = "ref";
@@ -954,6 +970,9 @@ const constructRootSchema = (
           out[prop].refKeyType = "<?>";
           out[prop].onDelete = struct[prop]?.onDelete ?? "delete";
           out[prop].nullable = struct[prop]?.nullable ?? false;
+          if (struct[prop]?.hasOwnProperty("default")) {
+            out[prop].default = struct[prop]?.default;
+          }
           if (struct[prop].isKey) {
             out[prop].isKey = true;
           }
@@ -985,6 +1004,9 @@ const constructRootSchema = (
         out[prop].refKeyType = key.type;
         out[prop].onDelete = struct[prop]?.onDelete ?? "delete";
         out[prop].nullable = struct[prop]?.nullable ?? false;
+        if (struct[prop]?.hasOwnProperty("default")) {
+          out[prop].default = struct[prop]?.default;
+        }
         if (struct[prop].isKey) {
           out[prop].isKey = true;
         }
@@ -1008,6 +1030,7 @@ const constructRootSchema = (
       continue;
     }
   }
+
   return out;
 };
 
@@ -1058,7 +1081,7 @@ const defaultMissingSchemaState = (
       continue;
     }
     if (primitives.has(struct[prop]?.type as string)) {
-      out[prop] = state?.[prop] ?? null;
+      out[prop] = state?.[prop] ?? struct[prop]?.default ?? null;
       continue;
     }
 
@@ -1066,6 +1089,13 @@ const defaultMissingSchemaState = (
       if (state?.[prop]) {
         const referencedObject = getObjectInStateMap(stateMap, state?.[prop]);
         if (!referencedObject) {
+          if (struct[prop]?.default) {
+            const referencedDefaultObject = getObjectInStateMap(stateMap, state?.[prop]);
+            if (referencedDefaultObject) {
+              out[prop] = struct[prop]?.default;
+              continue;
+            }
+          }
           out[prop] = null;
           continue;
         }
@@ -1076,7 +1106,7 @@ const defaultMissingSchemaState = (
     if (struct[prop]) {
       out[prop] = defaultMissingSchemaState(
         struct[prop] as TypeStruct,
-        state?.[prop] ?? {},
+        state?.[prop] ?? struct[prop]?.default ?? {},
         stateMap
       );
     }
@@ -1764,6 +1794,9 @@ const iterateSchemaTypes = (
     if (types[prop]?.type === "set" || types[prop]?.type === "array") {
       out[prop].type = types[prop]?.type;
       out[prop].emptyable = types[prop]?.emptyable === undefined ? true : types[prop].emptyable;
+      if (types[prop].hasOwnProperty("default")) {
+        out[prop].default = types[prop]?.default;
+      }
       if (
         typeof types[prop].values == "string" &&
         primitives.has(types[prop].values as string)
@@ -1776,6 +1809,10 @@ const iterateSchemaTypes = (
         (types[prop].values as string).split(".").length == 1
       ) {
         out[prop].values = `${pluginName}.${types[prop].values}`;
+        if (types[prop]?.type === "set") {
+          out[prop].bounded = types[prop]?.bounded ?? false;
+          out[prop].manualOrdering = types[prop]?.manualOrdering ?? false;
+        }
         continue;
       }
       if (
@@ -1787,6 +1824,10 @@ const iterateSchemaTypes = (
           pluginName,
           importedTypes
         );
+        if (types[prop]?.type === "set") {
+          out[prop].bounded = types[prop]?.bounded ?? false;
+          out[prop].manualOrdering = types[prop]?.manualOrdering ?? false;
+        }
         continue;
       }
       if (typeof types[prop].values == "object") {
@@ -1795,6 +1836,10 @@ const iterateSchemaTypes = (
           pluginName,
           importedTypes
         );
+        if (types[prop]?.type === "set") {
+          out[prop].bounded = types[prop]?.bounded ?? false;
+          out[prop].manualOrdering = types[prop]?.manualOrdering ?? false;
+        }
         continue;
       }
     }
@@ -2040,7 +2085,7 @@ const traverseSchemaMapForRefKeyTypes = (
       out[prop] = next;
       continue;
     }
-    if (typeof schemaMap[prop] == "object") {
+    if (typeof schemaMap[prop] == "object" && !Array.isArray(schemaMap[prop])) {
       const next = traverseSchemaMapForRefKeyTypes(
         schemaMap[prop] as TypeStruct,
         rootSchemaMap
@@ -2140,6 +2185,8 @@ interface StaticSetPath {
   staticChildren: Array<StaticSetPath>;
   keyProp: string;
   keyPropIsRef: boolean;
+  isBounded: boolean;
+  isManuallyOrdered: boolean;
 }
 
 const traverseSchemaMapForStaticSetPaths = (
@@ -2175,6 +2222,8 @@ const traverseSchemaMapForStaticSetPaths = (
       );
       let keyProp = null;
       let keyPropIsRef = false;
+      let isBounded = typeStruct[prop].bounded ?? false;
+      let isManuallyOrdered = isBounded && (typeStruct[prop].manualOrdering ?? false);
       for (const key in typeStruct[prop].values as object) {
         if (typeStruct[prop].values[key]?.isKey) {
           keyProp = key;
@@ -2190,6 +2239,8 @@ const traverseSchemaMapForStaticSetPaths = (
         relativePath: [...relativePath, prop, "values"],
         keyProp,
         keyPropIsRef,
+        isBounded,
+        isManuallyOrdered
       });
     }
   }
@@ -2280,6 +2331,8 @@ interface StaticPointer {
   relativePath: Array<string>;
   refType: string;
   onDelete: "delete" | "nullify";
+  isBounded: boolean;
+  isManuallyOrdered: boolean;
 }
 
 const traverseSchemaMapForStaticPointerPaths = (
@@ -2287,7 +2340,9 @@ const traverseSchemaMapForStaticPointerPaths = (
   typeStruct: { [key: string]: TypeStruct } | TypeStruct,
   path = [],
   relativePath = [],
-  parent = null
+  parent = null,
+  isBounded = false,
+  isManuallyOrdered = false
 ): Array<StaticPointer> => {
   const refs = [];
   for (const prop in typeStruct) {
@@ -2297,7 +2352,7 @@ const traverseSchemaMapForStaticPointerPaths = (
         typeStruct[prop] as TypeStruct,
         [...path, prop],
         [...relativePath, prop],
-        parent
+        parent,
       );
       refs.push(...subRefs);
       continue;
@@ -2319,7 +2374,9 @@ const traverseSchemaMapForStaticPointerPaths = (
         typeStruct[prop].values as TypeStruct,
         [...path, prop, `values_key:${keyProp}`],
         [],
-        [...path, prop, `values_key:${keyProp}`]
+        [...path, prop, `values_key:${keyProp}`],
+        (typeStruct[prop] as ManifestNode)?.bounded ?? false,
+        (typeStruct[prop] as ManifestNode)?.manualOrdering ?? false,
       );
       refs.push(...staticChildren);
       continue;
@@ -2330,6 +2387,8 @@ const traverseSchemaMapForStaticPointerPaths = (
         relativePath: [...relativePath, prop],
         refType: typeStruct[prop]?.refType,
         onDelete: typeStruct[prop]?.onDelete,
+        isBounded,
+        isManuallyOrdered
       });
     }
   }
@@ -2340,11 +2399,14 @@ interface StateMapPointer {
   parentSetPath: Array<string | { key: string; value: string }>;
   setPath: Array<string | { key: string; value: string }>;
   refPath: Array<string | { key: string; value: string }>;
+  refParentPath: Array<string | { key: string; value: string }>;
   ownerObject: unknown;
   refKey: string;
   ref: string;
   onDelete: "delete" | "nullify";
   refType: string;
+  isBounded: boolean;
+  isManuallyOrdered: boolean;
 }
 
 const getPointersAtPath = (
@@ -2365,17 +2427,23 @@ const getPointersAtPath = (
       const [pluginNameEncoded, ...remainingRefPath] = decodeSchemaPath(
         current[pointerPath[i]]
       );
+
       const pluginName = /\$\((.+)\)/.exec(pluginNameEncoded as string)[1];
       const refPath = [pluginName, ...remainingRefPath];
+      const refParentPath = refPath.slice(0, -1);
+
       pointers.push({
         setPath: path,
         parentSetPath: path.slice(0, -1),
         ownerObject: current,
+        isBounded: staticPointer.isBounded,
+        isManuallyOrdered: staticPointer.isManuallyOrdered,
         refKey: pointerPath[i],
         ref: current[pointerPath[i]],
         refPath,
         onDelete: staticPointer.onDelete,
         refType: staticPointer.refType,
+        refParentPath
       });
       break;
     }
@@ -2451,7 +2519,7 @@ const accessObjectInReferenceMap = (
 const accessSetInReferenceMap = (
   referenceMap: { [key: string]: StaticStateMapObject },
   path: Array<string | { key: string; value: string }>
-): Array<unknown> => {
+): {values: Array<unknown>, parent: Array<unknown>} => {
   let curr:
     | { [key: string]: StaticStateMapObject }
     | StaticStateMapObject
@@ -2585,6 +2653,66 @@ export const cascadePluginState = async (
     return stateMap;
   }
 };
+
+// call before cascade
+export const enforceBoundedSets = async (
+  datasource: DataSource,
+  schemaMap: { [key: string]: Manifest },
+  stateMap: { [key: string]: object }
+): Promise<void> => {
+  try {
+    const rootSchemaMap = (await getRootSchemaMap(datasource, schemaMap)) ?? {};
+    const staticPointers = traverseSchemaMapForStaticPointerPaths(
+      rootSchemaMap,
+      rootSchemaMap
+    );
+    const staticSetPaths = traverseSchemaMapForStaticSetPaths(
+      rootSchemaMap,
+      rootSchemaMap
+    );
+
+    const references = compileStateRefs(staticSetPaths, stateMap);
+    const pointers = compileStatePointers(staticPointers, stateMap);
+    const boundedSetStateMapPointers: {[key: string]: StateMapPointer} = {};
+    for (const stateMapPointer of pointers) {
+      if (stateMapPointer.isBounded) {
+        const parentPath = writePathString(stateMapPointer.parentSetPath);
+        boundedSetStateMapPointers[parentPath] = stateMapPointer;
+      }
+    }
+    for (const ref in boundedSetStateMapPointers) {
+      const staticPointer = boundedSetStateMapPointers[ref];
+      const subjectSet = accessSetInReferenceMap(references, staticPointer.parentSetPath);
+      const boundedSet = accessSetInReferenceMap(references, staticPointer.refParentPath);
+      const subjectSetIdSet = new Set(subjectSet.parent.map(v => {
+          const refPath = v[staticPointer.refKey];
+          const decodedKey = decodeSchemaPath(refPath);
+          return (decodedKey[decodedKey.length - 1] as { key: string, value: string}).value;
+      }));
+      const parentPath = writePathString(staticPointer.parentSetPath);
+      const boundedBySubSchema = getSchemaAtPath(rootSchemaMap[staticPointer.parentSetPath[0] as string], parentPath);
+      let ordinalMap: {[key: string]: number} = {};
+      let index = 0;
+      for (let key in boundedSet.values) {
+        const boundedKey = (staticPointer.refPath[staticPointer.refPath.length - 1] as {key: string, value: string}).key;
+        const refPath = writePathString([`$(${staticPointer.refParentPath[0]})`,...staticPointer.refParentPath.slice(1), { key: boundedKey, value: key}]);
+        ordinalMap[refPath] = index++;
+        if (!subjectSetIdSet.has(key)) {
+          const defaultObject = defaultMissingSchemaState(boundedBySubSchema as TypeStruct, {[staticPointer.refKey]: refPath}, stateMap);
+          subjectSet.parent.push(defaultObject);
+        }
+      }
+      if (!staticPointer.isManuallyOrdered) {
+        subjectSet.parent.sort((a, b) => {
+          const ordinalA = ordinalMap[a[staticPointer.refKey]] ?? Number.MAX_SAFE_INTEGER;
+          const ordinalB = ordinalMap[b[staticPointer.refKey]] ?? Number.MAX_SAFE_INTEGER;
+          return ordinalA - ordinalB;
+        });
+      }
+    }
+  } catch(e) {
+  }
+}
 
 export const reIndexSchemaArrays = (kvs: Array<DiffElement>): Array<string> => {
   const out = [];
@@ -3001,7 +3129,7 @@ export const isTopologicalSubset = async (
     return false;
   }
   const oldKVs =
-    (await (
+    (
       await getKVStateForPlugin(
         datasource,
         oldSchemaMap,
@@ -3016,7 +3144,7 @@ export const isTopologicalSubset = async (
           return false;
         }
         return true;
-      })) ?? [];
+      }) ?? [];
   const newKVs = (
     await getKVStateForPlugin(datasource, newSchemaMap, pluginName, newStateMap)
   ).map(({ key }) => key);
@@ -3106,26 +3234,248 @@ export const isSchemaValid = (
   isDirectParentSet = false,
   isDirectParentArray = false,
   isArrayDescendent = false,
+  isBoundedSet = false,
+  isManuallyOrdered = false,
   path: Array<string> = []
 ): SchemaValidationResponse => {
   try {
     let keyCount = 0;
+    let boundedRefProp = null;
     const sets: Array<string> = [];
     const arrays: Array<string> = [];
     const nestedStructures: Array<string> = [];
     const refs: Array<string> = [];
+    const formatValues = isDirectParentArray || isDirectParentSet ? ["values"] : [];
     for (const prop in typeStruct) {
+      if (
+        typeof typeStruct[prop] == "object"
+      ) {
+        const [root, ...rest] = path;
+        const formattedPath = [`$(${root})`, ...rest, ...formatValues, prop].join(".");
+
+        if (isBoundedSet && typeStruct?.[prop]?.isKey) {
+          boundedRefProp = prop;
+        }
+        if (!isBoundedSet && isManuallyOrdered) {
+
+          return {
+            status: "error",
+            message: `Invalid use of manualOrdering on '${prop}'. manualOrdering can only be used on bounded sets. Found at '${formattedPath}'.`,
+          };
+        }
+        if (typeStruct[prop].hasOwnProperty("default")) {
+          let okay = false
+          if (typeof typeStruct[prop]?.default == "object" && Object.keys(typeStruct[prop]?.default).length == 0) {
+            return {
+              status: "error",
+              message: `Invalid default value type for prop '${prop}'. Default values can not be null or undefined. Found at '${formattedPath}'.`,
+            };
+          }
+
+          if (typeStruct[prop]?.type == "int") {
+            if (typeof typeStruct[prop]?.default == "number" && !Number.isNaN(typeStruct[prop]?.default)) {
+              if (Math.round(typeStruct[prop]?.default as number) == typeStruct[prop]?.default as number) {
+                okay = true;
+              }
+            }
+          }
+
+          if (typeStruct[prop]?.type == "float") {
+            if (typeof typeStruct[prop]?.default == "number" && !Number.isNaN(typeStruct[prop]?.default)) {
+              okay = true;
+            }
+          }
+
+          if (typeStruct[prop]?.type == "boolean") {
+            if (typeof typeStruct[prop]?.default == "boolean") {
+              okay = true;
+            }
+          }
+
+          if (typeStruct[prop]?.type == "string") {
+            if (typeof typeStruct[prop]?.default == "string") {
+              okay = true;
+            }
+          }
+
+          if (typeStruct[prop]?.type == "ref") {
+            const staticPath = replaceRefVarsWithValues(typeStruct[prop].default as string);
+            if ((typeStruct[prop]?.refType as string)?.startsWith("$")) {
+              if (staticPath != typeStruct[prop]?.refType) {
+                return {
+                  status: "error",
+                  message: `Invalid pointer default type for prop '${prop}'. Found at '${formattedPath}'.`,
+                };
+              }
+              okay = true;
+            } else {
+              const referencedType = expandedTypes[typeStruct[prop].refType as string];
+              if (!referencedType) {
+                const [root, ...rest] = path;
+                const formattedPath = [`$(${root})`, ...rest, ...formatValues, prop].join(".");
+                return {
+                  status: "error",
+                  message: `Invalid default referenced pointer type '${typeStruct[prop].refType}'. No reference type found for reference at '${formattedPath}'.`,
+                };
+              }
+              const pluginName =
+                /^\$\((.+)\)$/.exec(
+                  staticPath.split(".")[0] as string
+                )?.[1];
+
+              const staticSchema = getStaticSchemaAtPath(
+                rootSchemaMap[pluginName],
+                staticPath
+              );
+              if (!staticSchema) {
+                const [root, ...rest] = path;
+                const formattedPath = [`$(${root})`, ...rest, ...formatValues, prop].join(".");
+                return {
+                  status: "error",
+                  message: `Invalid default referenced pointer type '${typeStruct[prop].refType}'. No reference found for reference at '${formattedPath}'.`,
+                };
+              }
+              if (!typestructsAreEquivalent(staticSchema, referencedType)) {
+                return {
+                  status: "error",
+                  message: `Invalid default referenced pointer type '${typeStruct[prop].refType}'. Corresponding pointer type does not match, found at '${formattedPath}'.`,
+                };
+              }
+              okay = true;
+            }
+          }
+
+          if (typeStruct[prop]?.type == "set" || typeStruct[prop]?.type == "array") {
+            okay = true;
+            if (!Array.isArray(typeStruct[prop].default)) {
+              return {
+                status: "error",
+                message: `Invalid default value type for prop '${prop}'. Default value must be a list. Found at '${formattedPath}'.`,
+              };
+            }
+            for (let element of typeStruct[prop].default as Array<unknown>) {
+              if (element === null || element === undefined) {
+                return {
+                  status: "error",
+                  message: `Invalid default value type for prop '${prop}'. Default value elements can not be null or undefined. Found at '${formattedPath}'.`,
+                };
+              }
+              if (typeStruct[prop]?.values == "int") {
+                if (typeof element != "number" || Number.isNaN(element)) {
+                  if (typeStruct[prop]?.type == "set") {
+                    return {
+                      status: "error",
+                      message: `Invalid default value type for element in default set of '${prop}'. Not an int. Found at '${formattedPath}'.`,
+                    };
+                  } else {
+                    return {
+                      status: "error",
+                      message: `Invalid default value type for element in default array of '${prop}'. Not an int. Found at '${formattedPath}'.`,
+                    };
+                  }
+                }
+                if (Math.round(element as number) != element as number) {
+                  if (typeStruct[prop]?.type == "set") {
+                    return {
+                      status: "error",
+                      message: `Invalid default value type for element in default set of '${prop}'. Not an int. Found at '${formattedPath}'.`,
+                    };
+                  } else {
+                    return {
+                      status: "error",
+                      message: `Invalid default value type for element in default array of '${prop}'. Not an int. Found at '${formattedPath}'.`,
+                    };
+                  }
+                }
+                continue;
+              }
+
+              if (typeStruct[prop]?.values == "float") {
+                if (typeof element != "number" || Number.isNaN(element)) {
+                  if (typeStruct[prop]?.type == "set") {
+                    return {
+                      status: "error",
+                      message: `Invalid default value type for element in default set of '${prop}'. Not a float. Found at '${formattedPath}'.`,
+                    };
+                  } else {
+                    return {
+                      status: "error",
+                      message: `Invalid default value type for element in default array of '${prop}'. Not a float. Found at '${formattedPath}'.`,
+                    };
+                  }
+                }
+                continue;
+              }
+
+              if (typeStruct[prop]?.values == "boolean") {
+                if (typeof element != "boolean") {
+                  if (typeStruct[prop]?.type == "set") {
+                    return {
+                      status: "error",
+                      message: `Invalid default value type for element in default set of '${prop}'. Not a boolean. Found at '${formattedPath}'.`,
+                    };
+                  } else {
+                    return {
+                      status: "error",
+                      message: `Invalid default value type for element in default array of '${prop}'. Not a boolean. Found at '${formattedPath}'.`,
+                    };
+                  }
+                }
+                continue;
+              }
+
+              if (typeStruct[prop]?.values == "string") {
+                if (typeof element != "string") {
+                  if (typeStruct[prop]?.type == "set") {
+                    return {
+                      status: "error",
+                      message: `Invalid default value type for element in default set of '${prop}'. Not a string. Found at '${formattedPath}'.`,
+                    };
+                  } else {
+                    return {
+                      status: "error",
+                      message: `Invalid default value type for element in default array of '${prop}'. Not a string. Found at '${formattedPath}'.`,
+                    };
+                  }
+                }
+                continue;
+              }
+              if (typeStruct[prop]?.type == "set") {
+                  return {
+                    status: "error",
+                    message: `Invalid default value type for element in default set of '${prop}'. Defaults can only be used for int, float, boolean, string, and arrays and sets of those types, as well as refs. Found at '${formattedPath}'.`,
+                  };
+
+              } else {
+                  return {
+                    status: "error",
+                    message: `Invalid default value type for element in default array of '${prop}'. Defaults can only be used for int, float, boolean, string, and arrays and sets of those types, as well as refs. Found at '${formattedPath}'.`,
+                  };
+              }
+            }
+            okay = true;
+          }
+          if (!okay) {
+            return {
+              status: "error",
+              message: `Invalid default value type for prop '${prop}'. Defaults can only be used for int, float, boolean, string, and arrays and sets of those types, as well as refs. Found at '${formattedPath}'.`,
+            };
+          }
+        }
+
+      }
       if (
         typeof typeStruct[prop] == "object" &&
         Object.keys(typeStruct[prop]).length == 0
       ) {
         const [root, ...rest] = path;
-        const formattedPath = [`$(${root})`, ...rest, prop].join(".");
+        const formattedPath = [`$(${root})`, ...rest, ...formatValues, prop].join(".");
         const schemaMapValue = getSchemaAtPath?.(
           schemaMap[root].store,
-          writePathString([`$(${root})`, ...rest])
+          writePathString([`$(${root})`, ...rest, ...formatValues])
         );
         const schemaMapValueProp = schemaMapValue?.[prop] as ManifestNode;
+
         if (
           schemaMapValue &&
           schemaMapValueProp &&
@@ -3166,7 +3516,7 @@ export const isSchemaValid = (
       if (typeof typeStruct[prop]?.type == "string" && typeStruct[prop].isKey) {
         if (typeStruct[prop]?.nullable == true) {
           const [root, ...rest] = path;
-          const formattedPath = [`$(${root})`, ...rest, prop].join(".");
+          const formattedPath = [`$(${root})`, ...rest, ...formatValues, prop].join(".");
           return {
             status: "error",
             message: `Invalid key '${prop}'. Key types cannot be nullable. Found at '${formattedPath}'.`,
@@ -3177,7 +3527,7 @@ export const isSchemaValid = (
           typeStruct[prop].onDelete == "nullify"
         ) {
           const [root, ...rest] = path;
-          const formattedPath = [`$(${root})`, ...rest, prop].join(".");
+          const formattedPath = [`$(${root})`, ...rest, ...formatValues, prop].join(".");
           return {
             status: "error",
             message: `Invalid key '${prop}'. Key types that are refs cannot have a cascaded onDelete values of nullify. Found at '${formattedPath}'.`,
@@ -3224,7 +3574,7 @@ export const isSchemaValid = (
         !primitives.has(typeStruct[prop].type as string)
       ) {
         const [root, ...rest] = path;
-        const formattedPath = [`$(${root})`, ...rest, prop].join(".");
+        const formattedPath = [`$(${root})`, ...rest, ...formatValues, prop].join(".");
         const schemaMapValue = getSchemaAtPath?.(
           schemaMap[root].store,
           writePathString([`$(${root})`, ...rest])
@@ -3255,7 +3605,7 @@ export const isSchemaValid = (
         !primitives.has(typeStruct[prop].values as string)
       ) {
         const [root, ...rest] = path;
-        const formattedPath = [`$(${root})`, ...rest, prop].join(".");
+        const formattedPath = [`$(${root})`, ...rest, ...formatValues, prop].join(".");
         return {
           status: "error",
           message: `Invalid type for values of '${typeStruct[prop]?.type}'. Found at '${formattedPath}'.`,
@@ -3265,6 +3615,30 @@ export const isSchemaValid = (
       if (typeof typeStruct[prop] == "object" && !typeStruct[prop]?.type) {
         nestedStructures.push(prop);
         continue;
+      }
+    }
+
+    if (isBoundedSet) {
+      const [root, ...rest] = path;
+      const formattedPath = [`$(${root})`, ...rest].join(".");
+      if (!boundedRefProp || !refs.includes(boundedRefProp)) {
+        return {
+          status: "error",
+          message: `A bounded set's key prop must be a constrained reference type. No key reference type found at '${formattedPath}.values'.`,
+        };
+      }
+
+      for (let refProp of refs) {
+        if (refProp == boundedRefProp) {
+          continue;
+        }
+        const refValue = typeStruct[refProp];
+        if (refValue?.onDelete != "nullify") {
+          return {
+            status: "error",
+            message: `A bounded set's refs, aside from the primary key, must nullify on delete. Please add onDelete='nullify' to '${formattedPath}.values.${refProp}'.`,
+          };
+        }
       }
     }
 
@@ -3321,15 +3695,17 @@ export const isSchemaValid = (
         if (response.status != "ok") {
           return response;
         }
+        const isBoundedRef = boundedRefProp && refProp == boundedRefProp;
         const refStruct = typeStruct[refProp] as ManifestNode;
         if (refStruct?.refType?.startsWith("$")) {
+          // constrained refs
           const [root, ...rest] = path;
           const pluginName =
             /^\$\((.+)\)$/.exec(
               refStruct?.refType.split(".")[0] as string
             )?.[1] ?? (refStruct?.refType.split(".")[0] == "$" ? root : null);
           if (!pluginName) {
-            const formattedPath = [`$(${root})`, ...rest, refProp].join(".");
+            const formattedPath = [`$(${root})`, ...rest, ...formatValues, refProp].join(".");
             return {
               status: "error",
               message: `Invalid reference pointer '${refStruct.refType}'. No reference value found for value at '${formattedPath}'.`,
@@ -3341,7 +3717,7 @@ export const isSchemaValid = (
           ) as TypeStruct | ManifestNode;
           if (!referencedType) {
             const [root, ...rest] = path;
-            const formattedPath = [`$(${root})`, ...rest, refProp].join(".");
+            const formattedPath = [`$(${root})`, ...rest, ...formatValues, refProp].join(".");
             return {
               status: "error",
               message: `Invalid reference pointer '${refStruct.refType}'. No reference value found for value at '${formattedPath}'.`,
@@ -3349,11 +3725,22 @@ export const isSchemaValid = (
           }
           if (refStruct.isKey && refStruct === referencedType[refProp]) {
             const [root, ...rest] = path;
-            const formattedPath = [`$(${root})`, ...rest, refProp].join(".");
+            const formattedPath = [`$(${root})`, ...rest, ...formatValues, refProp].join(".");
             return {
               status: "error",
               message: `Invalid reference pointer '${refStruct.refType}'. Keys that are constrained ref types cannot be schematically self-referential. Found at '${formattedPath}'.`,
             };
+          }
+          if (refStruct?.isKey) {
+            const [root, ...rest] = path;
+            const currentPath = [`$(${root})`, ...rest, ...formatValues].join(".");
+            if (refStruct?.refType?.startsWith(currentPath)) {
+              const formattedPath = [`$(${root})`, ...rest, ...formatValues, refProp].join(".");
+              return {
+                status: "error",
+                message: `Invalid reference pointer '${refStruct.refType}'. Keys that are constrained ref types cannot point to nested values. Found at '${formattedPath}'.`,
+              };
+            }
           }
           const containsKey = Object.keys(referencedType).reduce(
             (contains, prop) => {
@@ -3366,17 +3753,26 @@ export const isSchemaValid = (
           );
           if (!containsKey) {
             const [root, ...rest] = path;
-            const formattedPath = [`$(${root})`, ...rest, refProp].join(".");
+            const formattedPath = [`$(${root})`, ...rest, ...formatValues, refProp].join(".");
             return {
               status: "error",
               message: `Invalid reference constrainted pointer '${refStruct.refType}'. Constrained references must point directly at the values of a set. Found at '${formattedPath}'.`,
             };
           }
         } else {
+          //unconstrained refs
+          if (isBoundedRef) {
+            const [root, ...rest] = path;
+            const formattedPath = [`$(${root})`, ...rest, ...formatValues, refProp].join(".");
+            return {
+              status: "error",
+              message: `Invalid bounded set unconstrainted reference key '${refStruct.refType}'. Unconstrained references cannot be keys of a bounded set. Found at '${formattedPath}'.`,
+            };
+          }
           const referencedType = expandedTypes[refStruct.refType as string];
           if (!referencedType) {
             const [root, ...rest] = path;
-            const formattedPath = [`$(${root})`, ...rest, refProp].join(".");
+            const formattedPath = [`$(${root})`, ...rest, ...formatValues, refProp].join(".");
             return {
               status: "error",
               message: `Invalid reference pointer '${refStruct.refType}'. No reference type found for reference at '${formattedPath}'.`,
@@ -3393,7 +3789,7 @@ export const isSchemaValid = (
           );
           if (!containsKey) {
             const [root, ...rest] = path;
-            const formattedPath = [`$(${root})`, ...rest, refProp].join(".");
+            const formattedPath = [`$(${root})`, ...rest, ...formatValues, refProp].join(".");
             return {
               status: "error",
               message: `Invalid reference pointer '${refStruct.refType}'. References type ${refStruct.refType} contains no key type. Found at '${formattedPath}'.`,
@@ -3425,6 +3821,8 @@ export const isSchemaValid = (
           false,
           false,
           isArrayDescendent,
+          false,
+          false,
           [...path, nestedStructureProp]
         );
       },
@@ -3451,6 +3849,8 @@ export const isSchemaValid = (
           false,
           true,
           true,
+          false,
+          false,
           [...path, arrayProp]
         );
       },
@@ -3469,6 +3869,8 @@ export const isSchemaValid = (
         if (response.status != "ok") {
           return response;
         }
+        const isBounded: boolean = !!typeStruct?.[setProp].bounded;
+        const isManuallyOrdered: boolean = isBounded && !!typeStruct?.[setProp].manualOrdering;
         return isSchemaValid(
           typeStruct[setProp].values as TypeStruct,
           schemaMap,
@@ -3477,6 +3879,8 @@ export const isSchemaValid = (
           true,
           false,
           isArrayDescendent,
+          isBounded,
+          isManuallyOrdered,
           [...path, setProp]
         );
       },
@@ -3492,7 +3896,8 @@ export const isSchemaValid = (
     };
   } catch (e) {
     const [root, ...rest] = path;
-    const formattedPath = [`$(${root})`, ...rest].join(".");
+    const formatValues = isDirectParentArray || isDirectParentSet ? ["values"] : [];
+    const formattedPath = [`$(${root})`, ...rest, ...formatValues].join(".");
     return {
       status: "error",
       message: `${

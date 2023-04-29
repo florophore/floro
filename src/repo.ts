@@ -15,6 +15,7 @@ import { broadcastAllDevices } from "./multiplexer";
 import {
   cascadePluginState,
   collectFileRefs,
+  enforceBoundedSets,
   getInvalidRootStates,
   getKVStateForPlugin,
   getPluginInvalidStateIndices,
@@ -1095,6 +1096,7 @@ export const getMergedCommitState = async (
     const manifests = await getPluginManifests(datasource, mergeState.plugins);
 
     const schemaMap = manifestListToSchemaMap(manifests)
+    await enforceBoundedSets(datasource, schemaMap, stateStore);
     stateStore = await cascadePluginState(datasource, schemaMap, stateStore);
     stateStore = await nullifyMissingFileRefs(datasource, schemaMap, stateStore);
     const binaries = await collectFileRefs(datasource, schemaMap, stateStore);

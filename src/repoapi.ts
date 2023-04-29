@@ -62,6 +62,7 @@ import {
   collectFileRefs,
   manifestListToSchemaMap,
   getKVStateForPlugin,
+  enforceBoundedSets,
 } from "./plugins";
 import { LicenseCodes } from "./licensecodes";
 import { DataSource } from "./datasource";
@@ -1166,6 +1167,7 @@ export const updatePlugins = async (
       }
     }
     const schemaMap = manifestListToSchemaMap(updatedManifests);
+    await enforceBoundedSets(datasource, schemaMap, store)
     store = await cascadePluginState(datasource, schemaMap, store);
     store = await nullifyMissingFileRefs(datasource, schemaMap, store);
     const binaries = await collectFileRefs(datasource, schemaMap, store);
@@ -1217,6 +1219,8 @@ export const updatePluginState = async (
     const renderedState = await datasource.readRenderedState(repoId);
     const stateStore = renderedState.store;
     stateStore[pluginName] = updatedState;
+
+    await enforceBoundedSets(datasource, schemaMap, renderedState.store)
     renderedState.store = await cascadePluginState(
       datasource,
       schemaMap,
@@ -1231,6 +1235,7 @@ export const updatePluginState = async (
       await collectFileRefs(datasource, schemaMap, renderedState.store)
     );
     const sanitiziedRenderedState = await sanitizeApplicationKV(datasource, renderedState);
+    await enforceBoundedSets(datasource, schemaMap, sanitiziedRenderedState.store)
     sanitiziedRenderedState.store = await cascadePluginState(
       datasource,
       schemaMap,
