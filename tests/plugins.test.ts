@@ -2128,6 +2128,10 @@ describe("plugins", () => {
         ],
         colors: [
           {
+            colorId: "blue",
+            name: "Blue",
+          },
+          {
             colorId: "white",
             name: "White",
           },
@@ -2205,6 +2209,10 @@ describe("plugins", () => {
         palette: {
           colors: [
             {
+              colorId: "blue",
+              name: "Blue",
+            },
+            {
               colorId: "white",
               name: "White",
             },
@@ -2215,8 +2223,33 @@ describe("plugins", () => {
           ],
           palette: [
             {
+              id: "$(palette).colors.colorId<blue>",
+              paletteColors: [
+                {
+                  alpha: 255,
+                  hexcode: null,
+                  id: "$(palette).shades.shadeId<light>",
+                },
+                {
+                  alpha: 255,
+                  hexcode: null,
+                  id: "$(palette).shades.shadeId<regular>",
+                },
+                {
+                  alpha: 255,
+                  hexcode: null,
+                  id: "$(palette).shades.shadeId<dark>",
+                },
+              ],
+            },
+            {
               id: "$(palette).colors.colorId<white>",
               paletteColors: [
+                {
+                  alpha: 255,
+                  hexcode: null,
+                  id: "$(palette).shades.shadeId<dark>",
+                },
                 {
                   alpha: 255,
                   hexcode: null,
@@ -2226,11 +2259,6 @@ describe("plugins", () => {
                   alpha: 255,
                   hexcode: "#FFFFFF",
                   id: "$(palette).shades.shadeId<regular>",
-                },
-                {
-                  alpha: 255,
-                  hexcode: null,
-                  id: "$(palette).shades.shadeId<dark>",
                 },
               ],
             },
@@ -2312,6 +2340,7 @@ describe("plugins", () => {
           palette: {
             type: "set",
             bounded: true,
+            manualOrdering: true,
             values: {
               id: {
                 type: "ref<$.colors.values>",
@@ -2445,26 +2474,6 @@ describe("plugins", () => {
           ],
           palette: [
             {
-              id: "$(palette).colors.colorId<white>",
-              paletteColors: [
-                {
-                  alpha: 255,
-                  hexcode: null,
-                  id: "$(palette).shades.shadeId<dark>",
-                },
-                {
-                  alpha: 255,
-                  hexcode: null,
-                  id: "$(palette).shades.shadeId<light>",
-                },
-                {
-                  alpha: 255,
-                  hexcode: "#FFFFFF",
-                  id: "$(palette).shades.shadeId<regular>",
-                },
-              ],
-            },
-            {
               id: "$(palette).colors.colorId<red>",
               paletteColors: [
                 {
@@ -2481,6 +2490,26 @@ describe("plugins", () => {
                   alpha: 255,
                   hexcode: null,
                   id: "$(palette).shades.shadeId<light>",
+                },
+              ],
+            },
+            {
+              id: "$(palette).colors.colorId<white>",
+              paletteColors: [
+                {
+                  alpha: 255,
+                  hexcode: null,
+                  id: "$(palette).shades.shadeId<dark>",
+                },
+                {
+                  alpha: 255,
+                  hexcode: null,
+                  id: "$(palette).shades.shadeId<light>",
+                },
+                {
+                  alpha: 255,
+                  hexcode: "#FFFFFF",
+                  id: "$(palette).shades.shadeId<regular>",
                 },
               ],
             },

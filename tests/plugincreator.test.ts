@@ -1108,6 +1108,92 @@ describe("plugincreator", () => {
       });
     });
 
+    test("prevents nessted refs on bounded sets", async () => {
+
+      const PLUGIN_A_MANIFEST: Manifest = {
+        name: "A",
+        version: "0.0.0",
+        displayName: "A",
+        icon: "",
+        imports: {},
+        types: {
+          Color: {
+            name: {
+              type: "string",
+              isKey: true,
+            },
+          }
+        },
+        store: {
+          colors: {
+            type: "set",
+            values: {
+              name: {
+                type: "string",
+                isKey: true,
+              },
+            },
+          },
+          shades: {
+            type: "set",
+            values: {
+              name: {
+                type: "string",
+                isKey: true,
+              },
+              subShades: {
+                type: "set",
+                values: {
+                  subShadeName: {
+                    type: "string",
+                    isKey: true,
+                  },
+                  someProp: {
+                    type: "int"
+                  }
+                }
+              }
+            },
+          },
+          palette: {
+            type: "set",
+            values: {
+              id: {
+                type: "ref<Color>",
+                isKey: true,
+              },
+              name: {
+                type: "string",
+              },
+              paletteColors: {
+                type: "set",
+                bounded: true,
+                values: {
+                  id: {
+                    type: "ref<$.shades.values.subShades.values>",
+                    isKey: true,
+                  },
+                  value: {
+                    type: "string",
+                  }
+                }
+              }
+            }
+          }
+        },
+      };
+      makeTestPlugin(PLUGIN_A_MANIFEST);
+      const result = await validatePluginManifest(
+        datasource,
+        PLUGIN_A_MANIFEST
+      );
+      expect(result).toEqual({
+        status: "error",
+        message:
+          "Invalid reference pointer '$(A).shades.values.subShades.values'. Sets that are bounded cannot point to nested values. Found at '$(A).palette.paletteColors.values.id'.",
+      });
+    });
+
     describe("defaults", () => {
       test("throw error on null default", async () => {
         const PLUGIN_A_MANIFEST: Manifest = {

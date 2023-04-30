@@ -2654,61 +2654,166 @@ export const cascadePluginState = async (
   }
 };
 
+const getBoundedStaticSetPaths = (staticSetPaths: StaticSetPath[], out: StaticSetPath[] = []): StaticSetPath[] => {
+  for (const staticSet of staticSetPaths) {
+    if (staticSet.isBounded) {
+      out.push(staticSet);
+    }
+    out.push(...getBoundedStaticSetPaths(staticSet.staticChildren));
+  }
+  return out;
+}
+
+const getParentStatesFromStaticPath = (
+  staticPath: Array<string>,
+  referenceMap: { [key: string]: StaticStateMapObject },
+): Array<unknown> => {
+  let curr = referenceMap as { [key: string]: StaticStateMapObject }|StaticStateMapObject;
+  const out = [];
+  for (let i = 0; i < staticPath.length; ++i) {
+    const part = staticPath[i];
+    if (part == "values") {
+      if (staticPath.length - 1 == i) {
+        out.push(curr.parent);
+      }
+      const results = Object.keys(curr.values).flatMap((key) => {
+        return getParentStatesFromStaticPath(
+          staticPath.slice(i + 1),
+          curr.values[key].object
+        );
+      })
+      out.push(...results);
+      break;
+    }
+    curr = curr[part];
+  }
+  return out;
+}
+
+const getBoundedStateSets = (
+  referenceMap: { [key: string]: StaticStateMapObject },
+  staticSets: StaticSetPath[]
+): Array<{staticSet: StaticSetPath, parents: Array<Array<unknown>>}> => {
+  const out = [];
+  for (const staticSet of staticSets) {
+    out.push({
+      staticSet,
+      parents: getParentStatesFromStaticPath(staticSet.staticPath, referenceMap)
+    })
+  }
+  return out;
+};
+
 // call before cascade
+// Probably the dirtiest code in this whole thing, I am really sorry.
+// It's fastish and does not depend upon any serialization/reserialization
 export const enforceBoundedSets = async (
   datasource: DataSource,
   schemaMap: { [key: string]: Manifest },
   stateMap: { [key: string]: object }
 ): Promise<void> => {
   try {
+    let shouldRecurse = false;
     const rootSchemaMap = (await getRootSchemaMap(datasource, schemaMap)) ?? {};
     const staticPointers = traverseSchemaMapForStaticPointerPaths(
       rootSchemaMap,
       rootSchemaMap
     );
+
+    const boundedStaticPointers: {[key: string]: StaticPointer} = {};
+    for (const staticPointer of staticPointers) {
+      if (staticPointer.isBounded) {
+        const normalizedPath = staticPointer.staticPath.map(p => {
+          if (p.startsWith("values_key:")) {
+            return "values";
+          }
+          return p;
+        }).slice(0, -1).join(".");
+        boundedStaticPointers[normalizedPath] = staticPointer;
+      }
+    }
     const staticSetPaths = traverseSchemaMapForStaticSetPaths(
       rootSchemaMap,
       rootSchemaMap
     );
 
+    const boundedStaticSets = getBoundedStaticSetPaths(staticSetPaths);
+
     const references = compileStateRefs(staticSetPaths, stateMap);
-    const pointers = compileStatePointers(staticPointers, stateMap);
-    const boundedSetStateMapPointers: {[key: string]: StateMapPointer} = {};
-    for (const stateMapPointer of pointers) {
-      if (stateMapPointer.isBounded) {
-        const parentPath = writePathString(stateMapPointer.parentSetPath);
-        boundedSetStateMapPointers[parentPath] = stateMapPointer;
-      }
-    }
-    for (const ref in boundedSetStateMapPointers) {
-      const staticPointer = boundedSetStateMapPointers[ref];
-      const subjectSet = accessSetInReferenceMap(references, staticPointer.parentSetPath);
-      const boundedSet = accessSetInReferenceMap(references, staticPointer.refParentPath);
-      const subjectSetIdSet = new Set(subjectSet.parent.map(v => {
-          const refPath = v[staticPointer.refKey];
-          const decodedKey = decodeSchemaPath(refPath);
-          return (decodedKey[decodedKey.length - 1] as { key: string, value: string}).value;
-      }));
-      const parentPath = writePathString(staticPointer.parentSetPath);
-      const boundedBySubSchema = getSchemaAtPath(rootSchemaMap[staticPointer.parentSetPath[0] as string], parentPath);
-      let ordinalMap: {[key: string]: number} = {};
-      let index = 0;
-      for (let key in boundedSet.values) {
-        const boundedKey = (staticPointer.refPath[staticPointer.refPath.length - 1] as {key: string, value: string}).key;
-        const refPath = writePathString([`$(${staticPointer.refParentPath[0]})`,...staticPointer.refParentPath.slice(1), { key: boundedKey, value: key}]);
-        ordinalMap[refPath] = index++;
-        if (!subjectSetIdSet.has(key)) {
-          const defaultObject = defaultMissingSchemaState(boundedBySubSchema as TypeStruct, {[staticPointer.refKey]: refPath}, stateMap);
-          subjectSet.parent.push(defaultObject);
+    const boundedStateSetsWithParents = getBoundedStateSets(references, boundedStaticSets);
+    for (const boundedStateSetWithParents of boundedStateSetsWithParents) {
+      const staticPathString = boundedStateSetWithParents.staticSet.staticPath.join(".");
+      const staticPointer: StaticPointer = boundedStaticPointers[staticPathString];
+      const [boundingWrappedName, ...boundingRest] = staticPointer.refType.split(".");
+      const boundingPluginName =
+        /^\$\((.+)\)$/.exec(
+          boundingWrappedName as string
+        )?.[1];
+      const refMapPath = [boundingPluginName, ...boundingRest];
+      const boundingSet = accessObjectInReferenceMap(references, refMapPath);
+      const boundingSubSchema = getStaticSchemaAtPath(
+        rootSchemaMap[boundingPluginName],
+        staticPointer.refType
+      );
+      let boundingKey: string;
+      for (let prop in boundingSubSchema) {
+        if (boundingSubSchema[prop]?.isKey) {
+          boundingKey = prop;
+          break;
         }
       }
-      if (!staticPointer.isManuallyOrdered) {
-        subjectSet.parent.sort((a, b) => {
-          const ordinalA = ordinalMap[a[staticPointer.refKey]] ?? Number.MAX_SAFE_INTEGER;
-          const ordinalB = ordinalMap[b[staticPointer.refKey]] ?? Number.MAX_SAFE_INTEGER;
-          return ordinalA - ordinalB;
-        });
+      let ordinalMap: {[key: string]: number} = {};
+      const boundingKeys = Object.keys(boundingSet).map((value, index) => {
+        const key = [
+          ...staticPointer.refType.split(".").slice(0, -1),
+          `${boundingKey}<${value}>`,
+        ].join(".");
+        ordinalMap[key] = index;
+        return key;
+      });
+      const boundedSubSchema = getStaticSchemaAtPath(
+        rootSchemaMap[boundedStateSetWithParents.staticSet.staticPath[0]],
+        [`$(${boundedStateSetWithParents.staticSet.staticPath[0]})`,...boundedStateSetWithParents.staticSet.staticPath.slice(1)].join(".")
+      );
+      for (const boundedSet of boundedStateSetWithParents.parents) {
+        const keys = new Set(
+          boundedSet
+            .filter((v) => !!v[boundedStateSetWithParents.staticSet.keyProp])
+            .map(
+              (v) => v[boundedStateSetWithParents.staticSet.keyProp] as string
+            )
+        );
+        let outOfOrder = false;
+        for (let i = 0; i < boundingKeys.length; ++i) {
+          const key = boundingKeys[i];
+          if (!keys.has(key)) {
+            const defaultObject = defaultMissingSchemaState(
+              boundedSubSchema as TypeStruct,
+              { [boundedStateSetWithParents.staticSet.keyProp]: key },
+              stateMap
+            );
+            boundedSet.push(defaultObject);
+            shouldRecurse = true;
+            outOfOrder = true;
+          }
+          if (ordinalMap[key] != i) {
+            if (!staticPointer.isManuallyOrdered) {
+              shouldRecurse = true;
+            }
+            outOfOrder = true;
+          }
+        }
+        if (!staticPointer.isManuallyOrdered && outOfOrder) {
+          boundedSet.sort((a, b) => {
+            const ordinalA = ordinalMap[a[boundedStateSetWithParents.staticSet.keyProp]] ?? Number.MAX_SAFE_INTEGER;
+            const ordinalB = ordinalMap[b[boundedStateSetWithParents.staticSet.keyProp]] ?? Number.MAX_SAFE_INTEGER;
+            return ordinalA - ordinalB;
+          });
+        }
       }
+    }
+    if (shouldRecurse) {
+      await enforceBoundedSets(datasource, schemaMap, stateMap);
     }
   } catch(e) {
   }
@@ -3739,6 +3844,17 @@ export const isSchemaValid = (
               return {
                 status: "error",
                 message: `Invalid reference pointer '${refStruct.refType}'. Keys that are constrained ref types cannot point to nested values. Found at '${formattedPath}'.`,
+              };
+            }
+          }
+          if (isBoundedRef) {
+            const pathParts = decodeSchemaPath(refStruct?.refType);
+            const valuesCount = pathParts.reduce((a, p) => a + (p == "values" ? 1 : 0), 0);
+            if (valuesCount != 1) {
+              const formattedPath = [`$(${root})`, ...rest, ...formatValues, refProp].join(".");
+              return {
+                status: "error",
+                message: `Invalid reference pointer '${refStruct.refType}'. Sets that are bounded cannot point to nested values. Found at '${formattedPath}'.`,
               };
             }
           }
