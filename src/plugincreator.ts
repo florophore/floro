@@ -22,7 +22,6 @@ import {
   drawMakeQueryRef,
   drawSchemaRoot,
   drawRefReturnTypes,
-  drawGetReferencedObject,
   drawGetPluginStore,
   verifyPluginDependencyCompatability,
   getUpstreamDependencyManifests,
@@ -33,7 +32,6 @@ import {
   drawDiffableQueryTypes,
   drawSchematicTypes,
   drawPointerTypes,
-  drawDiffableReturnTypes,
   drawProviderApiCode,
   drawUseFloroStateFunction,
   drawUseWasAddedFunction,
@@ -42,6 +40,9 @@ import {
   drawUseHasConflictFunction,
   drawUseWasChangedFunction,
   drawUseHasIndicationFunction,
+  drawUseReferencedObjectFunction,
+  drawGetReferencedObjectFunction,
+  GENERATED_CODE_FUNCTIONS,
 } from "./plugins";
 import clc from "cli-color";
 import semver from "semver";
@@ -717,7 +718,6 @@ export const generateTypeScriptAPI = async (
 
   let code = useReact ? "import React, { useEffect, createContext, useMemo, useCallback, useState, useContext, useRef } from 'react';\n\n" : "";
   code += "export type FileRef = `${string}.${string}`;\n\n";
-  const queryTypesCode = drawMakeQueryRef(referenceArgsMap, useReact);
 
   const partialDiffableQueryTypes = drawDiffableQueryTypes(
     diffableListWithPartials,
@@ -730,7 +730,6 @@ export const generateTypeScriptAPI = async (
     false
   );
   code += diffableQueryTypes + "\n\n";
-  code += queryTypesCode + "\n\n";
 
   const schemaTypesCode = drawSchematicTypes(
     diffableListWithPartials,
@@ -739,12 +738,6 @@ export const generateTypeScriptAPI = async (
   );
   code += schemaTypesCode + "\n\n";
 
-  const diffableReturnType = drawDiffableReturnTypes(
-    diffableListWithPartials
-  );
-
-  code += diffableReturnType + "\n\n";
-
   const pointerTypesCode = drawPointerTypes(
     diffableListWithPartials,
   );
@@ -752,25 +745,27 @@ export const generateTypeScriptAPI = async (
 
   const schemaRootCode = drawSchemaRoot(rootSchemaMap, referenceReturnTypeMap);
   code += schemaRootCode + "\n\n";
-  const refReturnTypesCode = drawRefReturnTypes(
-    rootSchemaMap,
-    referenceReturnTypeMap
-  );
-  code += refReturnTypesCode;
 
   const providerCode = drawProviderApiCode();
   code += providerCode;
 
-  const getReferenceObjectCode = drawGetReferencedObject(
-    referenceArgsMap,
-    useReact
-  );
-  code += getReferenceObjectCode;
-  const getReferencePluginStoreCode = drawGetPluginStore(
+  code += GENERATED_CODE_FUNCTIONS + "\n\n";
+
+  const queryTypesCode = drawMakeQueryRef(referenceArgsMap, useReact);
+  code += queryTypesCode + "\n\n";
+
+  const getPluginStoreCode = drawGetPluginStore(
     rootSchemaMap,
     useReact
   );
-  code += getReferencePluginStoreCode;
+  code += getPluginStoreCode;
+
+
+  const getReferencedObjectCode = drawGetReferencedObjectFunction(diffableListWithPartials);
+  code += getReferencedObjectCode + "\n";
+
+  const useReferencedObjectCode = drawUseReferencedObjectFunction(diffableListWithPartials);
+  code += useReferencedObjectCode + "\n";
 
   const useFloroStateCode = drawUseFloroStateFunction(diffableListWithPartials);
   code += useFloroStateCode;

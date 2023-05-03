@@ -4,6 +4,7 @@ import fs from 'fs';
 import http from "http";
 import cors from "cors";
 import mime from 'mime-types';
+import { isBinaryFile } from "arraybuffer-isbinary"
 import {
   existsAsync,
   getRemoteHostSync,
@@ -1938,7 +1939,9 @@ app.get("/binary/:binaryRef", async (req, res) => {
   fs.createReadStream(fullPath).pipe(res);
 });
 
-app.get("/plugins/:pluginName/dev@*", async (req, res) => {
+app.get("/plugins/:pluginName/dev@*",
+  cors(corsOptionsDelegate),
+async (req, res) => {
   const pluginName = req?.params?.['pluginName'];
   const pluginVersion = req.path.split("/")[3];
   const [,version] = pluginVersion.split("@")
@@ -1976,6 +1979,10 @@ app.get("/plugins/:pluginName/dev@*", async (req, res) => {
   const file = await fs.promises.readFile(filePath);
   const contentType = mime.contentType(path.extname(filePath))
   res.setHeader('content-type', contentType);
+  if (isBinaryFile(file)) {
+    res.send(file);
+    return;
+  }
   res.send(file.toString().replaceAll(prodPath, basePath));
 });
 

@@ -2252,10 +2252,18 @@ const getSetInStateMapFromStaticPath = (
   stateMap: { [key: string]: object }
 ): Array<{ [key: string]: object }> => {
   let current: object = stateMap;
+  let last: object;
+  let lastPart: string;
   for (let part of path) {
     if (part == "values") {
+      if (current == undefined) {
+        last[lastPart] = [];
+        return last[lastPart] as Array<{ [key: string]: object }>;
+      }
       return current as Array<{ [key: string]: object }>;
     }
+    last = current;
+    lastPart = part;
     current = current[part];
   }
   return null;
@@ -2387,7 +2395,7 @@ const traverseSchemaMapForStaticPointerPaths = (
         relativePath: [...relativePath, prop],
         refType: typeStruct[prop]?.refType,
         onDelete: typeStruct[prop]?.onDelete,
-        isBounded,
+        isBounded: !!isBounded && !!typeStruct?.[prop]?.isKey,
         isManuallyOrdered
       });
     }
@@ -2696,9 +2704,10 @@ const getBoundedStateSets = (
 ): Array<{staticSet: StaticSetPath, parents: Array<Array<unknown>>}> => {
   const out = [];
   for (const staticSet of staticSets) {
+    const parents = getParentStatesFromStaticPath(staticSet.staticPath, referenceMap)
     out.push({
       staticSet,
-      parents: getParentStatesFromStaticPath(staticSet.staticPath, referenceMap)
+      parents
     })
   }
   return out;
@@ -3058,7 +3067,10 @@ export const getInvalidRootStates = async (
 ) => {
   const out = [];
   const rootSchemaMap = (await getRootSchemaMap(datasource, schemaMap)) ?? {};
-  const { key, value } = kvs[0];
+  const { key, value } = kvs?.[0] ?? {};
+  if (!key) {
+    return out;
+  }
   const subSchema = getSchemaAtPath(rootSchemaMap[pluginName], key);
 
   for (const prop in subSchema) {
@@ -4535,6 +4547,7 @@ export const drawMakeQueryRef = (
       query
     )}'];\n`;
   }
+  // this need to be sorted
   const globalParams: Array<string> = [];
   for (let i = 0; i < globalArgs.length; ++i) {
     const args: Array<string> = globalArgs[i];
@@ -4797,7 +4810,7 @@ const drawTypestruct = (
   return code;
 };
 
-const GENERATED_CODE_FUNCTIONS = `
+export const GENERATED_CODE_FUNCTIONS = `
 const getCounterArrowBalanance = (str: string): number => {
   let counter = 0;
   for (let i = 0; i < str.length; ++i) {
@@ -4997,71 +5010,13 @@ const updateObjectInStateMap = (
   last[indexPath[indexPath.length - 1]] = objectToUpdate;
   return stateMap;
 };
-
-
 `;
-
-export const drawGetReferencedObject = (
-  argMap: { [key: string]: Array<Array<string>> },
-  useReact = false
-): string => {
-  const wildcards = Object.keys(argMap).map(replaceRefVarsWithWildcards)?.sort((a, b) => {
-    return b.length - a.length;
-  });
-  let code = "";
-  code += GENERATED_CODE_FUNCTIONS;
-  code += "\n";
-  for (const wildcard of wildcards) {
-    code += `export function getReferencedObject(root: SchemaRoot, query: QueryTypes['${wildcard}']): RefReturnTypes['${wildcard}'];\n`;
-  }
-  const globalQueryTypes = wildcards
-    .map((wildcard) => `QueryTypes['${wildcard}']`)
-    .join("|");
-  const globalReturnTypes = wildcards
-    .map((wildcard) => `RefReturnTypes['${wildcard}']`)
-    .join("|");
-  code += `export function getReferencedObject(root: SchemaRoot, query: ${globalQueryTypes}): ${globalReturnTypes}|null {\n`;
-  for (const wildcard of wildcards) {
-    code += `  if (root && query && replaceRefVarsWithWildcards(query) == '${wildcard}') {\n`;
-    code += `    return getObjectInStateMap(root, query) as RefReturnTypes['${wildcard}'];\n`;
-    code += `  }\n`;
-  }
-  code += `  return null;\n`;
-  code += `}`;
-  if (useReact) {
-    code += `\n`;
-    for (const wildcard of wildcards) {
-      code += `export function useReferencedObject(query: QueryTypes['${wildcard}']): RefReturnTypes['${wildcard}'];\n`;
-    }
-    const globalQueryTypes = wildcards
-      .map((wildcard) => `QueryTypes['${wildcard}']`)
-      .join("|");
-    const globalReturnTypes = wildcards
-      .map((wildcard) => `RefReturnTypes['${wildcard}']`)
-      .join("|");
-    code += `export function useReferencedObject(query: ${globalQueryTypes}): ${globalReturnTypes}|null {\n`;
-    code += `  const ctx = useFloroContext();\n`;
-    code += `  const root = ctx.applicationState;\n`;
-    code += `  return useMemo(() => {\n`;
-    for (const wildcard of wildcards) {
-      code += `    if (root && query && replaceRefVarsWithWildcards(query) == '${wildcard}') {\n`;
-      code += `      return getObjectInStateMap(root, query) as RefReturnTypes['${wildcard}'];\n`;
-      code += `    }\n`;
-    }
-    code += `    return null;\n`;
-
-    code += `  }, [root, query]);\n`;
-    code += `}`;
-  }
-  return code;
-};
 
 export const drawGetPluginStore = (
   rootSchemaMap: { [key: string]: TypeStruct },
   useReact = false
 ): string => {
   let code = "";
-  code += "\n";
   const plugins = Object.keys(rootSchemaMap);
   for (const plugin of plugins) {
     code += `export function getPluginStore(plugin: '${plugin}'): SchemaRoot['${plugin}'];\n`;
@@ -5090,7 +5045,7 @@ export const drawGetPluginStore = (
     code += `    }\n`;
     code += `    return root[plugin];\n`;
     code += `  }, [root, plugin]);\n`;
-    code += `}\n`;
+    code += `}\n\n`;
   }
   return code;
 };
@@ -5840,4 +5795,64 @@ export function useHasIndication(query: PartialDiffableQuery|DiffableQuery, fuzz
     return containsDiffable(ctx.conflictSet, query, false);
   }, [ctx.conflictSet, query, fuzzy, ctx.commandMode])
   return isInvalid || wasAdded || wasRemoved || hasConflict;
+};`;
+
+
+export const drawUseReferencedObjectFunction = (
+  diffables: Array<Array<string|DiffableElement>>
+) => {
+  let code = "";
+  for (let diffable of diffables) {
+    const wildcard = renderDiffableToWildcard(diffable);
+    code += `export function useReferencedObject(query?: PointerTypes['${wildcard}']): SchemaTypes['${wildcard}'];\n`;
+  }
+  code += USE_REFERENCED_OBJECT_FUNCTION + "\n";
+  return code;
+}
+
+export const USE_REFERENCED_OBJECT_FUNCTION = `
+export function useReferencedObject<T>(query?: string): T|null {
+  const ctx = useFloroContext();
+  return useMemo(() => {
+    if (!query) {
+      return null;
+    }
+    const existingObj = getObjectInStateMap(
+      ctx.applicationState as SchemaRoot,
+      query
+    );
+    if (existingObj) {
+      return existingObj as T;
+    }
+    return null;
+  }, [query, ctx.applicationState]);
+};`;
+
+export const drawGetReferencedObjectFunction = (
+  diffables: Array<Array<string|DiffableElement>>
+) => {
+  let code = "";
+  for (let diffable of diffables) {
+    const wildcard = renderDiffableToWildcard(diffable);
+    code += `export function getReferencedObject(root: SchemaRoot, query?: PointerTypes['${wildcard}']): SchemaTypes['${wildcard}'];\n`;
+  }
+  code += USE_GET_OBJECT_FUNCTION + "\n";
+  return code;
+}
+
+export const USE_GET_OBJECT_FUNCTION = `
+export function getReferencedObject<T>(root: SchemaRoot, query?: string): T|null {
+  return useMemo(() => {
+    if (!query) {
+      return null;
+    }
+    const existingObj = getObjectInStateMap(
+      root,
+      query
+    );
+    if (existingObj) {
+      return existingObj as T;
+    }
+    return null;
+  }, [query, root]);
 };`;

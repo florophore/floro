@@ -1170,6 +1170,7 @@ export const updatePlugins = async (
     await enforceBoundedSets(datasource, schemaMap, store)
     store = await cascadePluginState(datasource, schemaMap, store);
     store = await nullifyMissingFileRefs(datasource, schemaMap, store);
+    console.log("BRO", JSON.stringify(store, null, 2))
     const binaries = await collectFileRefs(datasource, schemaMap, store);
     currentRenderedState.store = store;
     currentRenderedState.plugins = sortedUpdatedPlugins;
