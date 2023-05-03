@@ -1170,12 +1170,16 @@ export const updatePlugins = async (
     await enforceBoundedSets(datasource, schemaMap, store)
     store = await cascadePluginState(datasource, schemaMap, store);
     store = await nullifyMissingFileRefs(datasource, schemaMap, store);
-    console.log("BRO", JSON.stringify(store, null, 2))
     const binaries = await collectFileRefs(datasource, schemaMap, store);
+    const storeBefore = {...currentRenderedState.store};
     currentRenderedState.store = store;
     currentRenderedState.plugins = sortedUpdatedPlugins;
     currentRenderedState.binaries = uniqueStrings(binaries);
     const sanitizedRenderedState = await sanitizeApplicationKV(datasource, currentRenderedState);
+    sanitizedRenderedState.store = {
+      ...storeBefore, // this is so uninstalling doesn't delete the plugin state from the store until commit
+      ...sanitizedRenderedState.store
+    };
     await datasource.saveRenderedState(repoId, sanitizedRenderedState);
     return currentRenderedState;
   } catch (e) {

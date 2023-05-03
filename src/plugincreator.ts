@@ -43,6 +43,7 @@ import {
   drawUseReferencedObjectFunction,
   drawGetReferencedObjectFunction,
   GENERATED_CODE_FUNCTIONS,
+  drawExtractQueryArguments,
 } from "./plugins";
 import clc from "cli-color";
 import semver from "semver";
@@ -753,6 +754,9 @@ export const generateTypeScriptAPI = async (
 
   const queryTypesCode = drawMakeQueryRef(referenceArgsMap, useReact);
   code += queryTypesCode + "\n\n";
+
+  const extractArgsCode = drawExtractQueryArguments(referenceArgsMap, useReact);
+  code += extractArgsCode;
 
   const getPluginStoreCode = drawGetPluginStore(
     rootSchemaMap,

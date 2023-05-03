@@ -4513,6 +4513,8 @@ export const drawMakeQueryRef = (
     .map(replaceRefVarsWithWildcards)
     .map((query) => `QueryTypes['${query}']`)
     .join("|");
+
+  const exportedCodes: Array<{code: string, query: string}> = [];
   for (const query in argMap) {
     const args = argMap[query];
     for (let i = 0; i < args.length; ++i) {
@@ -4543,11 +4545,18 @@ export const drawMakeQueryRef = (
       return s + `, arg${index}: ${argType}`;
     }, `query: '${replaceRefVarsWithWildcards(query)}'`);
 
-    code += `export function makeQueryRef(${params}): QueryTypes['${replaceRefVarsWithWildcards(
+    const exportedCode = `export function makeQueryRef(${params}): QueryTypes['${replaceRefVarsWithWildcards(
       query
     )}'];\n`;
+    exportedCodes.push({
+      code: exportedCode,
+      query: replaceRefVarsWithWildcards(query)
+    })
   }
-  // this need to be sorted
+
+  code += exportedCodes.sort((a, b) => {
+    return b.query.length - a.query.length;
+  }).map(p => p.code).join("");
   const globalParams: Array<string> = [];
   for (let i = 0; i < globalArgs.length; ++i) {
     const args: Array<string> = globalArgs[i];
@@ -4606,6 +4615,8 @@ export const drawMakeQueryRef = (
   code += `};\n`;
   if (useReact) {
     code += `\n`;
+
+    const exportedReactCodes: Array<{code: string, query: string}> = [];
     for (const query in argMap) {
       const args = argMap[query];
       const params = args.reduce((s, possibleArgs, index) => {
@@ -4625,10 +4636,17 @@ export const drawMakeQueryRef = (
         return s + `, arg${index}: ${argType}`;
       }, `query: '${replaceRefVarsWithWildcards(query)}'`);
 
-      code += `export function useQueryRef(${params}): QueryTypes['${replaceRefVarsWithWildcards(
+      const exportedCode = `export function useQueryRef(${params}): QueryTypes['${replaceRefVarsWithWildcards(
         query
       )}'];\n`;
+      exportedReactCodes.push({
+        code: exportedCode,
+        query: replaceRefVarsWithWildcards(query)
+      })
     }
+    code += exportedReactCodes.sort((a, b) => {
+      return b.query.length - a.query.length;
+    }).map(p => p.code).join("");
 
     code += `export function useQueryRef(query: ${globalQueryParam}, ${globalParams.join(
       ", "
@@ -4665,6 +4683,132 @@ export const drawMakeQueryRef = (
   }
   return code;
 };
+
+const GET_EXTRACTED_QUERY_ARGS_FUNCTION = `export function extractQueryArgs(query?: string): Array<string> {
+  if (!query) {
+    return [];
+  }
+  return (
+    decodeSchemaPathWithArrays(query)
+      ?.filter((v) => typeof v != "string")
+      ?.map((v) => (v as { key: string; value: string }).value as string) ?? []
+  );
+};`;
+
+const USE_EXTRACTED_QUERY_ARGS_FUNCTION = `export function useExtractQueryArgs(query?: string): Array<string> {
+  return useMemo(() => {
+    if (!query) {
+      return [];
+    }
+    return (
+      decodeSchemaPathWithArrays(query)
+        ?.filter((v) => typeof v != "string")
+        ?.map((v) => (v as { key: string; value: string }).value as string) ?? []
+    );
+  }, [query]);
+};`;
+
+export const drawExtractQueryArguments = (
+  argMap: { [key: string]: Array<Array<string>> },
+  useReact = false
+) => {
+  let code = "";
+  const globalArgs: Array<Array<string>> = [];
+  const exportedCodes: Array<{code: string, query: string}> = [];
+  for (const query in argMap) {
+    const args = argMap[query];
+    for (let i = 0; i < args.length; ++i) {
+      if (globalArgs[i] == undefined) {
+        globalArgs.push([]);
+      }
+      for (let j = 0; j < args[i].length; ++j) {
+        if (!globalArgs[i].includes(args[i][j])) {
+          globalArgs[i].push(args[i][j]);
+        }
+      }
+    }
+
+    const params = args.map((possibleArgs, index) => {
+      return possibleArgs
+        .map((possibleArg) => {
+          if (
+            possibleArg == "string" ||
+            possibleArg == "FileRef" ||
+            possibleArg == "boolean" ||
+            possibleArg == "number"
+          ) {
+            return possibleArg;
+          }
+          return `QueryTypes['${replaceRefVarsWithWildcards(possibleArg)}']`;
+        })
+        .join("|");
+    }).join(", ");
+
+    const exportedCode = `export function extractQueryArgs(query?: QueryTypes['${replaceRefVarsWithWildcards(
+      query
+    )}']): [${params}];\n`;
+    exportedCodes.push({
+      code: exportedCode,
+      query: replaceRefVarsWithWildcards(query)
+    });
+  }
+  code += exportedCodes.sort((a, b) => {
+    return b.query.length - a.query.length;
+  }).map(p => p.code).join("");
+  code += GET_EXTRACTED_QUERY_ARGS_FUNCTION;
+
+  code += "\n\n";
+  if (useReact) {
+    const exportedReactCodes: Array<{code: string, query: string}> = [];
+    for (const query in argMap) {
+      const args = argMap[query];
+      for (let i = 0; i < args.length; ++i) {
+        if (globalArgs[i] == undefined) {
+          globalArgs.push([]);
+        }
+        for (let j = 0; j < args[i].length; ++j) {
+          if (!globalArgs[i].includes(args[i][j])) {
+            globalArgs[i].push(args[i][j]);
+          }
+        }
+      }
+
+      const params = args.map((possibleArgs, index) => {
+        return possibleArgs
+          .map((possibleArg) => {
+            if (
+              possibleArg == "string" ||
+              possibleArg == "FileRef" ||
+              possibleArg == "boolean" ||
+              possibleArg == "number"
+            ) {
+              return possibleArg;
+            }
+            return `QueryTypes['${replaceRefVarsWithWildcards(possibleArg)}']`;
+          })
+          .join("|");
+      }).join(", ");
+
+      const exportedCode = `export function useExtractQueryArgs(query?: QueryTypes['${replaceRefVarsWithWildcards(
+        query
+      )}']): [${params}];\n`;
+      exportedReactCodes.push({
+        code: exportedCode,
+        query: replaceRefVarsWithWildcards(query)
+      });
+    }
+    code += exportedReactCodes.sort((a, b) => {
+      return b.query.length - a.query.length;
+    }).map(p => p.code).join("");
+    code += USE_EXTRACTED_QUERY_ARGS_FUNCTION;
+
+    code += "\n\n";
+  }
+
+  return code;
+};
+
+
 
 export const drawSchemaRoot = (
   rootSchemaMap: TypeStruct,
@@ -5842,17 +5986,15 @@ export const drawGetReferencedObjectFunction = (
 
 export const USE_GET_OBJECT_FUNCTION = `
 export function getReferencedObject<T>(root: SchemaRoot, query?: string): T|null {
-  return useMemo(() => {
-    if (!query) {
-      return null;
-    }
-    const existingObj = getObjectInStateMap(
-      root,
-      query
-    );
-    if (existingObj) {
-      return existingObj as T;
-    }
+  if (!query) {
     return null;
-  }, [query, root]);
+  }
+  const existingObj = getObjectInStateMap(
+    root,
+    query
+  );
+  if (existingObj) {
+    return existingObj as T;
+  }
+  return null;
 };`;
