@@ -44,6 +44,8 @@ import {
   drawGetReferencedObjectFunction,
   GENERATED_CODE_FUNCTIONS,
   drawExtractQueryArguments,
+  coalesceDependencyVersions,
+  drawBinaryUploadAndDownloadCode,
 } from "./plugins";
 import clc from "cli-color";
 import semver from "semver";
@@ -598,37 +600,6 @@ export interface DepFetch {
   deps?: Array<Manifest>;
 }
 
-const coalesceDependencyVersions = (
-  deps: Array<Manifest>
-): {
-  [pluginName: string]: Array<string>;
-} => {
-  try {
-    return deps.reduce((acc, manifest) => {
-      if (acc[manifest.name]) {
-        const semList = [manifest.version, ...acc[manifest.name]].sort(
-          (a: string, b: string) => {
-            if (semver.eq(a, b)) {
-              return 0;
-            }
-            return semver.gt(a, b) ? 1 : -1;
-          }
-        );
-        return {
-          ...acc,
-          [manifest.name]: semList,
-        };
-      }
-      return {
-        ...acc,
-        [manifest.name]: [manifest.version],
-      };
-    }, {});
-  } catch (e) {
-    return null;
-  }
-};
-
 export const getSchemaMapForCreationManifest = async (
   datasource: DataSource,
   manifest: Manifest,
@@ -649,7 +620,7 @@ export const getSchemaMapForCreationManifest = async (
   let out = {};
   for (let pluginName in depsMap) {
     const maxVersion = depsMap[pluginName][depsMap[pluginName].length - 1];
-    const depManifest = depResult.deps.find((v) => v.version == maxVersion);
+    const depManifest = depResult.deps.find((v) => v.version == maxVersion && v.name == pluginName);
     out[depManifest.name] = depManifest;
   }
   out[manifest.name] = manifest;
@@ -683,6 +654,7 @@ export const generateLocalTypescriptAPI = async (
     }
     return false;
   } catch (e) {
+    console.log("E", e)
     return false;
   }
 };
@@ -791,5 +763,9 @@ export const generateTypeScriptAPI = async (
 
   const useHasIndicationCode = drawUseHasIndicationFunction(diffableListWithPartials);
   code += useHasIndicationCode;
+
+  const uploadDownloadCode = drawBinaryUploadAndDownloadCode();
+  code += uploadDownloadCode;
+
   return code;
 };

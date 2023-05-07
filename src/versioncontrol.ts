@@ -339,8 +339,7 @@ const getMergeSubSequence = (
     }
     mergeIndex++;
   }
-  const merge = mergeSequences.flatMap((v) => v);
-  return merge;
+  return mergeSequences.flatMap((v) => v);
 };
 
 const getGreatestCommonLCS = (
@@ -374,7 +373,7 @@ const sequencesAreEqual = (a: Array<string>, b: Array<string>) => {
  *                                                 \
  * FEATURE BRANCH:                                   ---> (commit: X, value: [DF])
  *
- * TO MERGE B into X, we have to find the greatest longest common subsequence (GLCS) amonst all 3 commits
+ * TO MERGE B into X, we have to find the greatest longest common subsequence (GLCS) amongst all 3 commits
  * which is
  * GLCS: [D,F]
  *
@@ -416,7 +415,7 @@ const sequencesAreEqual = (a: Array<string>, b: Array<string>) => {
  * C IS reconciled to the following: {[], [X], []}
  *
  * Because B and C both have uncommon values at IDX (1), this results in merge coflict where both values are concatenated
- * to [T, P, X], (if yours)
+ * to [T, P, X], if yours or [X, T, P] if theirs (i.e. the merge sequences do not commute!)
  */
 
 const getReconciledSequence = (

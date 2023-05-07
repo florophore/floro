@@ -1061,10 +1061,18 @@ export const getMergedCommitState = async (
       direction
     );
 
+    const seen = new Set<string>([]);
     const pluginsToTraverse = Array.from([
       ...Object.keys(tokenizedCommitFrom.store),
       ...Object.keys(tokenizedCommitInto.store),
-    ]);
+    ])
+    .filter(v => {
+      if (seen.has(v)) {
+        return false;
+      }
+      seen.add(v);
+      return true;
+    });
     const tokenizedStore = {};
     for (const pluginName of pluginsToTraverse) {
       const pluginKVsFrom = tokenizedCommitFrom?.store?.[pluginName] ?? [];
@@ -1107,7 +1115,6 @@ export const getMergedCommitState = async (
       stateStore
     );
     mergeState.binaries = uniqueStrings(binaries);
-
     return mergeState;
   } catch (e) {
     return null;

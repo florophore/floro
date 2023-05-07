@@ -1177,7 +1177,7 @@ export const updatePlugins = async (
     currentRenderedState.binaries = uniqueStrings(binaries);
     const sanitizedRenderedState = await sanitizeApplicationKV(datasource, currentRenderedState);
     sanitizedRenderedState.store = {
-      ...storeBefore, // this is so uninstalling doesn't delete the plugin state from the store until commit
+      ///...storeBefore, // this is so uninstalling doesn't delete the plugin state from the store until commit
       ...sanitizedRenderedState.store
     };
     await datasource.saveRenderedState(repoId, sanitizedRenderedState);
