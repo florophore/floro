@@ -181,7 +181,7 @@ describe("repoapi", () => {
         },
         types: {},
         store: {
-          aSet: {
+          bSet: {
             type: "set",
             values: {
               bnKey: {
@@ -217,8 +217,12 @@ describe("repoapi", () => {
           },
         ],
         store: {
-          A: {},
-          B: {},
+          A: {
+            aSet: []
+          },
+          B: {
+            bSet: []
+          },
         },
         binaries: [],
       });
