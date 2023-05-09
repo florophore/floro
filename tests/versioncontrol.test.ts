@@ -3,6 +3,8 @@ import {
   getDiff,
   getTextDiff,
   getMergeSequence,
+  getCopySequence,
+  copyKV,
 } from "../src/versioncontrol";
 
 describe("versioncontrol", () => {
@@ -148,6 +150,157 @@ describe("versioncontrol", () => {
       const canMerge = getMergeSequence(A, B, C, "theirs").join("") == getMergeSequence(A, B, C, "yours").join("");
       expect(canMerge).toBe(false);
       expect(getMergeSequence(A, B, C, "theirs").join("")).toEqual("DXTPF");
+    });
+  });
+
+  describe("getCopySequence", () => {
+    test("creates copy sequence", () => {
+      const copyFrom = "ABCDEF".split("");
+      const copyInto = "WBXYCDZ".split("");
+      const copySet = new Set("ACF".split(""));
+      const copySequence = getCopySequence(copyFrom, copyInto, copySet);
+      expect(copySequence.join("")).toEqual("WABXYCDZF");
+    });
+  });
+
+  describe("copyKV", () => {
+    test("respects copy direction", () => {
+      const copyFrom = [
+        {
+          key: "A",
+          value: "A0",
+        },
+        {
+          key: "B",
+          value: "B0",
+        },
+        {
+          key: "C",
+          value: "C0",
+        },
+        {
+          key: "D",
+          value: "D0",
+        },
+        {
+          key: "E",
+          value: "E0",
+        },
+        {
+          key: "F",
+          value: "F0",
+        },
+      ];
+      const copyInto = [
+        {
+          key: "W",
+          value: "W1",
+        },
+        {
+          key: "B",
+          value: "B1",
+        },
+        {
+          key: "X",
+          value: "X1",
+        },
+        {
+          key: "Y",
+          value: "Y1",
+        },
+        {
+          key: "C",
+          value: "C1",
+        },
+        {
+          key: "D",
+          value: "D1",
+        },
+        {
+          key: "Z",
+          value: "Z0",
+        },
+      ];
+      const copyKeys = ["A", "C", "F"]
+      const copySequenceTheirs = copyKV(copyFrom, copyInto, copyKeys);
+      expect(copySequenceTheirs).toEqual([
+        {
+          "key": "W",
+          "value": "W1"
+        },
+        {
+          "key": "A",
+          "value": "A0"
+        },
+        {
+          "key": "B",
+          "value": "B1"
+        },
+        {
+          "key": "X",
+          "value": "X1"
+        },
+        {
+          "key": "Y",
+          "value": "Y1"
+        },
+        {
+          "key": "C",
+          "value": "C0"
+        },
+        {
+          "key": "D",
+          "value": "D1"
+        },
+        {
+          "key": "Z",
+          "value": "Z0"
+        },
+        {
+          "key": "F",
+          "value": "F0"
+        }
+      ]);
+
+      const copySequenceYours = copyKV(copyFrom, copyInto, copyKeys, "yours");
+      expect(copySequenceYours).toEqual([
+        {
+          "key": "W",
+          "value": "W1"
+        },
+        {
+          "key": "A",
+          "value": "A0"
+        },
+        {
+          "key": "B",
+          "value": "B1"
+        },
+        {
+          "key": "X",
+          "value": "X1"
+        },
+        {
+          "key": "Y",
+          "value": "Y1"
+        },
+        {
+          "key": "C",
+          "value": "C1"
+        },
+        {
+          "key": "D",
+          "value": "D1"
+        },
+        {
+          "key": "Z",
+          "value": "Z0"
+        },
+        {
+          "key": "F",
+          "value": "F0"
+        }
+      ]);
     });
   });
 });

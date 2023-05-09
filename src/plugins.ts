@@ -1,5 +1,5 @@
 import axios from "axios";
-import { DiffElement } from "./versioncontrol";
+import { DiffElement, copyKV } from "./versioncontrol";
 import semver from "semver";
 import { DataSource } from "./datasource";
 
@@ -38,6 +38,7 @@ export interface Manifest {
   description?: string;
   codeDocsUrl?: string;
   codeRepoUrl?: string;
+  managedCopy?: boolean;
   icon:
     | string
     | {
@@ -57,6 +58,15 @@ export interface Manifest {
   store: TypeStruct;
   seed?: unknown;
 }
+
+export interface CopyInstructions {
+  [pluginName: string]: {
+    isManualCopy: boolean;
+    manualCopyList: Array<string>;
+    copyPriority: "yours"|"theirs"; // if not manual copy, this should be set by user, otherwise theirs
+    referencePriority: "yours"|"theirs"; // this should always be set by user
+  }
+};
 
 const primitives = new Set(["int", "float", "boolean", "string", "file"]);
 
@@ -2429,6 +2439,7 @@ interface StateMapPointer {
   refType: string;
   isBounded: boolean;
   isManuallyOrdered: boolean;
+  pluginName: string;
 }
 
 const getPointersAtPath = (
@@ -2438,7 +2449,7 @@ const getPointersAtPath = (
   path: Array<string | { key: string; value: string }> = [],
   index = 0
 ): Array<StateMapPointer> => {
-  const pointers = [];
+  const pointers: Array<StateMapPointer> = [];
   const subPath = [...path];
   let current = stateMap;
   for (let i = index; i < pointerPath.length; ++i) {
@@ -2465,7 +2476,8 @@ const getPointersAtPath = (
         refPath,
         onDelete: staticPointer.onDelete,
         refType: staticPointer.refType,
-        refParentPath
+        refParentPath,
+        pluginName
       });
       break;
     }
@@ -2842,6 +2854,256 @@ export const enforceBoundedSets = async (
   }
 }
 
+export const canCopyState = async (
+  datasource: DataSource,
+  copyFromSchemaMap: { [key: string]: Manifest },
+  copyIntoSchemaMap: { [key: string]: Manifest },
+  copyInstructions: CopyInstructions
+): Promise<boolean> => {
+  const copyFromRootSchemaMap = (await getRootSchemaMap(datasource, copyFromSchemaMap)) ?? {};
+  const copyIntoRootSchemaMap = (await getRootSchemaMap(datasource, copyIntoSchemaMap)) ?? {};
+  const copyListSchemaMap = Object.keys(copyInstructions).reduce((acc, pluginName) => {
+    return {
+      ...acc,
+      [pluginName]: copyFromRootSchemaMap[pluginName]
+    }
+  }, {});
+  return objectIsSubsetOfObject(copyListSchemaMap, copyIntoRootSchemaMap);
+}
+
+export const copyState = async (
+  datasource: DataSource,
+  copyFromSchemaMap: { [key: string]: Manifest },
+  copyFromStateMap: { [key: string]: object },
+  copyIntoSchemaMap: { [key: string]: Manifest },
+  copyIntoStateMap: { [key: string]: object },
+  copyInstructions: CopyInstructions
+) => {
+  const canCopy = await canCopyState(
+    datasource,
+    copyFromSchemaMap,
+    copyIntoSchemaMap,
+    copyInstructions
+  )
+  if (!canCopy) {
+    return null;
+  }
+
+  const copyFromManifestList = Object.keys(copyFromSchemaMap).map(
+    (pluginName) => copyFromSchemaMap[pluginName]
+  );
+
+  const topSortedCopyFromManifests = topSortManifests(copyFromManifestList);
+  const pluginOrdinalMap: {[pluginName: string]: number} = topSortedCopyFromManifests.reduce((acc, manifest, index) => {
+    return {
+      ...acc,
+      [manifest.name]: index
+    };
+  }, {});
+  for (const copyFromManifest of topSortedCopyFromManifests) {
+    if (!copyInstructions[copyFromManifest.name]) {
+      continue;
+    }
+    const copyInstructionsForPlugin = copyInstructions[copyFromManifest.name];
+    if (copyInstructionsForPlugin.isManualCopy) {
+      // we need this to cascade
+      const copyGroups = groupCopyKeyRefs(copyInstructionsForPlugin.manualCopyList, pluginOrdinalMap);
+      await copySetsFromCopyFromOntoCopyInto(
+        datasource,
+        copyFromSchemaMap,
+        copyFromStateMap,
+        copyIntoSchemaMap,
+        copyIntoStateMap,
+        pluginOrdinalMap,
+        copyGroups,
+        copyInstructionsForPlugin.copyPriority,
+        copyInstructionsForPlugin.referencePriority
+      );
+    } else {
+      // get all top level sets
+      // need to build reference map and discover top level schemas.
+      const [, ...kvs] = await getKVStateForPlugin(
+        datasource,
+        copyFromSchemaMap,
+        copyFromManifest.name,
+        copyFromStateMap
+      );
+      const keys = kvs.filter(kv => {
+        const keyPath = decodeSchemaPath(kv.key)
+        const lastPart = keyPath[keyPath.length];
+        if (typeof lastPart == "string") {
+          return false;
+        }
+        return lastPart.key != "(id)";
+      }).map(kv => kv.key);
+      const copyGroups = groupCopyKeyRefs(keys, pluginOrdinalMap);
+      await copySetsFromCopyFromOntoCopyInto(
+        datasource,
+        copyFromSchemaMap,
+        copyFromStateMap,
+        copyIntoSchemaMap,
+        copyIntoStateMap,
+        pluginOrdinalMap,
+        copyGroups,
+        copyInstructionsForPlugin.copyPriority,
+        copyInstructionsForPlugin.referencePriority
+      );
+    }
+  }
+  return copyIntoStateMap;
+}
+
+
+const copySetsFromCopyFromOntoCopyInto = async (
+  datasource: DataSource,
+  copyFromSchemaMap: { [key: string]: Manifest },
+  copyFromStateMap: { [key: string]: object },
+  copyIntoSchemaMap: { [key: string]: Manifest },
+  copyIntoStateMap: { [key: string]: object },
+  pluginOrdinalMap: {[pluginName: string]: number},
+  copyGroup: CopyGroup,
+  priority: "yours"|"theirs",
+  referencePriority: "yours"|"theirs",
+) => {
+
+  const beforeCopyIntoStateMapString = JSON.stringify(copyIntoStateMap);
+
+  // mutate copyIntoStateMap
+  const copyFromRootSchemaMap = (await getRootSchemaMap(datasource, copyFromSchemaMap)) ?? {};
+  const copyIntoRootSchemaMap = (await getRootSchemaMap(datasource, copyIntoSchemaMap)) ?? {};
+
+  const copyFromStaticSetPaths = traverseSchemaMapForStaticSetPaths(
+    copyFromRootSchemaMap,
+    copyFromRootSchemaMap
+  );
+  const copyIntoStaticSetPaths = traverseSchemaMapForStaticSetPaths(
+    copyIntoRootSchemaMap,
+    copyIntoRootSchemaMap
+  );
+
+  const copyFromReferences = compileStateRefs(copyFromStaticSetPaths, copyFromStateMap);
+  let copyIntoReferences = compileStateRefs(copyIntoStaticSetPaths, copyIntoStateMap);
+
+  for (const pluginName in copyGroup) {
+    for (const parentSetPath in copyGroup[pluginName].sets) {
+      const referenceKeys = copyGroup[pluginName].sets[parentSetPath];
+      const [, ...decodedParentPath] = decodeSchemaPath(parentSetPath);
+      const parentPath = [pluginName, ...decodedParentPath];
+      const copyFromParentSet = accessSetInReferenceMap(copyFromReferences, parentPath);
+      // no need to worry about null pointers because we copy the missing nested sets over
+      // before getting to the children sets
+      const copyIntoParentSet = accessSetInReferenceMap(copyIntoReferences, parentPath);
+      const setKey = (decodeSchemaPath(referenceKeys[0]).pop() as DiffElement).key;
+      const copyFromKV = Object.keys(copyFromParentSet.values).map(key => {
+        return {
+          key: `${parentSetPath}.${setKey}<${key}>`,
+          value: copyFromParentSet.values[key]
+        }
+      });
+
+      const copyIntoKV = Object.keys(copyIntoParentSet.values).map(key => {
+        return {
+          key: `${parentSetPath}.${setKey}<${key}>`,
+          value: copyIntoParentSet.values[key]
+        }
+      });
+      const copiedKV = copyKV(copyFromKV, copyIntoKV, referenceKeys, priority);
+      const parentReplacement = copiedKV.map(v => v.value.instance);
+      copyIntoParentSet.parent.splice(0, copyIntoParentSet.parent.length);
+      copyIntoParentSet.parent.push(...parentReplacement);
+      copyIntoReferences = compileStateRefs(copyIntoStaticSetPaths, copyIntoStateMap);
+      const subSchema = getSchemaAtPath(copyIntoRootSchemaMap[pluginName], referenceKeys[0]);
+      // we need to collect
+      const subRefs = copiedKV.filter(v => {
+        return referenceKeys.includes(v.key)
+      }).map(v => v.value.instance)?.flatMap(subState => {
+        return collectRefsInStateMap(subSchema as TypeStruct, subState);
+      });
+
+      const referenceCopyGroups = groupCopyKeyRefs(subRefs, pluginOrdinalMap);
+      await copySetsFromCopyFromOntoCopyInto(
+        datasource,
+        copyFromSchemaMap,
+        copyFromStateMap,
+        copyIntoSchemaMap,
+        copyIntoStateMap,
+        pluginOrdinalMap,
+        referenceCopyGroups,
+        referencePriority,
+        referencePriority
+      );
+    }
+  }
+
+  const afterCopyIntoStateMapString = JSON.stringify(copyIntoStateMap);
+  // this is janky but the only real way to gaurantee the copy has recursively carried
+  // over all copied pointers
+  if (afterCopyIntoStateMapString != beforeCopyIntoStateMapString) {
+    await copySetsFromCopyFromOntoCopyInto(
+      datasource,
+      copyFromSchemaMap,
+      copyFromStateMap,
+      copyIntoSchemaMap,
+      copyIntoStateMap,
+      pluginOrdinalMap,
+      copyGroup,
+      priority,
+      referencePriority
+    );
+  }
+  return copyIntoStateMap;
+}
+
+interface CopyGroup {
+  [pluginName: string]: {
+    pluginName: string;
+    sets: {
+      [parentPath: string]: Array<string>;
+    };
+  };
+}
+
+const groupCopyKeyRefs = (
+  referenceKeys: Array<string>,
+  pluginOrdinalMap: {[pluginName: string]: number}
+): CopyGroup => {
+  const keyPaths = referenceKeys.map(decodeSchemaPath).sort((a, b) => {
+    if (a[0] == b[0]) {
+      if (a.length == b.length) {
+        return 0;
+      }
+      return a.length > b.length ? -1 : 1;
+    }
+
+    const aPluginName = /^\$\((.+)\)$/.exec(
+      a[0] as string
+    )?.[1];
+    const bPluginName = /^\$\((.+)\)$/.exec(
+      b[0] as string
+    )?.[1];
+    return pluginOrdinalMap[aPluginName] > pluginOrdinalMap[bPluginName] ? 1 : -1;
+  });
+
+  return keyPaths.reduce((acc, path) => {
+    const keyPath = writePathString(path);
+    const parentPath = writePathString(path.slice(0, -1));
+    const pluginName = /^\$\((.+)\)$/.exec(
+      parentPath.split(".")[0] as string
+    )?.[1];
+    const pluginSets = acc?.[pluginName] ?? {
+      pluginName,
+      sets: {},
+    };
+    const values = pluginSets?.sets?.[parentPath] ?? [];
+    values.push(keyPath);
+    pluginSets.sets[parentPath] = values;
+    return {
+      ...acc,
+      [pluginName]: pluginSets,
+    };
+  }, {});
+};
+
 export const reIndexSchemaArrays = (kvs: Array<DiffElement>): Array<string> => {
   const out = [];
   const listStack: Array<string> = [];
@@ -3027,6 +3289,42 @@ export const collectFileRefs = async (
     }
   }
   return out.sort();
+}
+
+const collectRefsInStateMap = (
+  typestruct: TypeStruct,
+  state: object
+): Array<string> => {
+  const refs = [];
+  for (const prop in typestruct) {
+    if (
+      (typestruct[prop]?.type == "set" || typestruct[prop]?.type == "array") &&
+      typeof typestruct[prop].values == "object"
+    ) {
+      const subRefs = (state[prop] as Array<object>)?.flatMap?.((element) => {
+        return collectRefsInStateMap(typestruct[prop].values as TypeStruct, element);
+      }) ?? [];
+      refs.push(...subRefs)
+      continue;
+    }
+
+    if (
+      !typestruct[prop]?.type &&
+      typeof typestruct[prop] == "object"
+    ) {
+      const subRefs = collectRefsInStateMap(typestruct[prop] as TypeStruct, state[prop]);
+      refs.push(...subRefs)
+      continue;
+    }
+
+    if (typestruct[prop]?.type == "ref") {
+      if (!!state[prop]) {
+        refs.push(state[prop]);
+      }
+      continue;
+    }
+  }
+  return refs;
 }
 
 export const validatePluginState = async (

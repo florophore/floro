@@ -565,3 +565,86 @@ const getLCSOffsetMergeSeqments = (
   }
   return out;
 };
+
+export const getCopySequence = (
+  copyFrom: Array<string>,
+  copyInto: Array<string>,
+  copySet: Set<string>
+): Array<string> => {
+  const lcs = getLCS(copyFrom, copyInto);
+  const intoBoundaryOffests = getLCSBoundaryOffsets(copyInto, lcs);
+  const intoMergeSegments = getLCSOffsetMergeSeqments(copyInto, intoBoundaryOffests)
+  const fromBoundaryOffests = getLCSBoundaryOffsets(copyFrom, lcs);
+  const fromMergeSegments = getLCSOffsetMergeSeqments(copyFrom, fromBoundaryOffests)
+  for (let i = 0; i < lcs.length + 1; ++i) {
+    const copyIntoSegment = intoMergeSegments[i];
+    const copyFromSegment = fromMergeSegments[i];
+    for (let j = 0; j < copyFromSegment.length; ++j) {
+      if (copySet.has(copyFromSegment[j])) {
+        copyIntoSegment.push(copyFromSegment[j]);
+      }
+    }
+  }
+  const out: Array<string> = [];
+  for (let i = 0; i < lcs.length + 1; ++i) {
+    const copyIntoSegment = intoMergeSegments[i];
+    if (i == lcs.length) {
+      out.push(...copyIntoSegment);
+    } else {
+      out.push(...copyIntoSegment);
+      out.push(lcs[i]);
+    }
+  }
+  return out;
+};
+
+// only use "yours" for determining reference copying
+// otherwise it should always be theirs
+export const copyKV = <T>(
+  copyFrom: Array<{ key: string; value: T }>,
+  copyInto: Array<{ key: string; value: T }>,
+  copyKeys: Array<string>,
+  priority: "yours" | "theirs" = "theirs"
+): Array<{ key: string; value: T }> => {
+  const copyFromKeys = copyFrom.map((v) => v.key);
+  const copyFromMap: { [key: string]: T } = copyFrom.reduce(
+    (acc, v) => ({ ...acc, [v.key]: v.value }),
+    {}
+  );
+  const copyIntoKeys = copyInto.map((v) => v.key);
+  const copyIntoMap: { [key: string]: T } = copyInto.reduce(
+    (acc, v) => ({ ...acc, [v.key]: v.value }),
+    {}
+  );
+  const copySet = new Set<string>(copyKeys);
+  const out: Array<{ key: string; value: T }> = [];
+  const copySequence = getCopySequence(copyFromKeys, copyIntoKeys, copySet);
+  for (let i = 0; i < copySequence.length; ++i) {
+    if (copySet.has(copySequence[i])) {
+      if (copyFromMap[copySequence[i]] && copyIntoMap[copySequence[i]]) {
+        if (priority == "theirs") {
+          out.push({
+            key: copySequence[i],
+            value: copyFromMap[copySequence[i]],
+          });
+        } else {
+          out.push({
+            key: copySequence[i],
+            value: copyIntoMap[copySequence[i]],
+          });
+        }
+      } else {
+        out.push({
+          key: copySequence[i],
+          value: copyFromMap[copySequence[i]],
+        });
+      }
+    } else {
+      out.push({
+        key: copySequence[i],
+        value: copyIntoMap[copySequence[i]],
+      });
+    }
+  }
+  return out;
+};

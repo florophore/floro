@@ -16,6 +16,8 @@ import {
   getInvalidRootStates,
   enforceBoundedSets,
   defaultVoidedState,
+  copyState,
+  CopyInstructions,
 } from "../src/plugins";
 import { makeSignedInUser, makeTestPlugin } from "./helpers/fsmocks";
 import { SIMPLE_PLUGIN_MANIFEST } from "./helpers/pluginmocks";
@@ -3380,6 +3382,196 @@ describe("plugins", () => {
         BEFORE_PLUGIN_MANIFEST.name
       );
       expect(bIsTopSubset).toEqual(false);
+    });
+  });
+
+  describe("copy", () => {
+
+    test("can copy over plugin state", async () => {
+      const PLUGIN_A_MANIFEST: Manifest = {
+        name: "A",
+        version: "0.0.0",
+        displayName: "A",
+        icon: "",
+        imports: {},
+        types: {},
+        store: {
+          aObjects: {
+            type: "set",
+            values: {
+              mainKey: {
+                isKey: true,
+                type: "string",
+              },
+              someValue: {
+                type: "string"
+              }
+            },
+          },
+        },
+      };
+
+
+      const PLUGIN_B_MANIFEST: Manifest = {
+        name: "B",
+        version: "0.0.0",
+        displayName: "B",
+        icon: "",
+        imports: {
+          "A": "0.0.0"
+        },
+        types: {},
+        managedCopy: true,
+        store: {
+          bObjects: {
+            type: "set",
+            values: {
+              id: {
+                isKey: true,
+                type: "string",
+              },
+              hardRef: {
+                type: "ref<$(A).aObjects.values>"
+              }
+            },
+          },
+        },
+      };
+
+
+      const schemaMapCopyFrom: { [key: string]: Manifest } = {
+        [PLUGIN_B_MANIFEST.name]: PLUGIN_B_MANIFEST as Manifest,
+        [PLUGIN_A_MANIFEST.name]: PLUGIN_A_MANIFEST as Manifest,
+      };
+
+      const schemaMapCopyInto: { [key: string]: Manifest } = {
+        [PLUGIN_B_MANIFEST.name]: PLUGIN_B_MANIFEST as Manifest,
+        [PLUGIN_A_MANIFEST.name]: PLUGIN_A_MANIFEST as Manifest,
+      };
+
+      const stateCopyFromMap =
+        {
+          [PLUGIN_A_MANIFEST.name]: {
+            aObjects: [
+              {
+                mainKey: "abc",
+                someValue: "version 1 a"
+              },
+              {
+                mainKey: "def",
+                someValue: "version 1 b"
+              },
+              {
+                mainKey: "ghi",
+                someValue: "version 1 c"
+              },
+            ],
+          },
+          [PLUGIN_B_MANIFEST.name]: {
+            bObjects: [
+              {
+                id: "123",
+                hardRef: "$(A).aObjects.mainKey<abc>",
+              },
+              {
+                id: "456",
+                hardRef: "$(A).aObjects.mainKey<abc>",
+              },
+              {
+                id: "789",
+                hardRef: "$(A).aObjects.mainKey<ghi>",
+              },
+            ],
+          },
+        };
+
+      const stateCopyIntoMap =
+        {
+          [PLUGIN_A_MANIFEST.name]: {
+            aObjects: [
+              {
+                mainKey: "abc",
+                someValue: "version 2 a"
+              },
+              {
+                mainKey: "def",
+                someValue: "version 2 b"
+              }
+            ],
+          },
+          [PLUGIN_B_MANIFEST.name]: {
+            bObjects: [
+              {
+                id: "123",
+                hardRef: "$(A).aObjects.mainKey<abc>",
+              },
+              {
+                id: "456",
+                hardRef: "$(A).aObjects.mainKey<def>",
+              },
+            ],
+          },
+        };
+
+      const copyInstructions: CopyInstructions = {
+        [PLUGIN_B_MANIFEST.name]: {
+          isManualCopy: true,
+          manualCopyList: [
+            "$(B).bObjects.id<123>",
+            "$(B).bObjects.id<789>",
+          ],
+          copyPriority: "theirs",
+          referencePriority: "theirs"
+        }
+      }
+      const result = await copyState(
+        {
+          ...datasource,
+          getPluginManifest: async (pluginName, pluginVersion) => {
+            // could be either
+            return schemaMapCopyFrom[pluginName];
+          },
+        },
+        schemaMapCopyFrom,
+        stateCopyFromMap,
+        schemaMapCopyInto,
+        stateCopyIntoMap,
+        copyInstructions
+      );
+      expect(result).toEqual({
+        A: {
+          aObjects: [
+            {
+              mainKey: "abc",
+              someValue: "version 1 a",
+            },
+            {
+              mainKey: "def",
+              someValue: "version 2 b",
+            },
+            {
+              mainKey: "ghi",
+              someValue: "version 1 c",
+            },
+          ],
+        },
+        B: {
+          bObjects: [
+            {
+              id: "123",
+              hardRef: "$(A).aObjects.mainKey<abc>",
+            },
+            {
+              id: "456",
+              hardRef: "$(A).aObjects.mainKey<def>",
+            },
+            {
+              id: "789",
+              hardRef: "$(A).aObjects.mainKey<ghi>",
+            },
+          ],
+        },
+      });
     });
   });
 });
