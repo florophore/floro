@@ -45,7 +45,7 @@ import {
   DiffElement,
   getDiffHash,
   splitTextForDiff,
-} from "./versioncontrol";
+} from "./sequenceoperations";
 import {
   PluginElement,
   pluginManifestsAreCompatibleForUpdate,
@@ -1177,7 +1177,7 @@ export const updatePlugins = async (
     currentRenderedState.binaries = uniqueStrings(binaries);
     const sanitizedRenderedState = await sanitizeApplicationKV(datasource, currentRenderedState);
     sanitizedRenderedState.store = {
-      ///...storeBefore, // this is so uninstalling doesn't delete the plugin state from the store until commit
+      //...storeBefore, // this is so uninstalling doesn't delete the plugin state from the store until commit
       ...sanitizedRenderedState.store
     };
     await datasource.saveRenderedState(repoId, sanitizedRenderedState);
@@ -3047,27 +3047,47 @@ export const updateCurrentWithSHA = async (
     );
     const unstagedState = await getUnstagedCommitState(datasource, repoId);
     const unrenderedState = await getCommitState(datasource, repoId, sha);
+    const isWIP =
+      unstagedState &&
+      (await getIsWip(
+        datasource,
+        repoId,
+        current,
+        unstagedState,
+        currentApplicationKVState
+      ));
 
-    const canMergeWIP = await canAutoMergeCommitStates(
-      datasource,
-      currentApplicationKVState,
-      unrenderedState,
-      unstagedState
-    );
-    if (!canMergeWIP) {
-      return null;
+    if (isWIP) {
+      const canMergeWIP = await canAutoMergeCommitStates(
+        datasource,
+        currentApplicationKVState,
+        unrenderedState,
+        unstagedState
+      );
+      if (!canMergeWIP) {
+        return null;
+      }
+
+      const nextShaWIPState = await getMergedCommitState(
+        datasource,
+        currentApplicationKVState,
+        unrenderedState,
+        unstagedState
+      );
+
+      const nextState = await datasource.saveCurrentRepoState(repoId, updated);
+      const renderedState = await convertCommitStateToRenderedState(
+        datasource,
+        nextShaWIPState
+      );
+      await datasource.saveRenderedState(repoId, renderedState);
+      return nextState;
     }
-    const nextShaWIPState = await getMergedCommitState(
-      datasource,
-      currentApplicationKVState,
-      unrenderedState,
-      unstagedState
-    );
 
     const nextState = await datasource.saveCurrentRepoState(repoId, updated);
     const renderedState = await convertCommitStateToRenderedState(
       datasource,
-      nextShaWIPState
+      unrenderedState
     );
     await datasource.saveRenderedState(repoId, renderedState);
     return nextState;

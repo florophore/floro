@@ -6,10 +6,6 @@ import {
   getCurrentCommitSha,
   getCommitState,
   convertCommitStateToRenderedState,
-  ApplicationKVState,
-  applyStateDiffToCommitState,
-  uniqueKV,
-  uniqueKVObj,
 } from "../src/repo";
 import {
   getApplicationState,
@@ -31,14 +27,12 @@ import {
   cherryPickRevision,
   createRepoBranch,
   updateCurrentCommitSHA,
-  convertRenderedCommitStateToKv
 } from "../src/repoapi";
 import {
   createBlankRepo,
   makeSignedInUser,
   makeTestPlugin,
 } from "./helpers/fsmocks";
-import { applyDiff } from "../src/versioncontrol";
 
 jest.mock("fs");
 jest.mock("fs/promises");

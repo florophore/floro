@@ -598,8 +598,6 @@ export const getCopySequence = (
   return out;
 };
 
-// only use "yours" for determining reference copying
-// otherwise it should always be theirs
 export const copyKV = <T>(
   copyFrom: Array<{ key: string; value: T }>,
   copyInto: Array<{ key: string; value: T }>,

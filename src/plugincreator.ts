@@ -21,7 +21,6 @@ import {
   buildPointerArgsMap,
   drawMakeQueryRef,
   drawSchemaRoot,
-  drawRefReturnTypes,
   drawGetPluginStore,
   verifyPluginDependencyCompatability,
   getUpstreamDependencyManifests,
@@ -48,7 +47,6 @@ import {
   drawBinaryUploadAndDownloadCode,
 } from "./plugins";
 import clc from "cli-color";
-import semver from "semver";
 import { exec } from "child_process";
 import axios from "axios";
 import FormData from "form-data";

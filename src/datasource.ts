@@ -25,7 +25,7 @@ import {
 import {
   validatePluginManifest
 } from "./plugins";
-import { CommitData } from "./versioncontrol";
+import { CommitData } from "./sequenceoperations";
 import axios from "axios";
 import { broadcastAllDevices } from "./multiplexer";
 import tar from "tar";
@@ -826,7 +826,7 @@ const checkBinary = async (binaryId: string): Promise<boolean> => {
   try {
     const binDir = path.join(vBinariesPath, binaryId.substring(0, 2));
     const binPath = path.join(binDir, binaryId);
-    return await existsAsync(binaryId);
+    return await existsAsync(binPath);
   } catch (e) {
     return null;
   }

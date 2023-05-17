@@ -1,5 +1,5 @@
 import axios from "axios";
-import { DiffElement, copyKV } from "./versioncontrol";
+import { DiffElement, copyKV } from "./sequenceoperations";
 import semver from "semver";
 import { DataSource } from "./datasource";
 
@@ -6173,6 +6173,14 @@ export const useUploadFile = () => {
     useState<null | { promise: Promise<FileRef> | null; abort: () => void }>(
       null
     );
+
+  const reset = useCallback(() => {
+    setStatus("none");
+    setProgress(0);
+    setFileRef(null);
+    setUploadObject(null)
+  }, []);
+
   const isLoading = useMemo(() => status == "in_progress", [status]);
 
   const onProgress = useCallback((loaded: number, total: number) => {
@@ -6241,6 +6249,7 @@ export const useUploadFile = () => {
   return {
     uploadBlob,
     uploadFile,
+    reset,
     status,
     progress,
     fileRef,
@@ -6303,8 +6312,8 @@ const download = (
 };
 
 export const useBinaryData = <K extends keyof BinaryReturn>(
-  fileRef?: FileRef | null,
-  responseType: K = "text" as K
+  fileRef: FileRef | null,
+  responseType: K
 ) => {
   const binRef = useBinaryRef(fileRef);
   const [data, setData] = useState<BinaryReturn[K] | null>(null);
@@ -6313,7 +6322,13 @@ export const useBinaryData = <K extends keyof BinaryReturn>(
   const isLoading = useMemo(() => status == "in_progress", [status]);
 
   useEffect(() => {
-    if (status == "in_progress" || data) {
+    if (binRef) {
+      setStatus("none");
+    }
+  }, [binRef]);
+
+  useEffect(() => {
+    if (status != "none") {
       return;
     }
     if (!binRef) {
@@ -6337,7 +6352,7 @@ export const useBinaryData = <K extends keyof BinaryReturn>(
       aborted = true;
       downloadObject?.abort();
     };
-  }, [status, data, binRef, responseType]);
+  }, [status, binRef, responseType]);
 
   return { isLoading, status, data };
 };

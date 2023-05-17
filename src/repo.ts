@@ -40,7 +40,7 @@ import {
   getMergeSequence,
   hashString,
   StringDiff,
-} from "./versioncontrol";
+} from "./sequenceoperations";
 import { SourceCommitNode } from "./sourcegraph";
 
 export interface Comparison {

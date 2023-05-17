@@ -72,7 +72,7 @@ import {
 } from "./repoapi";
 import { makeMemoizedDataSource, readDevPluginManifest, readDevPlugins, readDevPluginVersions } from "./datasource";
 import busboy from 'connect-busboy';
-import { hashBinary } from "./versioncontrol";
+import { hashBinary } from "./sequenceoperations";
 import { LicenseCodesList } from "./licensecodes";
 import {
   getDependenciesForManifest,

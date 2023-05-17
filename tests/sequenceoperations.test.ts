@@ -5,7 +5,7 @@ import {
   getMergeSequence,
   getCopySequence,
   copyKV,
-} from "../src/versioncontrol";
+} from "../src/sequenceoperations";
 
 describe("versioncontrol", () => {
   describe("getDiff", () => {
