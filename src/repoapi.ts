@@ -1177,7 +1177,7 @@ export const updatePlugins = async (
     currentRenderedState.binaries = uniqueStrings(binaries);
     const sanitizedRenderedState = await sanitizeApplicationKV(datasource, currentRenderedState);
     sanitizedRenderedState.store = {
-      //...storeBefore, // this is so uninstalling doesn't delete the plugin state from the store until commit
+      ...storeBefore, // this is so uninstalling doesn't delete the plugin state from the store until commit
       ...sanitizedRenderedState.store
     };
     await datasource.saveRenderedState(repoId, sanitizedRenderedState);
@@ -1218,14 +1218,14 @@ export const updatePluginState = async (
       return null;
     }
     const manifests = await getPluginManifests(datasource, current.plugins);
+    const schemaMap = manifestListToSchemaMap(manifests);
 
-    const manifest = manifests.find((p) => p.name == pluginName);
-    const schemaMap = await getSchemaMapForManifest(datasource, manifest);
     const renderedState = await datasource.readRenderedState(repoId);
     const stateStore = renderedState.store;
     stateStore[pluginName] = updatedState;
 
     await enforceBoundedSets(datasource, schemaMap, renderedState.store)
+
     renderedState.store = await cascadePluginState(
       datasource,
       schemaMap,
@@ -1236,8 +1236,6 @@ export const updatePluginState = async (
       schemaMap,
       renderedState.store
     );
-    const refs =
-      await collectFileRefs(datasource, schemaMap, renderedState.store)
     renderedState.binaries = uniqueStrings(
       await collectFileRefs(datasource, schemaMap, renderedState.store)
     );
@@ -1254,8 +1252,6 @@ export const updatePluginState = async (
       renderedState.store
     );
 
-    const refs2 =
-      await collectFileRefs(datasource, schemaMap, sanitiziedRenderedState.store)
     sanitiziedRenderedState.binaries = uniqueStrings(
       await collectFileRefs(datasource, schemaMap, renderedState.store)
     );
@@ -3703,6 +3699,7 @@ export const getIsWip = async (
       const diff = await getMergeConflictDiff(datasource, repoId);
       return !diffIsEmpty(diff);
   }
+
   const diff = getStateDiffFromCommitStates(unstagedState, applicationKVState);
   return !diffIsEmpty(diff);
 }
