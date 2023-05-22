@@ -1236,6 +1236,8 @@ export const updatePluginState = async (
       schemaMap,
       renderedState.store
     );
+    const refs =
+      await collectFileRefs(datasource, schemaMap, renderedState.store)
     renderedState.binaries = uniqueStrings(
       await collectFileRefs(datasource, schemaMap, renderedState.store)
     );
@@ -1251,6 +1253,9 @@ export const updatePluginState = async (
       schemaMap,
       renderedState.store
     );
+
+    const refs2 =
+      await collectFileRefs(datasource, schemaMap, sanitiziedRenderedState.store)
     sanitiziedRenderedState.binaries = uniqueStrings(
       await collectFileRefs(datasource, schemaMap, renderedState.store)
     );
@@ -2696,7 +2701,6 @@ export const getCanCherryPickRevision = async (
       repoId,
       beforeCherryPickedSha
     );
-
 
     const canCherryPick = await canAutoMergeCommitStates(
       datasource,

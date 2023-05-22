@@ -3189,7 +3189,7 @@ const mutateStateMapWithMissingFileRefs = async (
 
     if (typestruct[prop]?.type == "file") {
       const exists = !!state[prop] ? await datasource.checkBinary(state[prop]) : null;
-      if (!exists) {
+      if (!exists && !!state[prop]) {
         state[prop] = null;
       }
       continue;
