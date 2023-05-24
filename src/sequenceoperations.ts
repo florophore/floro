@@ -29,7 +29,9 @@ export interface CommitData {
   sha?: string;
   diff: StateDiff;
   userId: string;
+  username: string,
   authorUserId?: string;
+  authorUsername?: string;
   timestamp: string;
   parent: string | null;
   historicalParent: string | null;
@@ -102,16 +104,20 @@ export const getDiffHash = (commitData: CommitData): string => {
   }
 
   if (!commitData.parent && !commitData.historicalParent) {
-    const str = `userId:${commitData.userId}/authorUserId:${
+    const str = `userId:${commitData.userId}/userId:${commitData.username}/authorUserId:${
       commitData.authorUserId ?? commitData.userId
+    }/authorUsername:${
+      commitData.authorUsername ?? commitData.username
     }/timestamp:${commitData.timestamp}/message:${commitData.message}/idx:${
       commitData.idx
     }/mergeBase:${commitData?.mergeBase ?? "none"}/diff:${diffString}`;
     return Crypto.SHA256(str);
   }
   if (!commitData.parent) {
-    const str = `userId:${commitData.userId}/authorUserId:${
+    const str = `userId:${commitData.userId}/username:${commitData.username}/authorUserId:${
       commitData.authorUserId ?? commitData.userId
+    }/authorUsername:${
+      commitData.authorUsername ?? commitData.username
     }/timestamp:${commitData.timestamp}/message:${
       commitData.message
     }/historicalParent:${commitData.historicalParent}/idx:${
@@ -120,8 +126,10 @@ export const getDiffHash = (commitData: CommitData): string => {
     return Crypto.SHA256(str);
   }
   if (!commitData.historicalParent) {
-    const str = `userId:${commitData.userId}/authorUserId:${
+    const str = `userId:${commitData.userId}/username:${commitData.username}/authorUserId:${
       commitData.authorUserId ?? commitData.userId
+    }/authorUsername:${
+      commitData.authorUsername ?? commitData.username
     }/timestamp:${commitData.timestamp}/message:${commitData.message}/parent:${
       commitData.parent
     }/idx:${commitData.idx}/mergeBase:${
@@ -129,9 +137,11 @@ export const getDiffHash = (commitData: CommitData): string => {
     }/diff:${diffString}`;
     return Crypto.SHA256(str);
   }
-  const str = `userId:${commitData.userId}/authorUserId:${
-    commitData.authorUserId ?? commitData.userId
-  }/timestamp:${commitData.timestamp}/message:${commitData.message}/parent:${
+  const str = `userId:${commitData.userId}/username:${commitData.username}/authorUserId:${
+      commitData.authorUserId ?? commitData.userId
+    }/authorUsername:${
+      commitData.authorUsername ?? commitData.username
+    }/timestamp:${commitData.timestamp}/message:${commitData.message}/parent:${
     commitData.parent
   }/historicalParent:${commitData.historicalParent}/idx:${
     commitData.idx

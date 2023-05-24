@@ -116,6 +116,7 @@ export interface Branch {
   lastCommit: null | string;
   baseBranchId: null | string;
   createdBy: string;
+  createdByUsername: string;
   createdAt: string;
 }
 
@@ -411,6 +412,7 @@ export const buildCommitData = (
   idx: number,
   diff: StateDiff,
   userId: string,
+  username: string,
   timestamp: string,
   message: string
 ): CommitData => {
@@ -421,6 +423,7 @@ export const buildCommitData = (
     diff,
     timestamp,
     userId,
+    username,
     message,
   };
   const sha = getDiffHash(commitData);

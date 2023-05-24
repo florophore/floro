@@ -297,6 +297,7 @@ export const updateLocalBranch = async (
       id: branchId,
       lastCommit: branchHeadSha,
       createdBy: user.id,
+      createdByUsername: user.username,
       createdAt: new Date().toString(),
       name: branchName,
       baseBranchId,
@@ -441,6 +442,7 @@ export const createRepoBranch = async (
       id: branchId,
       lastCommit: branchHead,
       createdBy: user.id,
+      createdByUsername: user.username,
       createdAt: new Date().toString(),
       name: branchName,
       baseBranchId,
@@ -958,6 +960,7 @@ export const writeRepoCommit = async (
       diff,
       timestamp,
       userId: user.id,
+      username: user.username,
       message,
     };
     const sha = getDiffHash(commitData);
@@ -1428,6 +1431,7 @@ export const mergeCommit = async (
         message: `Merge [${fromSha}] into [${currentRepoState.commit}]`,
         mergeBase: mergeBaseCommit.sha,
         userId: user.id,
+        username: user.username,
         timestamp: new Date().toString(),
         diff: mergeDiff,
       };
@@ -1779,6 +1783,7 @@ export const resolveMerge = async (datasource: DataSource, repoId: string) => {
       message: `Merge [${fromSha}] into [${currentRepoState.commit}]`,
       mergeBase: mergeBaseCommit.sha,
       userId: user.id,
+      username: user.username,
       timestamp: new Date().toString(),
       diff: mergeDiff,
     };
@@ -2282,7 +2287,9 @@ export const revertCommit = async (
       idx: currentCommit.idx + 1,
       message: `Revert [${reversionSha}]: (message) ${commitToRevert.message}`,
       userId: user.id,
+      username: user.username,
       authorUserId: commitToRevert.authorUserId,
+      authorUsername: commitToRevert.authorUsername,
       timestamp: new Date().toString(),
       diff: reversionDiff,
     };
@@ -2526,7 +2533,9 @@ export const autofixReversion = async (
       idx: currentCommit.idx + 1,
       message: `Fix-Forward [${reversionSha}]: (message) ${commitToRevert.message}`,
       userId: user.id,
+      username: user.username,
       authorUserId: commitToRevert.authorUserId,
+      authorUsername: commitToRevert.authorUsername,
       timestamp: new Date().toString(),
       diff: autofixDiff,
     };
