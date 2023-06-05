@@ -39,11 +39,23 @@ import {
   RawStore,
   Comparison,
   uniqueKVObj,
+  getRemoteFetchInfo,
+  FetchInfo,
+  checkRemoteShaExistence,
+  checkRemoteBinaryExistence,
+  pushBinary,
+  pushCommitData,
+  pushBranch,
+  fetchRemoteKvState,
+  CommitExchange,
+  saveRemoteSha,
 } from "./repo";
 import {
   CommitData,
   DiffElement,
+  getDiff,
   getDiffHash,
+  getTextDiff,
   splitTextForDiff,
 } from "./sequenceoperations";
 import {
@@ -66,7 +78,12 @@ import {
 } from "./plugins";
 import { LicenseCodes } from "./licensecodes";
 import { DataSource } from "./datasource";
-import { SourceGraph, getPotentialBaseBranchesForSha, getTargetBranchId } from "./sourcegraph";
+import {
+  SourceGraph,
+  getPotentialBaseBranchesForSha,
+  getTargetBranchId,
+} from "./sourcegraph";
+import { isWithStatement } from "typescript";
 
 export const ILLEGAL_BRANCH_NAMES = new Set(["none"]);
 
@@ -89,7 +106,10 @@ export const writeRepoDescription = async (
   try {
     const renderedState = await datasource.readRenderedState(repoId);
     renderedState.description = splitTextForDiff(description);
-    const sanitizedRenderedState = await sanitizeApplicationKV(datasource, renderedState);
+    const sanitizedRenderedState = await sanitizeApplicationKV(
+      datasource,
+      renderedState
+    );
     await datasource.saveRenderedState(repoId, sanitizedRenderedState);
     return sanitizedRenderedState;
   } catch (e) {
@@ -127,7 +147,10 @@ export const writeRepoLicenses = async (
     }
     const renderedState = await datasource.readRenderedState(repoId);
     renderedState.licenses = licenses;
-    const sanitizedRenderedState = await sanitizeApplicationKV(datasource, renderedState);
+    const sanitizedRenderedState = await sanitizeApplicationKV(
+      datasource,
+      renderedState
+    );
     await datasource.saveRenderedState(repoId, sanitizedRenderedState);
     return sanitizedRenderedState;
   } catch (e) {
@@ -149,6 +172,44 @@ export const readRepoDescription = async (
   const renderedState = await datasource.readRenderedState(repoId);
   return renderedState.description;
 };
+
+export const getRepoCloneState = async (
+  datasource: DataSource,
+  repoId?: string
+) => {
+  if (!repoId) {
+    return {
+      state: 'none',
+      downloadedCommits: 0,
+      totalCommits: 1,
+    }
+  }
+  const exists = await existsAsync(path.join(vReposPath, repoId));
+  if (!exists) {
+    return {
+      state: 'none',
+      downloadedCommits: 0,
+      totalCommits: 1,
+    }
+  }
+  try {
+    const cloneFile = await datasource.readCloneFile(repoId);
+    if (!cloneFile) {
+      return {
+        state: 'none',
+        downloadedCommits: 0,
+        totalCommits: 1,
+      }
+    }
+    return {
+      state: cloneFile?.state,
+      downloadedCommits: cloneFile?.downloadedCommits,
+      totalCommits: cloneFile?.totalCommits,
+    }
+  } catch (e) {
+    return null;
+  }
+}
 
 export const getCurrentRepoBranch = async (
   datasource: DataSource,
@@ -298,7 +359,7 @@ export const updateLocalBranch = async (
       lastCommit: branchHeadSha,
       createdBy: user.id,
       createdByUsername: user.username,
-      createdAt: new Date().toString(),
+      createdAt: new Date().toISOString(),
       name: branchName,
       baseBranchId,
     };
@@ -443,7 +504,7 @@ export const createRepoBranch = async (
       lastCommit: branchHead,
       createdBy: user.id,
       createdByUsername: user.username,
-      createdAt: new Date().toString(),
+      createdAt: new Date().toISOString(),
       name: branchName,
       baseBranchId,
     };
@@ -479,7 +540,10 @@ export const createRepoBranch = async (
       );
     }
     if (newRenderedState) {
-      const sanitizedRenderedState = await sanitizeApplicationKV(datasource, newRenderedState);
+      const sanitizedRenderedState = await sanitizeApplicationKV(
+        datasource,
+        newRenderedState
+      );
       await datasource.saveRenderedState(repoId, sanitizedRenderedState);
     }
     return repoState;
@@ -550,7 +614,7 @@ export const switchRepoBranch = async (
     const branchMeta = branchMetaState.allBranches.find(
       (bm) => bm.branchId == branchId
     );
-    const userBranchMeta = branchMetaState.allBranches.find(
+    const userBranchMeta = branchMetaState.userBranches.find(
       (bm) => bm.branchId == branchId
     );
     if (branchMeta && !userBranchMeta) {
@@ -558,13 +622,36 @@ export const switchRepoBranch = async (
     }
 
     await datasource.saveBranchesMetaState(repoId, branchMetaState);
-    const sanitizedRenderedState = await sanitizeApplicationKV(datasource, newRenderedState);
+    const sanitizedRenderedState = await sanitizeApplicationKV(
+      datasource,
+      newRenderedState
+    );
     await datasource.saveRenderedState(repoId, sanitizedRenderedState);
     return await updateCurrentBranch(datasource, repoId, branchId);
   } catch (e) {
     return null;
   }
 };
+
+export const checkIsBranchProtected = async (
+  datasource: DataSource,
+  repoId: string,
+  branchId: string
+): Promise<boolean> => {
+
+  const remoteSettings = await datasource?.readRemoteSettings(repoId);
+  if (!remoteSettings) {
+    return false;
+  }
+  if (branchId == remoteSettings?.defaultBranchId) {
+    return true;
+  }
+  const branchRule = remoteSettings?.branchRules?.find(br => br.branchId == branchId);
+  if (!branchRule) {
+    return false;
+  }
+  return branchRule.directPushingDisabled;
+}
 
 export const deleteLocalBranch = async (
   datasource: DataSource,
@@ -605,6 +692,18 @@ export const deleteLocalBranch = async (
         if (!canSwitch) {
           return null;
         }
+      }
+    }
+    if (currentRepoState.branch) {
+      const currentBranch = await datasource.readBranch(repoId, branchId);
+      if (currentBranch?.baseBranchId && currentBranch?.baseBranchId == branchId) {
+        const remoteSettings = await datasource?.readRemoteSettings(repoId);
+        const updatedCurrentBranch = {
+          ...currentBranch,
+          baseBranchId: remoteSettings?.defaultBranchId ?? null
+        }
+
+        await datasource?.saveBranch(repoId, updatedCurrentBranch.id, updatedCurrentBranch);
       }
     }
 
@@ -666,7 +765,10 @@ export const deleteLocalBranch = async (
     }
 
     if (newRenderedState) {
-      const sanitizedRenderedState = await sanitizeApplicationKV(datasource, newRenderedState);
+      const sanitizedRenderedState = await sanitizeApplicationKV(
+        datasource,
+        newRenderedState
+      );
       await datasource.saveRenderedState(repoId, sanitizedRenderedState);
     }
     await datasource.deleteBranch(repoId, branchId);
@@ -952,7 +1054,7 @@ export const writeRepoCommit = async (
       ? await datasource.readCommit(repoId, currentSha)
       : null;
     const idx = parent ? parent.idx + 1 : 0;
-    const timestamp = new Date().toString();
+    const timestamp = new Date().toISOString();
     const commitData: CommitData = {
       parent: parent ? parent.sha : null,
       historicalParent: parent ? parent.sha : null,
@@ -1165,23 +1267,26 @@ export const updatePlugins = async (
     let store = currentRenderedState.store;
     for (let { key } of lexicallyOrderedPlugins) {
       if (!store[key]) {
-        const manifest = updatedManifests.find(m => m.name == key);
+        const manifest = updatedManifests.find((m) => m.name == key);
         store[key] = (manifest?.seed as object) ?? {};
       }
     }
     const schemaMap = manifestListToSchemaMap(updatedManifests);
-    await enforceBoundedSets(datasource, schemaMap, store)
+    await enforceBoundedSets(datasource, schemaMap, store);
     store = await cascadePluginState(datasource, schemaMap, store);
     store = await nullifyMissingFileRefs(datasource, schemaMap, store);
     const binaries = await collectFileRefs(datasource, schemaMap, store);
-    const storeBefore = {...currentRenderedState.store};
+    const storeBefore = { ...currentRenderedState.store };
     currentRenderedState.store = store;
     currentRenderedState.plugins = sortedUpdatedPlugins;
     currentRenderedState.binaries = uniqueStrings(binaries);
-    const sanitizedRenderedState = await sanitizeApplicationKV(datasource, currentRenderedState);
+    const sanitizedRenderedState = await sanitizeApplicationKV(
+      datasource,
+      currentRenderedState
+    );
     sanitizedRenderedState.store = {
       ...storeBefore, // this is so uninstalling doesn't delete the plugin state from the store until commit
-      ...sanitizedRenderedState.store
+      ...sanitizedRenderedState.store,
     };
     await datasource.saveRenderedState(repoId, sanitizedRenderedState);
     return currentRenderedState;
@@ -1227,7 +1332,7 @@ export const updatePluginState = async (
     const stateStore = renderedState.store;
     stateStore[pluginName] = updatedState;
 
-    await enforceBoundedSets(datasource, schemaMap, renderedState.store)
+    await enforceBoundedSets(datasource, schemaMap, renderedState.store);
 
     renderedState.store = await cascadePluginState(
       datasource,
@@ -1242,8 +1347,15 @@ export const updatePluginState = async (
     renderedState.binaries = uniqueStrings(
       await collectFileRefs(datasource, schemaMap, renderedState.store)
     );
-    const sanitiziedRenderedState = await sanitizeApplicationKV(datasource, renderedState);
-    await enforceBoundedSets(datasource, schemaMap, sanitiziedRenderedState.store)
+    const sanitiziedRenderedState = await sanitizeApplicationKV(
+      datasource,
+      renderedState
+    );
+    await enforceBoundedSets(
+      datasource,
+      schemaMap,
+      sanitiziedRenderedState.store
+    );
     sanitiziedRenderedState.store = await cascadePluginState(
       datasource,
       schemaMap,
@@ -1404,6 +1516,7 @@ export const mergeCommit = async (
         idx: mergeCommitData.idx + 1,
         historicalParent: originSha,
         authorUserId: baseCommitData.authorUserId ?? baseCommitData.userId,
+        authorUsername: baseCommitData.authorUsername ?? baseCommitData.username,
         userId: user.id,
         parent: fromSha,
       };
@@ -1417,6 +1530,9 @@ export const mergeCommit = async (
         commitToRebase.authorUserId =
           rebaseList[rebaseList.length - 1].authorUserId ??
           rebaseList[rebaseList.length - 1].userId;
+        commitToRebase.authorUserId =
+          rebaseList[rebaseList.length - 1].authorUsername ??
+          rebaseList[rebaseList.length - 1].username;
         commitToRebase.userId = user.id;
         commitToRebase.parent = rebaseList[rebaseList.length - 1].sha;
         commitToRebase.historicalParent = rebaseList[rebaseList.length - 1].sha;
@@ -1432,7 +1548,7 @@ export const mergeCommit = async (
         mergeBase: mergeBaseCommit.sha,
         userId: user.id,
         username: user.username,
-        timestamp: new Date().toString(),
+        timestamp: new Date().toISOString(),
         diff: mergeDiff,
       };
       mergeCommit.sha = getDiffHash(mergeCommit);
@@ -1494,7 +1610,11 @@ export const mergeCommit = async (
         );
         const currentAfterRestorationRendered =
           await convertCommitStateToRenderedState(datasource, mergeCurrState);
-        const sanitizedCurrentAfterRestorationRendered = await sanitizeApplicationKV(datasource, currentAfterRestorationRendered);
+        const sanitizedCurrentAfterRestorationRendered =
+          await sanitizeApplicationKV(
+            datasource,
+            currentAfterRestorationRendered
+          );
         const state = await datasource.saveRenderedState(
           repoId,
           sanitizedCurrentAfterRestorationRendered
@@ -1506,8 +1626,14 @@ export const mergeCommit = async (
           mergeState
         );
 
-        const sanitizedRenderedState = await sanitizeApplicationKV(datasource, renderedState);
-        const state = await datasource.saveRenderedState(repoId, sanitizedRenderedState);
+        const sanitizedRenderedState = await sanitizeApplicationKV(
+          datasource,
+          renderedState
+        );
+        const state = await datasource.saveRenderedState(
+          repoId,
+          sanitizedRenderedState
+        );
         return state;
       }
     } else {
@@ -1577,7 +1703,10 @@ export const mergeCommit = async (
         datasource,
         mergeState
       );
-      const sanitizedRenderedState = await sanitizeApplicationKV(datasource, renderedState);
+      const sanitizedRenderedState = await sanitizeApplicationKV(
+        datasource,
+        renderedState
+      );
       await datasource.saveRenderedState(repoId, sanitizedRenderedState);
       return renderedState;
     }
@@ -1650,7 +1779,10 @@ export const updateMergeDirection = async (
       datasource,
       mergeState
     );
-    const sanitizedRenderedState = await sanitizeApplicationKV(datasource, renderedState);
+    const sanitizedRenderedState = await sanitizeApplicationKV(
+      datasource,
+      renderedState
+    );
     await datasource.saveRenderedState(repoId, sanitizedRenderedState);
     return renderedState;
   } catch (e) {
@@ -1693,7 +1825,10 @@ export const abortMerge = async (datasource: DataSource, repoId: string) => {
       datasource,
       appState
     );
-    const sanitiziedRenderedState = await sanitizeApplicationKV(datasource, renderedState);
+    const sanitiziedRenderedState = await sanitizeApplicationKV(
+      datasource,
+      renderedState
+    );
     await datasource.saveRenderedState(repoId, sanitiziedRenderedState);
     return renderedState;
   } catch (e) {
@@ -1747,6 +1882,7 @@ export const resolveMerge = async (datasource: DataSource, repoId: string) => {
       idx: mergeCommitData.idx + 1,
       historicalParent: originSha,
       authorUserId: baseCommitData.authorUserId ?? baseCommitData.userId,
+      authorUsername: baseCommitData.authorUsername ?? baseCommitData.username,
       userId: user.id,
       parent: fromSha,
     };
@@ -1760,6 +1896,9 @@ export const resolveMerge = async (datasource: DataSource, repoId: string) => {
       commitToRebase.authorUserId =
         rebaseList[rebaseList.length - 1].authorUserId ??
         rebaseList[rebaseList.length - 1].userId;
+      commitToRebase.authorUserId =
+        rebaseList[rebaseList.length - 1].authorUsername ??
+        rebaseList[rebaseList.length - 1].username;
       commitToRebase.userId = user.id;
       commitToRebase.parent = rebaseList[rebaseList.length - 1].sha;
       commitToRebase.historicalParent = rebaseList[rebaseList.length - 1].sha;
@@ -1784,7 +1923,7 @@ export const resolveMerge = async (datasource: DataSource, repoId: string) => {
       mergeBase: mergeBaseCommit.sha,
       userId: user.id,
       username: user.username,
-      timestamp: new Date().toString(),
+      timestamp: new Date().toISOString(),
       diff: mergeDiff,
     };
     mergeCommit.sha = getDiffHash(mergeCommit);
@@ -1932,7 +2071,8 @@ export const stashChanges = async (datasource: DataSource, repoId: string) => {
     if (diffIsEmpty(currentDiff)) {
       return null;
     }
-    const stashList = await datasource.readStash(repoId, currentRepoState) ?? [];
+    const stashList =
+      (await datasource.readStash(repoId, currentRepoState)) ?? [];
     stashList?.push(currentKVState);
     await datasource.saveStash(repoId, currentRepoState, stashList);
     const renderedState = await convertCommitStateToRenderedState(
@@ -1940,7 +2080,10 @@ export const stashChanges = async (datasource: DataSource, repoId: string) => {
       unstagedState
     );
 
-    const sanitiziedRenderedState = await sanitizeApplicationKV(datasource, renderedState);
+    const sanitiziedRenderedState = await sanitizeApplicationKV(
+      datasource,
+      renderedState
+    );
     return await datasource.saveRenderedState(repoId, sanitiziedRenderedState);
   } catch (e) {
     return null;
@@ -2048,7 +2191,10 @@ export const popStashedChanges = async (
       appliedStash
     );
 
-    const sanitiziedRenderedState = await sanitizeApplicationKV(datasource, renderedState);
+    const sanitiziedRenderedState = await sanitizeApplicationKV(
+      datasource,
+      renderedState
+    );
     return await datasource.saveRenderedState(repoId, sanitiziedRenderedState);
   } catch (e) {
     return null;
@@ -2114,7 +2260,10 @@ export const applyStashedChange = async (
       appliedStash
     );
 
-    const sanitiziedRenderedState = await sanitizeApplicationKV(datasource, renderedState);
+    const sanitiziedRenderedState = await sanitizeApplicationKV(
+      datasource,
+      renderedState
+    );
     return await datasource.saveRenderedState(repoId, sanitiziedRenderedState);
   } catch (e) {
     return null;
@@ -2140,7 +2289,10 @@ export const discardCurrentChanges = async (
       unstagedState
     );
 
-    const sanitiziedRenderedState = await sanitizeApplicationKV(datasource, renderedState);
+    const sanitiziedRenderedState = await sanitizeApplicationKV(
+      datasource,
+      renderedState
+    );
     return await datasource.saveRenderedState(repoId, sanitiziedRenderedState);
   } catch (e) {
     return null;
@@ -2290,7 +2442,7 @@ export const revertCommit = async (
       username: user.username,
       authorUserId: commitToRevert.authorUserId,
       authorUsername: commitToRevert.authorUsername,
-      timestamp: new Date().toString(),
+      timestamp: new Date().toISOString(),
       diff: reversionDiff,
     };
     revertCommit.sha = getDiffHash(revertCommit);
@@ -2310,8 +2462,8 @@ export const revertCommit = async (
           if (branch.branchId == branchState.id) {
             return {
               ...branch,
-              lastLocalCommit: revertCommit.sha
-            }
+              lastLocalCommit: revertCommit.sha,
+            };
           }
           return branch;
         }
@@ -2322,8 +2474,8 @@ export const revertCommit = async (
           if (branch.branchId == branchState.id) {
             return {
               ...branch,
-              lastLocalCommit: revertCommit.sha
-            }
+              lastLocalCommit: revertCommit.sha,
+            };
           }
           return branch;
         }
@@ -2336,7 +2488,10 @@ export const revertCommit = async (
       reversionState
     );
 
-    const sanitiziedRenderedState = await sanitizeApplicationKV(datasource, renderedState);
+    const sanitiziedRenderedState = await sanitizeApplicationKV(
+      datasource,
+      renderedState
+    );
     const state = datasource.saveRenderedState(repoId, sanitiziedRenderedState);
     return state;
   } catch (e) {
@@ -2536,7 +2691,7 @@ export const autofixReversion = async (
       username: user.username,
       authorUserId: commitToRevert.authorUserId,
       authorUsername: commitToRevert.authorUsername,
-      timestamp: new Date().toString(),
+      timestamp: new Date().toISOString(),
       diff: autofixDiff,
     };
     autofixCommit.sha = getDiffHash(autofixCommit);
@@ -2576,8 +2731,14 @@ export const autofixReversion = async (
       autoFixState
     );
 
-    const sanitiziedRenderedState = await sanitizeApplicationKV(datasource, renderedState);
-    const state = await datasource.saveRenderedState(repoId, sanitiziedRenderedState);
+    const sanitiziedRenderedState = await sanitizeApplicationKV(
+      datasource,
+      renderedState
+    );
+    const state = await datasource.saveRenderedState(
+      repoId,
+      sanitiziedRenderedState
+    );
     return state;
   } catch (e) {
     return null;
@@ -2654,7 +2815,10 @@ export const cherryPickRevision = async (
       datasource,
       updatedState
     );
-    const sanitiziedRenderedState = await sanitizeApplicationKV(datasource, renderedState);
+    const sanitiziedRenderedState = await sanitizeApplicationKV(
+      datasource,
+      renderedState
+    );
     return await datasource.saveRenderedState(repoId, sanitiziedRenderedState);
   } catch (e) {
     return null;
@@ -2964,7 +3128,10 @@ export const rollbackCommit = async (
       datasource,
       parentKVState
     );
-    const sanitizedRenderedState = await sanitizeApplicationKV(datasource, renderedState);
+    const sanitizedRenderedState = await sanitizeApplicationKV(
+      datasource,
+      renderedState
+    );
     return await datasource.saveRenderedState(repoId, sanitizedRenderedState);
   } catch (e) {
     return null;
@@ -3131,6 +3298,7 @@ export const renderApiReponse = async (
   const mergeCommit = repoState.isInMergeConflict
     ? await datasource.readCommit(repoId, repoState?.merge.fromSha)
     : null;
+  const checkedOutBranchIds = await getCheckoutBranchIds(datasource, repoId);
 
   if (repoState.commandMode == "edit") {
     const unstagedState = await getUnstagedCommitState(datasource, repoId);
@@ -3159,6 +3327,7 @@ export const renderApiReponse = async (
       canPopStashedChanges,
       stashSize,
       mergeCommit,
+      checkedOutBranchIds
     };
   }
 
@@ -3183,6 +3352,7 @@ export const renderApiReponse = async (
       lastCommit,
       isWIP,
       mergeCommit,
+      checkedOutBranchIds
     };
   }
   if (repoState.commandMode == "compare") {
@@ -3231,6 +3401,7 @@ export const renderApiReponse = async (
         beforeManifests: manifests,
         beforeSchemaMap: schemaMap,
         mergeCommit,
+        checkedOutBranchIds
       };
     }
     return {
@@ -3249,6 +3420,7 @@ export const renderApiReponse = async (
       beforeSchemaMap,
       mergeCommit,
       conflictResolution,
+      checkedOutBranchIds
     };
   }
   return null;
@@ -3278,7 +3450,11 @@ export const renderSourceGraphInputs = async (
   }
 };
 
-export const changeCommandMode = async (datasource: DataSource, repoId: string, commandMode: "view"|"edit"|"compare") => {
+export const changeCommandMode = async (
+  datasource: DataSource,
+  repoId: string,
+  commandMode: "view" | "edit" | "compare"
+) => {
   try {
     const currentRepoState = await datasource.readCurrentRepoState(repoId);
     const nextRepoState: RepoState = {
@@ -3294,16 +3470,15 @@ export const changeCommandMode = async (datasource: DataSource, repoId: string, 
   } catch (e) {
     return null;
   }
-}
+};
 
 export const updateComparison = async (
   datasource: DataSource,
   repoId: string,
   against: "wip" | "branch" | "sha",
-  branchId?: string|null,
-  sha?: string|null,
+  branchId?: string | null,
+  sha?: string | null
 ) => {
-
   try {
     const currentRepoState = await datasource.readCurrentRepoState(repoId);
     if (!currentRepoState || currentRepoState?.commandMode != "compare") {
@@ -3317,12 +3492,17 @@ export const updateComparison = async (
           comparisonDirection: "forward",
           branch: null,
           commit: null,
-        }
+        },
       };
       return await datasource.saveCurrentRepoState(repoId, nextRepoState);
     }
     if (against == "branch") {
-      const comparisonDirection = await getComparisonDirection(datasource, repoId, against, branchId)
+      const comparisonDirection = await getComparisonDirection(
+        datasource,
+        repoId,
+        against,
+        branchId
+      );
       const nextRepoState: RepoState = {
         ...currentRepoState,
         comparison: {
@@ -3330,12 +3510,18 @@ export const updateComparison = async (
           comparisonDirection,
           branch: branchId ?? null,
           commit: null,
-        }
+        },
       };
       return await datasource.saveCurrentRepoState(repoId, nextRepoState);
     }
     if (against == "sha") {
-      const comparisonDirection = await getComparisonDirection(datasource, repoId, against, null, sha);
+      const comparisonDirection = await getComparisonDirection(
+        datasource,
+        repoId,
+        against,
+        null,
+        sha
+      );
       const nextRepoState: RepoState = {
         ...currentRepoState,
         comparison: {
@@ -3343,15 +3529,15 @@ export const updateComparison = async (
           comparisonDirection,
           branch: null,
           commit: sha ?? null,
-        }
+        },
       };
       return await datasource.saveCurrentRepoState(repoId, nextRepoState);
     }
     return null;
-  } catch(e) {
+  } catch (e) {
     return null;
   }
-}
+};
 
 export const getCanAutoMergeOnUnStagedState = async (
   datasource: DataSource,
@@ -3359,7 +3545,7 @@ export const getCanAutoMergeOnUnStagedState = async (
   mergeSha: string
 ) => {
   try {
-  const unstagedState = await getUnstagedCommitState(datasource, repoId);
+    const unstagedState = await getUnstagedCommitState(datasource, repoId);
     const repoState = await datasource.readCurrentRepoState(repoId);
     const mergeState = await getCommitState(datasource, repoId, mergeSha);
     const { originCommit } = await getMergeCommitStates(
@@ -3462,18 +3648,23 @@ export const convertRenderedStateStoreToKV = async (
   return out;
 };
 
-
 export const sanitizeApplicationKV = async (
   datasource: DataSource,
   renderedAppState: RenderedApplicationState
 ): Promise<RenderedApplicationState> => {
-  const unrendered = await convertRenderedCommitStateToKv(datasource, renderedAppState);
-  const rendered =  await convertCommitStateToRenderedState(datasource, unrendered);
+  const unrendered = await convertRenderedCommitStateToKv(
+    datasource,
+    renderedAppState
+  );
+  const rendered = await convertCommitStateToRenderedState(
+    datasource,
+    unrendered
+  );
   rendered.plugins = uniqueKVObj(rendered.plugins);
   rendered.licenses = uniqueKVObj(rendered.licenses);
   rendered.binaries = uniqueStrings(rendered.binaries);
   return rendered;
-}
+};
 
 export const getDefaultComparison = async (
   datasource: DataSource,
@@ -3520,7 +3711,12 @@ export const getDefaultComparison = async (
       const baseBranch = currentBranch?.baseBranchId
         ? await datasource?.readBranch(repoId, currentBranch?.baseBranchId)
         : null;
-      const comparisonDirection = await getComparisonDirection(datasource, repoId, "branch", baseBranch?.id);
+      const comparisonDirection = await getComparisonDirection(
+        datasource,
+        repoId,
+        "branch",
+        baseBranch?.id
+      );
       if (baseBranch?.id) {
         return {
           against: "branch",
@@ -3563,9 +3759,9 @@ export const getComparisonDirection = async (
   datasource: DataSource,
   repoId: string,
   against: "branch" | "sha",
-  branchId?: string|null,
-  sha?: string|null,
-): Promise<"forward"|"backward"> => {
+  branchId?: string | null,
+  sha?: string | null
+): Promise<"forward" | "backward"> => {
   if (against == "branch" && branchId) {
     const branch = await datasource.readBranch(repoId, branchId);
     if (branch?.lastCommit) {
@@ -3594,12 +3790,22 @@ export const getComparisonDirection = async (
     const commits = await datasource.readCommits(repoId);
     const branchesMetaState = await datasource.readBranchesMetaState(repoId);
     const branches = await datasource.readBranches(repoId);
-    const sourcegraph = new SourceGraph(commits, branchesMetaState, currentRepoState);
+    const sourcegraph = new SourceGraph(
+      commits,
+      branchesMetaState,
+      currentRepoState
+    );
     const pointerMap = sourcegraph?.getPointers();
     const currentPointer = pointerMap[currentRepoState?.commit];
     const comparisonPointer = pointerMap[commit?.sha];
-    const currentTopBranchId = getTargetBranchId(branches, currentPointer.branchIds);
-    const comparisonTopBranchId = getTargetBranchId(branches, comparisonPointer.branchIds);
+    const currentTopBranchId = getTargetBranchId(
+      branches,
+      currentPointer.branchIds
+    );
+    const comparisonTopBranchId = getTargetBranchId(
+      branches,
+      comparisonPointer.branchIds
+    );
     if (currentTopBranchId != comparisonTopBranchId) {
       return "forward";
     }
@@ -3627,11 +3833,17 @@ export const getComparisonDirection = async (
       return "forward";
     }
 
-    const currentOrigin = await datasource?.readCommit(repoId, currentOriginSha);
+    const currentOrigin = await datasource?.readCommit(
+      repoId,
+      currentOriginSha
+    );
     if (!currentOrigin) {
       return "forward";
     }
-    const comparisonOrigin = await datasource?.readCommit(repoId, comparisonOriginSha);
+    const comparisonOrigin = await datasource?.readCommit(
+      repoId,
+      comparisonOriginSha
+    );
     if (!comparisonOrigin) {
       return "forward";
     }
@@ -3640,7 +3852,7 @@ export const getComparisonDirection = async (
     }
   }
   return "forward";
-}
+};
 
 export const getMergeConflictDiff = async (
   datasource: DataSource,
@@ -3665,7 +3877,10 @@ export const getMergeConflictDiff = async (
       currentAppState
     );
     if (currentRepoState.merge.mergeState) {
-      return getStateDiffFromCommitStates(currentRepoState.merge.mergeState, currentKVState);
+      return getStateDiffFromCommitStates(
+        currentRepoState.merge.mergeState,
+        currentKVState
+      );
     }
 
     const fromCommitState = await getCommitState(
@@ -3696,19 +3911,729 @@ export const getMergeConflictDiff = async (
   }
 };
 
+const checkIfBranchHeadsDiverges = async (
+  datasource: DataSource,
+  repoId: string,
+  remoteCommits: Array<CommitExchange>,
+  remoteBranch?: Branch,
+  localBranch?: Branch
+) => {
+  if (!localBranch?.lastCommit || !remoteBranch?.lastCommit) {
+    return false;
+  }
+  if (localBranch?.lastCommit == remoteBranch?.lastCommit) {
+    return false;
+  }
+  const localCommits = await datasource.readCommits(repoId);
+  const localCommitMap = localCommits.reduce((acc, c) => {
+    return {
+      ...acc,
+      [c.sha]: c,
+    };
+  }, {});
+
+  const remoteCommitMap = remoteCommits.reduce((acc, c) => {
+    return {
+      ...acc,
+      [c.sha]: c,
+    };
+  }, {});
+  const remoteIdx =
+    remoteCommitMap[remoteBranch?.lastCommit]?.idx ??
+    localCommitMap[remoteBranch?.lastCommit]?.idx ??
+    -1;
+  const localIdx = localCommitMap[localBranch?.lastCommit]?.idx ?? -1;
+  let currentSha =
+    remoteIdx >= localIdx ? remoteBranch?.lastCommit : localBranch?.lastCommit;
+  const targetSha =
+    currentSha == remoteBranch?.lastCommit
+      ? localBranch?.lastCommit
+      : remoteBranch?.lastCommit;
+
+  let index = currentSha == remoteBranch?.lastCommit ? remoteIdx : localIdx;
+  const targetIdx =
+    currentSha == remoteBranch?.lastCommit ? localIdx : remoteIdx;
+  while (currentSha) {
+    if (currentSha == targetSha) {
+      return false;
+    }
+    if (index < targetIdx) {
+      return true;
+    }
+    currentSha =
+      remoteCommitMap[currentSha]?.parent ?? localCommitMap[currentSha]?.parent;
+    index--;
+  }
+  return true;
+};
+const getBranchHeadIndices = async (
+  datasource: DataSource,
+  repoId: string,
+  remoteCommits: Array<CommitExchange>,
+  remoteBranch?: Branch,
+  localBranch?: Branch
+) => {
+  if (!localBranch?.lastCommit && !remoteBranch?.lastCommit) {
+    return {
+      localIdx: -1,
+      remoteIdx: -1,
+    };
+  }
+  const localCommits = await datasource.readCommits(repoId);
+  const localCommitMap = localCommits.reduce((acc, c) => {
+    return {
+      ...acc,
+      [c.sha]: c,
+    };
+  }, {});
+
+  const remoteCommitMap = remoteCommits.reduce((acc, c) => {
+    return {
+      ...acc,
+      [c.sha]: c,
+    };
+  }, {});
+  const remoteIdx =
+    remoteCommitMap[remoteBranch?.lastCommit]?.idx ??
+    localCommitMap[remoteBranch?.lastCommit]?.idx ??
+    -1;
+  const localIdx = localCommitMap[localBranch?.lastCommit]?.idx ?? -1;
+  return {
+    remoteIdx,
+    localIdx,
+  };
+};
+
 export const getIsWip = async (
   datasource: DataSource,
   repoId: string,
   repoState: RepoState,
   unstagedState: ApplicationKVState,
-  applicationKVState: ApplicationKVState,
-
+  applicationKVState: ApplicationKVState
 ) => {
   if (repoState?.isInMergeConflict) {
-      const diff = await getMergeConflictDiff(datasource, repoId);
-      return !diffIsEmpty(diff);
+    const diff = await getMergeConflictDiff(datasource, repoId);
+    return !diffIsEmpty(diff);
   }
 
   const diff = getStateDiffFromCommitStates(unstagedState, applicationKVState);
   return !diffIsEmpty(diff);
+};
+
+export const getFetchInfo = async (
+  datasource: DataSource,
+  repoId: string
+): Promise<FetchInfo> => {
+  try {
+    const repoState = await datasource.readCurrentRepoState(repoId);
+    if (!repoState?.branch) {
+      return {
+        canPull: false,
+        canPushBranch: false,
+        userHasPermissionToPush: false,
+        branchPushDisabled: false,
+        hasConflict: false,
+        nothingToPush: true,
+        nothingToPull: true,
+        containsDevPlugins: false,
+        baseBranchRequiresPush: false,
+        accountInGoodStanding: true,
+        pullCanMergeWip: false,
+        fetchFailed: false,
+        commits: [],
+        branches: []
+      };
+    }
+
+    const fetchInfo = await getRemoteFetchInfo(datasource, repoId);
+    if (fetchInfo.status == "fail") {
+      return {
+        canPull: false,
+        canPushBranch: false,
+        userHasPermissionToPush: false,
+        branchPushDisabled: false,
+        hasConflict: false,
+        nothingToPush: true,
+        nothingToPull: true,
+        containsDevPlugins: false,
+        baseBranchRequiresPush: false,
+        accountInGoodStanding: true,
+        pullCanMergeWip: false,
+        fetchFailed: true,
+        commits: [],
+        branches: []
+      };
+    }
+
+    const branchRule = fetchInfo?.settings?.branchRules?.find(
+      (b) => b?.branchId == repoState?.branch
+    );
+    const userHasPermissionToPush =
+      fetchInfo?.settings?.canPushBranches &&
+      !branchRule?.directPushingDisabled;
+    const remoteBranch = fetchInfo?.branches?.find(
+      (b) => b.id == repoState.branch
+    );
+    const remoteMap = fetchInfo.commits?.reduce((acc, commit) => {
+      return {
+        ...acc,
+        [commit.sha]: commit,
+      };
+    }, {});
+
+    const localBranch = await datasource?.readBranch(repoId, repoState?.branch);
+    const remoteBaseBranch = localBranch.baseBranchId
+      ? fetchInfo.branches.find((v) => v.id == localBranch.baseBranchId)
+      : null;
+    const baseBranchRequiresPush = !!localBranch.baseBranchId && !remoteBaseBranch;
+    const branchHeadsDiverge = await checkIfBranchHeadsDiverges(
+      datasource,
+      repoId,
+      fetchInfo?.commits ?? [],
+      remoteBranch,
+      localBranch
+    );
+
+    const { localIdx, remoteIdx} = await getBranchHeadIndices(
+      datasource,
+      repoId,
+      fetchInfo?.commits ?? [],
+      remoteBranch,
+      localBranch
+    );
+    const nothingToPull = branchHeadsDiverge || localIdx >= remoteIdx;
+    const nothingToPush =
+      branchHeadsDiverge || localIdx <= remoteIdx;
+    const hasConflict = branchHeadsDiverge;
+
+    let currentSha = localBranch.lastCommit;
+    let containsDevPlugins = false;
+    while (currentSha) {
+      const commit = await datasource.readCommit(repoId, currentSha);
+      const hasDevPlugins = commitDataContainsDevPlugins(commit);
+      if (hasDevPlugins) {
+        containsDevPlugins = true;
+        break;
+      }
+      currentSha = commit.parent;
+    }
+
+    const hasLastRemoteCommit =
+      !!remoteBranch?.lastCommit &&
+      !!(await datasource.readCommit(repoId, remoteBranch.lastCommit));
+    if (hasLastRemoteCommit) {
+      let pullCanMergeWip = false;
+      const unstagedState = await getUnstagedCommitState(datasource, repoId);
+      const currentAppState = await getApplicationState(datasource, repoId);
+      const currentKVState = await convertRenderedCommitStateToKv(
+        datasource,
+        currentAppState
+      );
+      const isWIP = await getIsWip(
+        datasource,
+        repoId,
+        repoState,
+        unstagedState,
+        currentKVState
+      );
+      if (!hasConflict && isWIP) {
+        const remoteBranchHead = fetchInfo?.branchHeadLinks?.find(
+          (bh) => bh.id == repoState?.branch
+        );
+        const lastLocalCommitKv = await getCommitState(datasource, repoId, remoteBranchHead?.lastCommit);
+        const isMergeable = await canAutoMergeCommitStates(
+          datasource,
+          currentKVState,
+          lastLocalCommitKv,
+          unstagedState
+        );
+        pullCanMergeWip = isMergeable;
+        return {
+        canPull: !nothingToPull && (!hasConflict || !isWIP) && pullCanMergeWip,
+          canPushBranch:
+            !branchRule?.directPushingDisabled &&
+            userHasPermissionToPush &&
+            !containsDevPlugins &&
+            !nothingToPush &&
+            !baseBranchRequiresPush,
+          userHasPermissionToPush,
+          branchPushDisabled: branchRule?.directPushingDisabled ?? false,
+          hasConflict,
+          accountInGoodStanding: fetchInfo?.settings?.accountInGoodStanding,
+          remoteBranch,
+          nothingToPush,
+          nothingToPull,
+          baseBranchRequiresPush,
+          containsDevPlugins,
+          pullCanMergeWip,
+          fetchFailed: false,
+          commits: fetchInfo.commits,
+          branches: fetchInfo.branches
+        };
+      }
+    }
+    if (
+      !!remoteBranch &&
+      !!remoteBranch?.lastCommit &&
+      remoteMap[remoteBranch.lastCommit]
+    ) {
+      let pullCanMergeWip = false;
+      let firstRemoteCommit = remoteMap[remoteBranch.lastCommit];
+      while (
+        firstRemoteCommit?.parent &&
+        remoteMap[firstRemoteCommit?.parent]
+      ) {
+        firstRemoteCommit = remoteMap[firstRemoteCommit?.parent];
+      }
+      const unstagedState = await getUnstagedCommitState(datasource, repoId);
+      const currentAppState = await getApplicationState(datasource, repoId);
+      const currentKVState = await convertRenderedCommitStateToKv(
+        datasource,
+        currentAppState
+      );
+      const isWIP = await getIsWip(
+        datasource,
+        repoId,
+        repoState,
+        unstagedState,
+        currentKVState
+      );
+
+      if (!hasConflict && isWIP) {
+        const remoteBranchHead = fetchInfo?.branchHeadLinks?.find(
+          (bh) => bh.id == repoState?.branch
+        );
+        const localLastCommit = await datasource?.readCommit(
+          repoId,
+          remoteBranchHead?.lastCommit
+        );
+        if (localLastCommit) {
+          const kvState = await getCommitState(
+            datasource,
+            repoId,
+            localLastCommit.sha
+          );
+          if (kvState) {
+            const isMergeable = await canAutoMergeCommitStates(
+              datasource,
+              currentKVState,
+              kvState,
+              unstagedState
+            );
+            pullCanMergeWip = isMergeable;
+          }
+        } else if (remoteBranchHead?.kvLink) {
+          const kvState = await fetchRemoteKvState(remoteBranchHead.kvLink);
+          if (kvState) {
+            const isMergeable = await canAutoMergeCommitStates(
+              datasource,
+              currentKVState,
+              kvState,
+              unstagedState
+            );
+            pullCanMergeWip = isMergeable;
+          }
+        }
+      }
+
+      return {
+        canPull: !nothingToPull && (!hasConflict || !isWIP) && pullCanMergeWip,
+        canPushBranch:
+          !branchRule?.directPushingDisabled &&
+          userHasPermissionToPush &&
+          !containsDevPlugins &&
+          !nothingToPush &&
+          !baseBranchRequiresPush,
+        userHasPermissionToPush,
+        branchPushDisabled: branchRule?.directPushingDisabled ?? false,
+        hasConflict,
+        accountInGoodStanding: fetchInfo?.settings?.accountInGoodStanding,
+        remoteBranch,
+        nothingToPush,
+        nothingToPull,
+        baseBranchRequiresPush,
+        containsDevPlugins,
+        pullCanMergeWip,
+        fetchFailed: false,
+        commits: fetchInfo.commits,
+        branches: fetchInfo.branches
+      };
+    }
+    return {
+      canPull: !nothingToPull,
+      canPushBranch:
+        !branchRule?.directPushingDisabled &&
+        userHasPermissionToPush &&
+        !containsDevPlugins &&
+        !nothingToPush &&
+        !baseBranchRequiresPush,
+      userHasPermissionToPush,
+      branchPushDisabled: branchRule?.directPushingDisabled ?? false,
+      hasConflict,
+      accountInGoodStanding: fetchInfo?.settings?.accountInGoodStanding,
+      remoteBranch,
+      nothingToPush,
+      nothingToPull,
+      baseBranchRequiresPush,
+      containsDevPlugins,
+      pullCanMergeWip: true,
+      fetchFailed: false,
+      commits: fetchInfo.commits,
+      branches: fetchInfo.branches
+    };
+  } catch (e) {
+    return null;
+  }
+};
+
+export const pull = async (
+  datasource: DataSource,
+  repoId: string
+): Promise<boolean> => {
+  const repoState = await datasource.readCurrentRepoState(repoId);
+  const fetchInfo = await getFetchInfo(datasource, repoId);
+  if (!fetchInfo) {
+    return false;
+  }
+  if (!fetchInfo.canPull) {
+    return false;
+  }
+
+  const commitsToFetch = fetchInfo.commits.sort((a, b) => a.idx - b.idx);
+  for (const commit of commitsToFetch) {
+    const didPullCommmit = await saveRemoteSha(datasource, repoId, commit.sha);
+    if (!didPullCommmit) {
+      return false;
+    }
+  }
+  // now iterate over branches
+  const branchesMetaState = await datasource.readBranchesMetaState(repoId);
+  const userLocalBranchIds = new Set(
+    branchesMetaState?.userBranches.map((b) => b.branchId)
+  );
+
+  const remoteBranchIds = new Set(
+    fetchInfo?.branches.map((b) => b.id)
+  );
+
+  const remoteSettings = await datasource?.readRemoteSettings(repoId);
+  const protectedBranchIds = new Set(
+    remoteSettings?.branchRules?.map(b => b.branchId)
+  )
+  protectedBranchIds.add(remoteSettings?.defaultBranchId);
+
+  const localAllBranchIds = new Set(
+    branchesMetaState?.allBranches.map((b) => b.branchId)
+  );
+
+  // 1) remove no longer needed branches
+  // 2) add new branches/updates
+  let branchIdsToEvict = [];
+  branchesMetaState.allBranches = branchesMetaState.allBranches.filter(b => {
+    if (userLocalBranchIds.has(b.branchId) || remoteBranchIds.has(b.branchId) || protectedBranchIds.has(b.branchId)) {
+      return true;
+    }
+    branchIdsToEvict.push(b.branchId);
+    return false;
+  });
+  const branchesToAdd = [];
+  const branchesToUpdate = [];
+  for (const branch of fetchInfo?.branches) {
+    if (!localAllBranchIds.has(branch.id)) {
+      branchesToAdd.push(branch);
+      branchesMetaState.allBranches.push({
+        branchId: branch.id,
+        lastLocalCommit: branch.lastCommit,
+        lastRemoteCommit: branch.lastCommit,
+      });
+    } else {
+      if (branch?.id == repoState.branch) {
+
+        const branchMetaData = branchesMetaState.allBranches.find(b => b.branchId == branch.id);
+        branchMetaData.lastRemoteCommit = branch.lastCommit;
+        // update branch
+        // check if need to merge, then merge
+        const unstagedState = await getUnstagedCommitState(datasource, repoId);
+        const currentAppState = await getApplicationState(datasource, repoId);
+        const currentKVState = await convertRenderedCommitStateToKv(
+          datasource,
+          currentAppState
+        );
+        const isWIP = await getIsWip(
+          datasource,
+          repoId,
+          repoState,
+          unstagedState,
+          currentKVState
+        );
+        const currentRepoState = await datasource.readCurrentRepoState(repoId);
+        const pullKv = await getCommitState(datasource, repoId, branch.lastCommit);
+        if (isWIP) {
+
+          const canAutoMergePullState = await canAutoMergeCommitStates(
+            datasource,
+            currentKVState,
+            pullKv,
+            unstagedState
+          );
+          if (canAutoMergePullState) {
+            branchesToUpdate.push(branch);
+            branchMetaData.lastLocalCommit = branch.lastCommit;
+
+            const updated = {
+              ...currentRepoState,
+              commit: branch.lastCommit,
+              branch: branch.id,
+            };
+            branchMetaData.lastLocalCommit = branch.lastCommit;
+            const mergeState = await getMergedCommitState(
+              datasource,
+              currentKVState,
+              pullKv,
+              unstagedState
+            );
+            const renderedState = await convertCommitStateToRenderedState(
+              datasource,
+              mergeState
+            );
+            const sanitizedRenderedState = await sanitizeApplicationKV(
+              datasource,
+              renderedState
+            );
+            await datasource.saveRenderedState(repoId, sanitizedRenderedState);
+            await datasource.saveCurrentRepoState(repoId, updated);
+          } else {
+            return false;
+          }
+        } else {
+          branchesToUpdate.push(branch);
+          branchMetaData.lastLocalCommit = branch.lastCommit;
+          const updated = {
+            ...currentRepoState,
+            commit: branch.lastCommit,
+            branch: branch.id,
+          };
+          const renderedState = await convertCommitStateToRenderedState(
+            datasource,
+            pullKv
+          );
+          const sanitizedRenderedState = await sanitizeApplicationKV(
+            datasource,
+            renderedState
+          );
+          await datasource.saveRenderedState(repoId, sanitizedRenderedState);
+          await datasource.saveCurrentRepoState(repoId, updated);
+        }
+
+      } else {
+        const localBranch = await datasource.readBranch(repoId, branch.id);
+        let isBranchDescendent = false;
+        let currentSha = branch.lastCommit;
+        while(currentSha) {
+          if (currentSha == localBranch.lastCommit) {
+            isBranchDescendent = true;
+            break;
+          }
+        }
+        const branchMetaData = branchesMetaState.allBranches.find(b => b.branchId == branch.id);
+        if (isBranchDescendent) {
+          branchesToUpdate.push(branch);
+          branchMetaData.lastLocalCommit = branch.lastCommit;
+        }
+        branchMetaData.lastRemoteCommit = branch.lastCommit;
+      }
+    }
+  }
+  branchesMetaState.userBranches = branchesMetaState.userBranches.map(v => {
+    return branchesMetaState.allBranches.find(b => b.branchId == v.branchId);
+  });
+  for (const branchIdToEvict of branchIdsToEvict) {
+    await datasource.deleteBranch(repoId, branchIdToEvict);
+  }
+
+  for (const branch of branchesToAdd) {
+    await datasource.saveBranch(repoId, branch.id, branch);
+  }
+
+  for (const branch of branchesToUpdate) {
+    await datasource.saveBranch(repoId, branch.id, branch);
+  }
+
+  await datasource.saveBranchesMetaState(repoId, branchesMetaState);
+
+  return true;
 }
+
+export const push = async (
+  datasource: DataSource,
+  repoId: string
+): Promise<boolean> => {
+  const repoState = await datasource.readCurrentRepoState(repoId);
+  const pushInfo = await getFetchInfo(datasource, repoId);
+  if (!pushInfo) {
+    return null;
+  }
+  const canPush = pushInfo.canPushBranch && pushInfo.accountInGoodStanding;
+  if (!canPush) {
+    return null;
+  }
+
+  const localBranch = await datasource?.readBranch(repoId, repoState?.branch);
+  const pushList: Array<CommitData> = [];
+  let currentSha = localBranch.lastCommit;
+  while (
+    currentSha &&
+    (await checkRemoteShaExistence(repoId, currentSha)) === false
+  ) {
+    const commit = await datasource.readCommit(repoId, currentSha);
+    pushList.unshift(commit);
+    currentSha = commit.parent;
+  }
+  for (const commitData of pushList) {
+    const didPush = await pushCommit(datasource, repoId, commitData);
+    if (!didPush) {
+      return false;
+    }
+  }
+
+  const branch = await datasource.readBranch(repoId, repoState.branch);
+  const pushedBranchResult = await pushBranch(repoId, branch);
+  if (!pushedBranchResult) {
+    return false;
+  }
+  // update branch meta state here
+  const branchesMetaState = await datasource.readBranchesMetaState(repoId);
+  branchesMetaState.allBranches = branchesMetaState.allBranches.map(b => {
+    if (b.branchId == branch.id) {
+      return {
+        branchId: b.branchId,
+        lastLocalCommit: branch.lastCommit,
+        lastRemoteCommit: branch.lastCommit,
+      }
+    }
+    return b;
+  });
+
+  branchesMetaState.userBranches = branchesMetaState.userBranches.map(b => {
+    if (b.branchId == branch.id) {
+      return {
+        branchId: b.branchId,
+        lastLocalCommit: branch.lastCommit,
+        lastRemoteCommit: branch.lastCommit,
+      }
+    }
+    return b;
+  })
+
+  await datasource.saveBranchesMetaState(repoId, branchesMetaState);
+  return true;
+};
+
+const pushCommit = async (
+  datasource: DataSource,
+  repoId: string,
+  commitData: CommitData
+): Promise<boolean> => {
+  try {
+    const repoState = await datasource.readCurrentRepoState(repoId);
+    const commitExists = await checkRemoteShaExistence(repoId, commitData.sha);
+    if (commitExists === null) {
+      return false;
+    }
+    if (commitExists) {
+      return true;
+    }
+    const binariesInCommit = Object.values(commitData?.diff?.binaries?.add);
+    for (const binaryRef of binariesInCommit) {
+      const exists = await checkRemoteBinaryExistence(repoId, binaryRef);
+      if (exists === null) {
+        return false;
+      }
+      if (!exists) {
+        const binaryPushResult = await pushBinary(
+          repoId,
+          binaryRef,
+          repoState.branch
+        );
+        if (!binaryPushResult) {
+          return false;
+        }
+      }
+    }
+
+    const commitPushResult = await pushCommitData(
+      repoId,
+      commitData,
+      repoState.branch
+    );
+    if (!commitPushResult) {
+      return false;
+    }
+    return true;
+  } catch (e) {
+    return false;
+  }
+};
+
+export const commitDataContainsDevPlugins = (
+  commitData: CommitData
+): boolean => {
+  const addedPlugins = Object.values(commitData.diff.plugins.add);
+  for (let addedPlugin of addedPlugins) {
+    if (addedPlugin.value?.startsWith("dev")) {
+      return true;
+    }
+  }
+  return false;
+};
+
+export const branchesAreEquivalent = (branchA?: Branch, branchB?: Branch) => {
+  return (
+    branchA?.id == branchB?.id &&
+    branchA?.createdBy == branchB?.createdBy &&
+    branchA?.baseBranchId == branchB?.baseBranchId &&
+    branchA?.createdByUsername == branchB?.createdByUsername &&
+    branchA?.lastCommit == branchB?.lastCommit &&
+    branchA?.name == branchB?.name
+  );
+};
+
+export const getCheckoutBranchIds = async (
+  datasource: DataSource,
+  repoId: string
+): Promise<string[]> => {
+  try {
+    const branchMetaState = await datasource.readBranchesMetaState(repoId);
+    const branches = await datasource.readBranches(repoId);
+    const remoteSettings = await datasource.readRemoteSettings(repoId);
+    const branchRuleIds = new Set([
+      ...remoteSettings?.branchRules?.map(
+        (br) => br.branchId,
+        remoteSettings.defaultBranchId
+      ),
+    ]);
+    const userBranchIds = new Set(
+      branchMetaState.userBranches.map((b) => b.branchId)
+    );
+    const useBaseBranchIds = new Set(
+      branches
+        ?.filter?.((b) => userBranchIds.has(b.id))
+        ?.map?.((b) => b.baseBranchId)
+        ?.filter((v) => !!v) ?? []
+    );
+    return branches
+      ?.filter((b) => {
+        if (!b.id) {
+          return false;
+        }
+        return (
+          branchRuleIds.has(b.id) ||
+          userBranchIds.has(b.id) ||
+          useBaseBranchIds.has(b.id)
+        );
+      })
+      ?.map((v) => v.id);
+  } catch (e) {
+    return [];
+  }
+};

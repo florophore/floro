@@ -21,6 +21,7 @@ export class SourceGraph {
     private commits: Array<SourceCommitNode>;
     private branchesMetaState: BranchesMetaState;
     private repoState?: RepoState;
+    private leafShas?: Set<string>;
 
     constructor(
         commits: Array<SourceCommitNode>,
@@ -30,6 +31,7 @@ export class SourceGraph {
         this.commits = commits;
         this.branchesMetaState = branchesMetaState;
         this.repoState = repoState;
+        this.leafShas = new Set([]);
         this.buildGraph();
     }
 
@@ -54,6 +56,11 @@ export class SourceGraph {
                 if (!this.pointers[commit.sha]?.children?.includes(commit)) {
                     this.pointers?.[commit.parent]?.children?.push(commit);
                 }
+            }
+            if (commit.sha && this.pointers[commit.sha]?.children?.length == 0) {
+              if (!this.leafShas.has(commit.sha)) {
+                this.leafShas.add(commit.sha);
+              }
             }
         }
         for (const branch of this.branchesMetaState.allBranches) {
@@ -106,7 +113,6 @@ export class SourceGraph {
     public getPointers(): {[sha: string]: SourceCommitNode} {
         return this.pointers;
     }
-
 }
 
 export const getTopologicalBranchMap = (

@@ -18,6 +18,8 @@ import {
   ApplicationKVState,
   Branch,
   BranchesMetaState,
+  CloneFile,
+  RemoteSettings,
   RenderedApplicationState,
   RepoSetting,
   RepoState,
@@ -30,6 +32,7 @@ import axios from "axios";
 import { broadcastAllDevices } from "./multiplexer";
 import tar from "tar";
 import { SourceCommitNode } from "./sourcegraph";
+import { Stream } from "stream";
 
 axios.defaults.validateStatus = function () {
   return true;
@@ -70,6 +73,7 @@ export interface DataSource {
     sha: string,
     commitData: CommitData
   ) => Promise<CommitData>;
+  commitExists?: (repoId: string, sha: string) => Promise<boolean>;
   readCommit?: (repoId: string, sha: string) => Promise<CommitData>;
   readCheckpoint?(repoId: string, sha: string): Promise<ApplicationKVState>;
 
@@ -100,7 +104,7 @@ export interface DataSource {
 
   readStash?(
     repoId: string,
-    repoState: RepoState,
+    repoState: RepoState
   ): Promise<Array<ApplicationKVState>>;
 
   saveStash?(
@@ -117,6 +121,27 @@ export interface DataSource {
   ): Promise<BranchesMetaState>;
 
   checkBinary?(binaryId: string): Promise<boolean>;
+  writeBinary?(
+    binaryId: string,
+    content:
+      | string
+      | NodeJS.ArrayBufferView
+      | Iterable<string | NodeJS.ArrayBufferView>
+      | AsyncIterable<string | NodeJS.ArrayBufferView>
+      | Stream
+  ): Promise<boolean>;
+
+  checkCloneFile?: (repoId: string) => Promise<boolean>;
+  readCloneFile?: (repoId: string) => Promise<CloneFile>;
+  saveCloneFile?: (repoId: string, cloneFile: CloneFile) => Promise<CloneFile>;
+  deleteCloneFile?: (repoId: string) => Promise<boolean>;
+
+
+  saveRemoteSettings?: (repoId: string, settings: RemoteSettings) => Promise<RemoteSettings>;
+  readRemoteSettings?: (repoId: string) => Promise<RemoteSettings>;
+
+  saveLocalSettings?: (repoId: string, settings: RemoteSettings) => Promise<RemoteSettings>;
+  readLocalSettings?: (repoId: string) => Promise<RemoteSettings>;
 }
 
 export const readDevPlugins = async (): Promise<Array<string>> => {
@@ -570,6 +595,19 @@ const saveCommit = async (
   }
 };
 
+const commitExists = async (repoId: string, sha: string): Promise<boolean> => {
+  try {
+    if (!sha) {
+      return null;
+    }
+    const commitDir = getCommitDirPath(repoId, sha);
+    const commitPath = path.join(commitDir, `${sha.substring(2)}.json`);
+    return await existsAsync(commitPath);
+  } catch (e) {
+    return false;
+  }
+};
+
 const readCommit = async (repoId: string, sha: string): Promise<CommitData> => {
   try {
     if (!sha) {
@@ -674,7 +712,7 @@ const deleteHotCheckpoint = async (repoId: string): Promise<boolean> => {
     const hotPath = path.join(vReposPath, repoId, "hotcheckpoint.json");
     const hotPointExists = await existsAsync(hotPath);
     if (!hotPointExists) {
-      return false;
+      return true;
     }
     await fs.promises.rm(hotPath);
     return true;
@@ -832,6 +870,160 @@ const checkBinary = async (binaryId: string): Promise<boolean> => {
   }
 };
 
+const writeBinary = async (fileName: string, content: string | NodeJS.ArrayBufferView | Iterable<string | NodeJS.ArrayBufferView> | AsyncIterable<string | NodeJS.ArrayBufferView> | Stream): Promise<boolean> => {
+  try {
+    const binDir = path.join(vBinariesPath, fileName.substring(0, 2));
+    const binPath = path.join(binDir, fileName);
+    const existsBinSubDir = await existsAsync(binDir)
+    if (!existsBinSubDir) {
+      fs.promises.mkdir(binDir, {recursive: true});
+    }
+    await fs.promises.writeFile(
+      binPath,
+      content
+    );
+    return true;
+  } catch (e) {
+    return false;
+  }
+};
+
+
+const checkCloneFile = async (repoId: string): Promise<boolean> => {
+  try {
+    const cloneFilePath = path.join(vReposPath, repoId, "clonefile.json");
+    const cloneFileExists = await existsAsync(cloneFilePath);
+    return cloneFileExists;
+  } catch (e) {
+    return false;
+  }
+};
+
+const readCloneFile = async (repoId: string): Promise<CloneFile> => {
+  try {
+    const cloneFilePath = path.join(vReposPath, repoId, "clonefile.json");
+    const cloneFileExists = await existsAsync(cloneFilePath);
+    if (!cloneFileExists) {
+      return null;
+    }
+    const cloneFileString = await fs.promises.readFile(cloneFilePath, "utf8");
+    const cloneFile = JSON.parse(cloneFileString);
+    return cloneFile as CloneFile;
+  } catch (e) {
+    return null;
+  }
+};
+
+const saveCloneFile = async (repoId: string, cloneFile: CloneFile): Promise<CloneFile> => {
+  try {
+    const repoPath = path.join(vReposPath, repoId);
+    const repoPathExists = await existsAsync(repoPath);
+    if (!repoPathExists) {
+      await fs.promises.mkdir(repoPath, { recursive: true });
+      if (process.env.NODE_ENV != "test") {
+        await fs.promises.chmod(repoPath, 0o755);
+      }
+      const commitsPath = path.join(repoPath, "commits");
+      await fs.promises.mkdir(commitsPath, { recursive: true });
+      if (process.env.NODE_ENV != "test") {
+        await fs.promises.chmod(commitsPath, 0o755);
+      }
+      const branchesPath = path.join(repoPath, "branches");
+      await fs.promises.mkdir(branchesPath, { recursive: true });
+      if (process.env.NODE_ENV != "test") {
+        await fs.promises.chmod(branchesPath, 0o755);
+      }
+      const stashPath = path.join(repoPath, "stash");
+      await fs.promises.mkdir(stashPath, { recursive: true });
+      if (process.env.NODE_ENV != "test") {
+        await fs.promises.chmod(stashPath, 0o755);
+      }
+    }
+    const cloneFilePath = path.join(vReposPath, repoId, "clonefile.json");
+    await fs.promises.writeFile(
+      cloneFilePath,
+      JSON.stringify(cloneFile),
+      "utf8"
+    );
+    return cloneFile;
+  } catch (e) {
+    return null;
+  }
+
+};
+
+const deleteCloneFile = async (repoId: string):  Promise<boolean> => {
+  try {
+    const cloneFilePath = path.join(vReposPath, repoId, "clonefile.json");
+    const cloneFileExists = await existsAsync(cloneFilePath);
+    if (!cloneFileExists) {
+      return true;
+    }
+    await fs.promises.rm(cloneFilePath);
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+const readRemoteSettings = async (repoId: string): Promise<RemoteSettings> => {
+  try {
+    const repoPath = path.join(vReposPath, repoId);
+    const settingsPath = path.join(repoPath, `remote_settings.json`);
+    const current = await fs.promises.readFile(settingsPath);
+    return JSON.parse(current.toString());
+  } catch (e) {
+    return null;
+  }
+};
+
+const saveRemoteSettings = async (
+  repoId: string,
+  state: RemoteSettings
+): Promise<RemoteSettings> => {
+  try {
+    const repoPath = path.join(vReposPath, repoId);
+    const settingsPath = path.join(repoPath, `remote_settings.json`);
+    await fs.promises.writeFile(
+      settingsPath,
+      Buffer.from(JSON.stringify(state, null, 2)),
+      "utf-8"
+    );
+    return state;
+  } catch (e) {
+    return null;
+  }
+};
+
+const readLocalSettings = async (repoId: string): Promise<RemoteSettings> => {
+  try {
+    const repoPath = path.join(vReposPath, repoId);
+    const settingsPath = path.join(repoPath, `local_settings.json`);
+    const current = await fs.promises.readFile(settingsPath);
+    return JSON.parse(current.toString());
+  } catch (e) {
+    return null;
+  }
+};
+
+const saveLocalSettings = async (
+  repoId: string,
+  state: RemoteSettings
+): Promise<RemoteSettings> => {
+  try {
+    const repoPath = path.join(vReposPath, repoId);
+    const settingsPath = path.join(repoPath, `local_settings.json`);
+    await fs.promises.writeFile(
+      settingsPath,
+      Buffer.from(JSON.stringify(state, null, 2)),
+      "utf-8"
+    );
+    return state;
+  } catch (e) {
+    return null;
+  }
+};
+
 export const makeDataSource = (datasource: DataSource = {}) => {
   const defaultDataSource: DataSource = {
     readRepos,
@@ -860,6 +1052,15 @@ export const makeDataSource = (datasource: DataSource = {}) => {
     readBranchesMetaState,
     saveBranchesMetaState,
     checkBinary,
+    writeBinary,
+    checkCloneFile,
+    readCloneFile,
+    saveCloneFile,
+    deleteCloneFile,
+    readRemoteSettings,
+    saveRemoteSettings,
+    readLocalSettings,
+    saveLocalSettings,
   };
   return {
     ...defaultDataSource,

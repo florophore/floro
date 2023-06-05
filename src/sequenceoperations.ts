@@ -373,60 +373,60 @@ const sequencesAreEqual = (a: Array<string>, b: Array<string>) => {
 };
 
 /**
- * This is a kind of unintuitive function since it assumes
- * the inputs were derived in a certain way
- * Consider the following
  *
  * EXAMPLE 1 (NO CONFLICT)
  *
- * MAIN BRANCH:    (commit: A, value: [D, E, N, F]) ---> (commit: B, value: [D, T, E, N, P, F])
+ * MAIN BRANCH:    (commit: A, value: [A, B, C, D]) ---> (commit: B, value: [A, X, B, C, Y, D])
  *                                                 \
- * FEATURE BRANCH:                                   ---> (commit: X, value: [DF])
+ * FEATURE BRANCH:                 —-------------------------> (commit: C, value: [A, D])
  *
- * TO MERGE B into X, we have to find the greatest longest common subsequence (GLCS) amongst all 3 commits
+ * TO MERGE B into C, we have to find the greatest longest common subsequence (GLCS) amongst all 3 commits
  * which is
- * GLCS: [D,F]
+ * GLCS: [A,D]
  *
- * SINCE the GLCS is [D, F], we know the merge segments for each commit are
- * A: {[], [E, N], []}
- * B: {[], [T, E, N, P], []}
+ * SINCE the GLCS is [A, D], we know the merge segments for each commit are
+ * A: {[], [B, C], []}
+ * B: {[], [X, B, C, Y], []}
  * C: {[], [], []}
  *
- * Any sequences that are the same between the origin and sequence, must have been removed by the counter
- * commit of the merge. Therefore we erase the sequence if the sequences are equal.
+ * Any sequences that are the same between the origin and sequence, must have been removed by the counter commit of the merge. Therefore we erase the sequence if the sequences are equal.
  *
- * B IS reconciled to the following: {[], [T, P], []}
+ * B IS reconciled to the following: {[], [X, Y], []}
  * C IS reconciled to the following: {[], [], []}
  *
- * SINCE [E, N] are present in commit B but not commit C, we know C had to have deleted E and N,
- * therefore we can safely splice out [E, N] from [T, E, N, P] in the merge by taking the LCS
+ * SINCE [B, C] are present in commit B but not commit C, we know C had to have deleted B and C,
+ * therefore we can safely splice out [B, C] from [X, B, C, Y] in the merge by taking the LCS
  * of the origin against the respective sequence and finding the offsets. we then ignore the offsets
  * which effectively removes the values deleted by the merge-INTO (C) commit.
+ *
+ * merging by prioritzing commit B or commit C, always results in the sequence [A, X, Y, D].
+ * Because the merging is communative we know no conflict exists between the sequences.
  *
  * To further clarify consider a case with merge conflicts
  * ______________________________________________________________________________________________________
  *
  *  EXAMPLE 2 (CONFLICT)
  *
- * MAIN BRANCH:    (commit: A, value: [D, E, N, F]) ---> (commit: B, value: [D, T, E, N, P, F])
+ * MAIN BRANCH:    (commit: A, value: [A, B, C, D]) ---> (commit: B, value: [A, X, B, C, Y, D])
  *                                                 \
- * FEATURE BRANCH:                                   ---> (commit: X, value: [DXF])
+ * FEATURE BRANCH:                 —-------------------------> (commit: C, value: [A, Z, D])
  *
- * TO MERGE B into X, we have to find the greatest longest common subsequence (GLCS) amonst all 3 commits
+ * TO MERGE B into C, we have to find the greatest longest common subsequence (GLCS) amonst all 3 commits
  * which is
- * GLCS: [D,F]
+ * GLCS: [A,D]
  *
- * SINCE the GLCS is [D, F], we know the merge segments for each commit are
- * A: {[], [E, N], []}
- * B: {[], [T, E, N, P], []}
- * C: {[], [X], []}
+ * SINCE the GLCS is [A, D], we know the merge segments for each commit are
+ * A: {[], [B, C], []}
+ * B: {[], [X, B, C, Y], []}
+ * C: {[], [Z], []}
  *
- * B IS reconciled to the following: {[], [T, P], []} (when yours, not theirs, otherwise {[], [P, T], []})
- * C IS reconciled to the following: {[], [X], []}
+ * B IS reconciled to the following: {[], [X, Y], []}
+ * C IS reconciled to the following: {[], [Z], []}
  *
  * Because B and C both have uncommon values at IDX (1), this results in merge coflict where both values are concatenated
- * to [T, P, X], if yours or [X, T, P] if theirs (i.e. the merge sequences do not commute!)
+ * to [X, Y, Z], if yours or [Z, X, Y] if theirs (i.e. the merge sequences do not commute, when changing the merge direction!)
  */
+
 
 const getReconciledSequence = (
   originSequences: Array<Array<string>>,

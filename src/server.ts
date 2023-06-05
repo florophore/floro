@@ -1,10 +1,10 @@
 import express from "express";
 import path from "path";
-import fs from 'fs';
+import fs from "fs";
 import http from "http";
 import cors from "cors";
-import mime from 'mime-types';
-import { isBinaryFile } from "arraybuffer-isbinary"
+import mime from "mime-types";
+import { isBinaryFile } from "arraybuffer-isbinary";
 import {
   existsAsync,
   getRemoteHostSync,
@@ -29,9 +29,7 @@ import { startSessionJob } from "./cron";
 import macaddres from "macaddress";
 import sha256 from "crypto-js/sha256";
 import HexEncode from "crypto-js/enc-hex";
-import {
-  cloneRepo,
-} from "./repo";
+import { cloneRepo } from "./repo";
 import {
   convertRenderedCommitStateToKv,
   getApplicationState,
@@ -69,9 +67,19 @@ import {
   amendRevision,
   autofixReversion,
   changeCommandMode,
+  getFetchInfo,
+  push,
+  pull,
+  getRepoCloneState,
+  checkIsBranchProtected,
 } from "./repoapi";
-import { makeMemoizedDataSource, readDevPluginManifest, readDevPlugins, readDevPluginVersions } from "./datasource";
-import busboy from 'connect-busboy';
+import {
+  makeMemoizedDataSource,
+  readDevPluginManifest,
+  readDevPlugins,
+  readDevPluginVersions,
+} from "./datasource";
+import busboy from "connect-busboy";
 import { hashBinary } from "./sequenceoperations";
 import { LicenseCodesList } from "./licensecodes";
 import {
@@ -117,7 +125,7 @@ const remoteHostCors = {
 
 const localPlugin = {
   origin: safeOriginRegex,
-}
+};
 
 const io = new Server(server, {
   cors: {
@@ -155,7 +163,7 @@ io.on("connection", (socket) => {
 
 app.use(busboy());
 
-app.use(express.json({limit: '1gb'}));
+app.use(express.json({ limit: "1gb" }));
 
 app.use(function (_req, res, next) {
   res.header("Access-Control-Allow-Origin", remoteHost);
@@ -204,6 +212,111 @@ app.get(
 );
 
 app.get(
+  "/repo/:repoId/fetchinfo",
+  cors(corsOptionsDelegate),
+  async (req, res): Promise<void> => {
+    const repoId = req.params["repoId"];
+    if (!repoId) {
+      res.sendStatus(404);
+      return;
+    }
+    const exists = await datasource.repoExists(repoId);
+    if (!exists) {
+      res.sendStatus(404);
+      return;
+    }
+    try {
+      const fetchInfo = await getFetchInfo(datasource, repoId);
+      if (!fetchInfo) {
+        res.send({
+          canPull: false,
+          canPushBranch: false,
+          userHasPermissionToPush: false,
+          branchPushDisabled: false,
+          hasConflict: false,
+          nothingToPush: true,
+          nothingToPull: true,
+          containsDevPlugins: false,
+          baseBranchRequiresPush: false,
+          accountInGoodStanding: true,
+          pullCanMergeWip: false,
+          fetchFailed: true,
+          commits: [],
+          branches: [],
+        });
+        return;
+      }
+      res.send(fetchInfo);
+    } catch (e) {
+      res.sendStatus(400);
+    }
+  }
+);
+
+app.post(
+  "/repo/:repoId/push",
+  cors(corsOptionsDelegate),
+  async (req, res): Promise<void> => {
+    const repoId = req.params["repoId"];
+    if (!repoId) {
+      res.sendStatus(404);
+      return;
+    }
+    const exists = await datasource.repoExists(repoId);
+    if (!exists) {
+      res.sendStatus(404);
+      return;
+    }
+    try {
+      const pushResponse = await push(datasource, repoId);
+      if (!pushResponse) {
+        res.sendStatus(400);
+        return;
+      }
+      const fetchInfo = await getFetchInfo(datasource, repoId);
+      if (!fetchInfo) {
+        res.sendStatus(400);
+        return;
+      }
+      res.send(fetchInfo);
+    } catch (e) {
+      res.sendStatus(400);
+    }
+  }
+)
+app.post(
+  "/repo/:repoId/pull",
+  cors(corsOptionsDelegate),
+  async (req, res): Promise<void> => {
+    const repoId = req.params["repoId"];
+    if (!repoId) {
+      res.sendStatus(404);
+      return;
+    }
+    const exists = await datasource.repoExists(repoId);
+    if (!exists) {
+      res.sendStatus(404);
+      return;
+    }
+    try {
+      const pullResponse = await pull(datasource, repoId);
+      if (!pullResponse) {
+        res.sendStatus(400);
+        return;
+      }
+      const fetchInfo = await getFetchInfo(datasource, repoId);
+      if (!fetchInfo) {
+        res.sendStatus(400);
+        return;
+      }
+      res.send(fetchInfo);
+    } catch (e) {
+      res.sendStatus(400);
+    }
+  }
+)
+
+app.get(
   "/repo/:repoId/current",
   cors(corsOptionsDelegate),
   async (req, res): Promise<void> => {
@@ -241,13 +354,16 @@ app.get(
       return;
     }
     try {
-      const sourceGraphResponse = await renderSourceGraphInputs(repoId, datasource);
+      const sourceGraphResponse = await renderSourceGraphInputs(
+        repoId,
+        datasource
+      );
       if (!sourceGraphResponse) {
         res.sendStatus(404);
         return;
       }
       res.send(sourceGraphResponse);
-    } catch(e) {
+    } catch (e) {
       res.sendStatus(400);
     }
   }
@@ -258,7 +374,11 @@ app.post(
   cors(corsOptionsDelegate),
   async (req, res): Promise<void> => {
     const repoId = req.params["repoId"];
-    const repoState = await changeCommandMode(datasource, repoId, req.body.commandMode);
+    const repoState = await changeCommandMode(
+      datasource,
+      repoId,
+      req.body.commandMode
+    );
     const renderedState = await getApplicationState(datasource, repoId);
     const applicationState = await convertRenderedCommitStateToKv(
       datasource,
@@ -284,9 +404,9 @@ app.post(
   cors(corsOptionsDelegate),
   async (req, res): Promise<void> => {
     const repoId = req.params["repoId"];
-    const against = req.body["against"] as "wip"|"branch"|"sha";
-    const branch = req.body["branch"] as string ?? null;
-    const sha = req.body["sha"] as string ?? null;
+    const against = req.body["against"] as "wip" | "branch" | "sha";
+    const branch = (req.body["branch"] as string) ?? null;
+    const sha = (req.body["sha"] as string) ?? null;
     if (!repoId) {
       res.sendStatus(404);
       return;
@@ -327,7 +447,6 @@ app.post(
   }
 );
 
-
 app.post(
   "/repo/:repoId/commit",
   cors(corsOptionsDelegate),
@@ -345,11 +464,7 @@ app.post(
       return;
     }
 
-    const commitData = await writeRepoCommit(
-      datasource,
-      repoId,
-      message
-    );
+    const commitData = await writeRepoCommit(datasource, repoId, message);
     if (!commitData) {
       res.sendStatus(400);
       return;
@@ -391,7 +506,6 @@ app.get(
   }
 );
 
-
 app.get(
   "/repo/:repoId/sha/:sha/canswitchwip",
   cors(corsOptionsDelegate),
@@ -403,17 +517,13 @@ app.get(
     }
     const sha = req.params["sha"];
     try {
-      const canSwitch = await canSwitchShasWithWIP(
-        datasource,
-        repoId,
-        sha
-      );
+      const canSwitch = await canSwitchShasWithWIP(datasource, repoId, sha);
       if (canSwitch == null) {
         res.sendStatus(400);
         return;
       }
       res.send({ canSwitch });
-    } catch(e) {
+    } catch (e) {
       res.sendStatus(400);
       return;
     }
@@ -431,22 +541,23 @@ app.get(
     }
     const sha = req.params["sha"];
     try {
-      const [
-        canAutoMergeOnTopOfCurrentState,
-        canAutoMergeOnUnStagedState,
-      ] = await Promise.all([
-        getCanAutoMergeOnTopCurrentState(datasource, repoId, sha),
-        getCanAutoMergeOnUnStagedState(datasource, repoId, sha),
-      ]);
-      if (canAutoMergeOnTopOfCurrentState == null || canAutoMergeOnUnStagedState == null) {
+      const [canAutoMergeOnTopOfCurrentState, canAutoMergeOnUnStagedState] =
+        await Promise.all([
+          getCanAutoMergeOnTopCurrentState(datasource, repoId, sha),
+          getCanAutoMergeOnUnStagedState(datasource, repoId, sha),
+        ]);
+      if (
+        canAutoMergeOnTopOfCurrentState == null ||
+        canAutoMergeOnUnStagedState == null
+      ) {
         res.sendStatus(400);
         return;
       }
       res.send({
         canAutoMergeOnTopOfCurrentState,
         canAutoMergeOnUnStagedState,
-       });
-    } catch(e) {
+      });
+    } catch (e) {
       res.sendStatus(400);
       return;
     }
@@ -464,15 +575,19 @@ app.get(
     }
     const sha = req.params["sha"];
     try {
-      const canCherryPick = await getCanCherryPickRevision(datasource, repoId, sha);
+      const canCherryPick = await getCanCherryPickRevision(
+        datasource,
+        repoId,
+        sha
+      );
       if (canCherryPick == null) {
         res.sendStatus(400);
         return;
       }
       res.send({
         canCherryPick,
-       });
-    } catch(e) {
+      });
+    } catch (e) {
       res.sendStatus(400);
       return;
     }
@@ -497,8 +612,8 @@ app.get(
       }
       res.send({
         canAmend,
-       });
-    } catch(e) {
+      });
+    } catch (e) {
       res.sendStatus(400);
       return;
     }
@@ -523,8 +638,8 @@ app.get(
       }
       res.send({
         canAutoFix,
-       });
-    } catch(e) {
+      });
+    } catch (e) {
       res.sendStatus(400);
       return;
     }
@@ -560,12 +675,15 @@ app.post(
         repoState
       );
 
-      const sourceGraphResponse = await renderSourceGraphInputs(repoId, datasource);
+      const sourceGraphResponse = await renderSourceGraphInputs(
+        repoId,
+        datasource
+      );
       res.send({
         apiResponse,
-        sourceGraphResponse
+        sourceGraphResponse,
       });
-    } catch(e) {
+    } catch (e) {
       res.sendStatus(400);
       return null;
     }
@@ -600,7 +718,7 @@ app.post(
         repoState
       );
       res.send(apiResponse);
-    } catch(e) {
+    } catch (e) {
       res.sendStatus(400);
       return null;
     }
@@ -634,12 +752,15 @@ app.post(
         applicationState,
         repoState
       );
-      const sourceGraphResponse = await renderSourceGraphInputs(repoId, datasource);
+      const sourceGraphResponse = await renderSourceGraphInputs(
+        repoId,
+        datasource
+      );
       res.send({
         apiResponse,
-        sourceGraphResponse
+        sourceGraphResponse,
       });
-    } catch(e) {
+    } catch (e) {
       res.sendStatus(400);
       return null;
     }
@@ -652,16 +773,27 @@ app.post(
   async (req, res): Promise<void> => {
     const repoId = req.params["repoId"];
     const direction = req.params["direction"];
-    if (!repoId || !direction || (direction != "yours" && direction != "theirs")) {
+    if (
+      !repoId ||
+      !direction ||
+      (direction != "yours" && direction != "theirs")
+    ) {
       res.sendStatus(404);
       return;
     }
     try {
       const initRepoState = await datasource.readCurrentRepoState(repoId);
-      if (!initRepoState.isInMergeConflict || initRepoState.merge.direction == direction) {
+      if (
+        !initRepoState.isInMergeConflict ||
+        initRepoState.merge.direction == direction
+      ) {
         return null;
       }
-      const renderedState = await updateMergeDirection(datasource, repoId, direction);
+      const renderedState = await updateMergeDirection(
+        datasource,
+        repoId,
+        direction
+      );
       const repoState = await datasource.readCurrentRepoState(repoId);
       if (!renderedState) {
         res.sendStatus(400);
@@ -680,7 +812,7 @@ app.post(
       );
 
       res.send(apiResponse);
-    } catch(e) {
+    } catch (e) {
       res.sendStatus(400);
       return null;
     }
@@ -698,13 +830,12 @@ app.post(
       return;
     }
     try {
-
       const renderedState = await cherryPickRevision(datasource, repoId, sha);
       if (!renderedState) {
         res.sendStatus(400);
         return;
       }
-      const repoState =await changeCommandMode(datasource, repoId, "compare");
+      const repoState = await changeCommandMode(datasource, repoId, "compare");
       const applicationState = await convertRenderedCommitStateToKv(
         datasource,
         renderedState
@@ -717,12 +848,15 @@ app.post(
         repoState
       );
 
-      const sourceGraphResponse = await renderSourceGraphInputs(repoId, datasource);
+      const sourceGraphResponse = await renderSourceGraphInputs(
+        repoId,
+        datasource
+      );
       res.send({
         apiResponse,
-        sourceGraphResponse
+        sourceGraphResponse,
       });
-    } catch(e) {
+    } catch (e) {
       res.sendStatus(400);
       return null;
     }
@@ -740,7 +874,6 @@ app.post(
       return;
     }
     try {
-
       const currentRepoState = await datasource?.readCurrentRepoState(repoId);
       const renderedState = await revertCommit(datasource, repoId, sha);
       if (!renderedState) {
@@ -767,18 +900,20 @@ app.post(
         repoState
       );
 
-      const sourceGraphResponse = await renderSourceGraphInputs(repoId, datasource);
+      const sourceGraphResponse = await renderSourceGraphInputs(
+        repoId,
+        datasource
+      );
       res.send({
         apiResponse,
-        sourceGraphResponse
+        sourceGraphResponse,
       });
-    } catch(e) {
+    } catch (e) {
       res.sendStatus(400);
       return null;
     }
   }
 );
-
 
 app.post(
   "/repo/:repoId/sha/:sha/amend",
@@ -815,12 +950,15 @@ app.post(
         repoState
       );
 
-      const sourceGraphResponse = await renderSourceGraphInputs(repoId, datasource);
+      const sourceGraphResponse = await renderSourceGraphInputs(
+        repoId,
+        datasource
+      );
       res.send({
         apiResponse,
-        sourceGraphResponse
+        sourceGraphResponse,
       });
-    } catch(e) {
+    } catch (e) {
       res.sendStatus(400);
       return null;
     }
@@ -839,11 +977,7 @@ app.post(
     }
     try {
       const currentRepoState = await datasource.readCurrentRepoState(repoId);
-      const renderedState = await autofixReversion(
-        datasource,
-        repoId,
-        sha
-      );
+      const renderedState = await autofixReversion(datasource, repoId, sha);
       if (!renderedState) {
         res.sendStatus(400);
         return;
@@ -868,12 +1002,15 @@ app.post(
         repoState
       );
 
-      const sourceGraphResponse = await renderSourceGraphInputs(repoId, datasource);
+      const sourceGraphResponse = await renderSourceGraphInputs(
+        repoId,
+        datasource
+      );
       res.send({
         apiResponse,
-        sourceGraphResponse
+        sourceGraphResponse,
       });
-    } catch(e) {
+    } catch (e) {
       res.sendStatus(400);
       return null;
     }
@@ -885,10 +1022,7 @@ app.post(
   cors(corsOptionsDelegate),
   async (req, res): Promise<void> => {
     const repoId = req.params["repoId"];
-    const renderedState = await stashChanges(
-      datasource,
-      repoId
-    );
+    const renderedState = await stashChanges(datasource, repoId);
     const [repoState, applicationState] = await Promise.all([
       datasource.readCurrentRepoState(repoId),
       convertRenderedCommitStateToKv(datasource, renderedState),
@@ -913,10 +1047,7 @@ app.post(
   cors(corsOptionsDelegate),
   async (req, res): Promise<void> => {
     const repoId = req.params["repoId"];
-    const renderedState = await popStashedChanges(
-      datasource,
-      repoId
-    );
+    const renderedState = await popStashedChanges(datasource, repoId);
     const [repoState, applicationState] = await Promise.all([
       datasource.readCurrentRepoState(repoId),
       convertRenderedCommitStateToKv(datasource, renderedState),
@@ -941,10 +1072,7 @@ app.post(
   cors(corsOptionsDelegate),
   async (req, res): Promise<void> => {
     const repoId = req.params["repoId"];
-    const renderedState = await discardCurrentChanges(
-      datasource,
-      repoId
-    );
+    const renderedState = await discardCurrentChanges(datasource, repoId);
     const [repoState, applicationState] = await Promise.all([
       datasource.readCurrentRepoState(repoId),
       convertRenderedCommitStateToKv(datasource, renderedState),
@@ -979,7 +1107,11 @@ app.post(
     const switchBranchOnCreate = req.body["switchBranchOnCreate"] ?? true;
     try {
       if (switchBranchOnCreate && branchHead) {
-        const canSwitch = await canSwitchShasWithWIP(datasource, repoId, branchHead)
+        const canSwitch = await canSwitchShasWithWIP(
+          datasource,
+          repoId,
+          branchHead
+        );
         if (!canSwitch) {
           res.sendStatus(400);
           return;
@@ -1012,12 +1144,15 @@ app.post(
         repoState
       );
 
-      const sourceGraphResponse = await renderSourceGraphInputs(repoId, datasource);
+      const sourceGraphResponse = await renderSourceGraphInputs(
+        repoId,
+        datasource
+      );
       res.send({
         apiResponse,
-        sourceGraphResponse
+        sourceGraphResponse,
       });
-    } catch(e) {
+    } catch (e) {
       res.sendStatus(400);
       return null;
     }
@@ -1063,12 +1198,15 @@ app.post(
         repoState
       );
 
-      const sourceGraphResponse = await renderSourceGraphInputs(repoId, datasource);
+      const sourceGraphResponse = await renderSourceGraphInputs(
+        repoId,
+        datasource
+      );
       res.send({
         apiResponse,
-        sourceGraphResponse
+        sourceGraphResponse,
       });
-    } catch(e) {
+    } catch (e) {
       res.sendStatus(400);
       return null;
     }
@@ -1085,18 +1223,20 @@ app.post(
       return;
     }
     const branchId = req.body["branchId"] ?? "";
-    const branch = branchId ? await datasource.readBranch(repoId, branchId) : null;
+    const branch = branchId
+      ? await datasource.readBranch(repoId, branchId)
+      : null;
     try {
-      const canSwitch = await canSwitchShasWithWIP(datasource, repoId, branch?.lastCommit)
+      const canSwitch = await canSwitchShasWithWIP(
+        datasource,
+        repoId,
+        branch?.lastCommit
+      );
       if (!canSwitch) {
         res.sendStatus(400);
         return;
       }
-      const repoState = await switchRepoBranch(
-        datasource,
-        repoId,
-        branch?.id
-      );
+      const repoState = await switchRepoBranch(datasource, repoId, branch?.id);
 
       if (repoState == null) {
         res.sendStatus(400);
@@ -1116,17 +1256,47 @@ app.post(
         repoState
       );
 
-      const sourceGraphResponse = await renderSourceGraphInputs(repoId, datasource);
+      const sourceGraphResponse = await renderSourceGraphInputs(
+        repoId,
+        datasource
+      );
       res.send({
         apiResponse,
-        sourceGraphResponse
+        sourceGraphResponse,
       });
-    } catch(e) {
+    } catch (e) {
       res.sendStatus(400);
       return null;
     }
   }
 );
+
+app.get(
+  "/repo/:repoId/branch/:branchId/is_protected",
+  cors(corsOptionsDelegate),
+  async (req, res): Promise<void> => {
+    const repoId = req.params["repoId"];
+    if (!repoId) {
+      res.sendStatus(404);
+      return;
+    }
+    const branchId = req.params["branchId"] ?? "";
+    if (!branchId) {
+      res.sendStatus(404);
+      return;
+    }
+
+    const isProtected = await checkIsBranchProtected(
+      datasource,
+      repoId,
+      branchId
+    );
+    res.send({
+      isProtected
+    });
+  }
+);
+
 
 app.post(
   "/repo/:repoId/branch/:branchId/delete",
@@ -1138,17 +1308,15 @@ app.post(
       return;
     }
     const branchId = req.body["branchId"] ?? "";
-    const branch = branchId ? await datasource.readBranch(repoId, branchId) : null;
+    const branch = branchId
+      ? await datasource.readBranch(repoId, branchId)
+      : null;
     try {
       if (!branch) {
         res.sendStatus(400);
         return;
       }
-      const repoState = await deleteLocalBranch(
-        datasource,
-        repoId,
-        branch?.id
-      );
+      const repoState = await deleteLocalBranch(datasource, repoId, branch?.id);
 
       if (repoState == null) {
         res.sendStatus(400);
@@ -1168,12 +1336,15 @@ app.post(
         repoState
       );
 
-      const sourceGraphResponse = await renderSourceGraphInputs(repoId, datasource);
+      const sourceGraphResponse = await renderSourceGraphInputs(
+        repoId,
+        datasource
+      );
       res.send({
         apiResponse,
-        sourceGraphResponse
+        sourceGraphResponse,
       });
-    } catch(e) {
+    } catch (e) {
       res.sendStatus(400);
       return null;
     }
@@ -1235,12 +1406,15 @@ app.post(
         repoState
       );
 
-      const sourceGraphResponse = await renderSourceGraphInputs(repoId, datasource);
+      const sourceGraphResponse = await renderSourceGraphInputs(
+        repoId,
+        datasource
+      );
       res.send({
         apiResponse,
-        sourceGraphResponse
+        sourceGraphResponse,
       });
-    } catch(e) {
+    } catch (e) {
       res.sendStatus(400);
       return null;
     }
@@ -1349,66 +1523,83 @@ app.get(
       res.sendStatus(400);
       return null;
     }
-    const depFetch = await getDependenciesForManifest(datasource, manifest, true);
+    const depFetch = await getDependenciesForManifest(
+      datasource,
+      manifest,
+      true
+    );
     if (depFetch.status == "error") {
       return null;
     }
-    const fetchedDeps = depFetch.deps.filter(depManifest => {
+    const fetchedDeps = depFetch.deps.filter((depManifest) => {
       return manifest.imports[depManifest.name] == depManifest.version;
     });
-    const proposedSchemaMap =  manifestListToSchemaMap([manifest, ...depFetch.deps]);
-    const currentManifests = await getPluginManifests(datasource, renderedState.plugins, true);
+    const proposedSchemaMap = manifestListToSchemaMap([
+      manifest,
+      ...depFetch.deps,
+    ]);
+    const currentManifests = await getPluginManifests(
+      datasource,
+      renderedState.plugins,
+      true
+    );
     const currentSchemaMap = manifestListToSchemaMap(currentManifests);
     const isCompatible = await pluginManifestIsSubsetOfManifest(
       datasource,
       currentSchemaMap,
       {
         ...currentSchemaMap,
-        ...proposedSchemaMap
+        ...proposedSchemaMap,
       },
       true
     );
     if (isCompatible) {
-      const dependencies = fetchedDeps.map(manifest => {
+      const dependencies = fetchedDeps.map((manifest) => {
         return {
           pluginName: manifest.name,
           pluginVersion: manifest.version,
-          isCompatible: true
-        }
-
+          isCompatible: true,
+        };
       });
       res.send({
         pluginName,
         pluginVersion,
         isCompatible,
-        dependencies
+        dependencies,
       });
       return;
     }
     const dependencies = [];
     for (const depManifest of fetchedDeps) {
-      const depFetch = await getDependenciesForManifest(datasource, depManifest, true);
-      const proposedSchemaMap =  manifestListToSchemaMap([depManifest, ...depFetch.deps]);
+      const depFetch = await getDependenciesForManifest(
+        datasource,
+        depManifest,
+        true
+      );
+      const proposedSchemaMap = manifestListToSchemaMap([
+        depManifest,
+        ...depFetch.deps,
+      ]);
       const isCompatible = await pluginManifestIsSubsetOfManifest(
         datasource,
         currentSchemaMap,
         {
           ...currentSchemaMap,
-          ...proposedSchemaMap
+          ...proposedSchemaMap,
         },
         true
       );
       dependencies.push({
-          pluginName: depManifest.name,
-          pluginVersion: depManifest.version,
-          isCompatible
+        pluginName: depManifest.name,
+        pluginVersion: depManifest.version,
+        isCompatible,
       });
     }
     res.send({
       pluginName,
       pluginVersion,
       isCompatible,
-      dependencies
+      dependencies,
     });
   }
 );
@@ -1440,12 +1631,15 @@ app.get(
       renderedState.plugins
     );
     const currentSchemaMap = manifestListToSchemaMap(currentManifests);
-    const downstreamDeps = getDownstreamDepsInSchemaMap(currentSchemaMap, pluginName);
+    const downstreamDeps = getDownstreamDepsInSchemaMap(
+      currentSchemaMap,
+      pluginName
+    );
     res.send({
       canUninstall: downstreamDeps.length == 0,
       downstreamDeps,
-      manifestList: currentManifests
-    })
+      manifestList: currentManifests,
+    });
   }
 );
 
@@ -1497,24 +1691,30 @@ app.post(
           `dev@${pluginVersion}`
         );
         devManifest.version = `dev@${pluginVersion}`;
-        const depFetch = await getDependenciesForManifest(datasource, devManifest);
+        const depFetch = await getDependenciesForManifest(
+          datasource,
+          devManifest
+        );
         if (depFetch.status == "error") {
           continue;
         }
-        const proposedSchemaMap =  manifestListToSchemaMap([devManifest, ...depFetch.deps]);
+        const proposedSchemaMap = manifestListToSchemaMap([
+          devManifest,
+          ...depFetch.deps,
+        ]);
 
         const isCompatible = await pluginManifestIsSubsetOfManifest(
           datasource,
           currentSchemaMap,
           {
             ...currentSchemaMap,
-            ...proposedSchemaMap
-          },
+            ...proposedSchemaMap,
+          }
         );
 
         out[availablePluginName][devManifest.version] = {
           manifest: devManifest,
-          isCompatible
+          isCompatible,
         };
       }
     }
@@ -1531,28 +1731,35 @@ app.post(
           out[pluginName] = {};
         }
 
-        const depFetch = await getDependenciesForManifest(datasource, devManifest, true);
+        const depFetch = await getDependenciesForManifest(
+          datasource,
+          devManifest,
+          true
+        );
         if (depFetch.status == "error") {
           continue;
         }
-        const proposedSchemaMap =  manifestListToSchemaMap([devManifest, ...depFetch.deps]);
+        const proposedSchemaMap = manifestListToSchemaMap([
+          devManifest,
+          ...depFetch.deps,
+        ]);
 
         const isCompatible = await pluginManifestIsSubsetOfManifest(
           datasource,
           currentSchemaMap,
           {
             ...currentSchemaMap,
-            ...proposedSchemaMap
+            ...proposedSchemaMap,
           },
           true
         );
         out[pluginName]["dev"] = {
           manifest: devManifest,
-          isCompatible
+          isCompatible,
         };
       }
     }
-    res.send(out)
+    res.send(out);
   }
 );
 
@@ -1587,36 +1794,47 @@ app.post(
     const currentSchemaMap = manifestListToSchemaMap(currentManifests);
 
     for (let version of versions) {
-      const manifest = await datasource.getPluginManifest(pluginName, version, true);
+      const manifest = await datasource.getPluginManifest(
+        pluginName,
+        version,
+        true
+      );
       if (!manifest) {
         continue;
       }
 
-      const depFetch = await getDependenciesForManifest(datasource, manifest, true);
+      const depFetch = await getDependenciesForManifest(
+        datasource,
+        manifest,
+        true
+      );
       if (depFetch.status == "error") {
         continue;
       }
 
-      const proposedSchemaMap =  manifestListToSchemaMap([manifest, ...depFetch.deps]);
+      const proposedSchemaMap = manifestListToSchemaMap([
+        manifest,
+        ...depFetch.deps,
+      ]);
       const isCompatible = await pluginManifestIsSubsetOfManifest(
         datasource,
         currentSchemaMap,
         {
           ...currentSchemaMap,
-          ...proposedSchemaMap
+          ...proposedSchemaMap,
         },
         true
       );
       if (isCompatible) {
         res.send({
-          canUpdate: true
-        })
+          canUpdate: true,
+        });
         return;
       }
     }
     res.send({
-      canUpdate: false
-    })
+      canUpdate: false,
+    });
   }
 );
 
@@ -1641,18 +1859,21 @@ app.get(
       renderedState.plugins
     );
     for (let manifest of currentManifests) {
-      const upstreamDeps = await getUpstreamDependencyManifests(datasource, manifest, true);
+      const upstreamDeps = await getUpstreamDependencyManifests(
+        datasource,
+        manifest,
+        true
+      );
       for (const upstreamDep of upstreamDeps) {
         const seen = !!currentManifests?.find(
           (m) => m.name == upstreamDep.name && m.version == upstreamDep.version
         );
         if (!seen) {
-          currentManifests.push(upstreamDep)
+          currentManifests.push(upstreamDep);
         }
       }
-
     }
-    res.send(currentManifests)
+    res.send(currentManifests);
   }
 );
 
@@ -1683,18 +1904,26 @@ app.get(
       renderedState.plugins
     );
 
-    const manifest = await datasource.getPluginManifest(pluginName, pluginVersion, true);
-    const upstreamDeps = await getUpstreamDependencyManifests(datasource, manifest, true);
+    const manifest = await datasource.getPluginManifest(
+      pluginName,
+      pluginVersion,
+      true
+    );
+    const upstreamDeps = await getUpstreamDependencyManifests(
+      datasource,
+      manifest,
+      true
+    );
     const manifestList = currentManifests;
     for (const upstreamDep of upstreamDeps) {
       const seen = !!manifestList?.find(
         (m) => m.name == upstreamDep.name && m.version == upstreamDep.version
       );
       if (!seen) {
-        manifestList.push(upstreamDep)
+        manifestList.push(upstreamDep);
       }
     }
-    res.send(manifestList)
+    res.send(manifestList);
   }
 );
 
@@ -1740,7 +1969,9 @@ app.post(
       return;
     }
     const currentRenderedState = await datasource.readRenderedState(repoId);
-    const pluginElement = currentRenderedState?.plugins?.find(v => v.key == pluginName);
+    const pluginElement = currentRenderedState?.plugins?.find(
+      (v) => v.key == pluginName
+    );
     if (!pluginElement) {
       res.sendStatus(400);
       return;
@@ -1754,7 +1985,10 @@ app.post(
       res.sendStatus(400);
       return;
     }
-    if (pluginName != pluginNameToUpdate && !manifest.imports[pluginNameToUpdate]) {
+    if (
+      pluginName != pluginNameToUpdate &&
+      !manifest.imports[pluginNameToUpdate]
+    ) {
       res.sendStatus(400);
       return;
     }
@@ -1784,6 +2018,19 @@ app.post(
 );
 
 app.get(
+  "/repo/:repoId/clone/state",
+  cors(corsOptionsDelegate),
+  async (req, res): Promise<void> => {
+    const repoId = req.params["repoId"];
+    if (!repoId) {
+      res.sendStatus(400);
+    }
+    const state = await getRepoCloneState(datasource, repoId)
+    res.send(state);
+  }
+);
+
+app.get(
   "/repo/:repoId/clone",
   cors(corsOptionsDelegate),
   async (req, res): Promise<void> => {
@@ -1791,12 +2038,7 @@ app.get(
     if (!repoId) {
       res.send({ status: "failed" });
     }
-    const exists = await existsAsync(path.join(vReposPath, repoId));
-    if (exists) {
-      res.send({ status: "already_exists" });
-      return;
-    }
-    const didSucceed = await cloneRepo(repoId);
+    const didSucceed = await cloneRepo(datasource, repoId);
     if (didSucceed) {
       res.send({ status: "success" });
     } else {
@@ -1848,12 +2090,14 @@ app.post("/complete_signup", cors(remoteHostCors), async (req, res) => {
   }
 });
 
-
-app.use("/binary/upload", busboy({
-  limits: {
-    fileSize: 1024 * 1024 * 1024, //1GB limit
-  }
-}));
+app.use(
+  "/binary/upload",
+  busboy({
+    limits: {
+      fileSize: 1024 * 1024 * 20, //20MB limit
+    },
+  })
+);
 
 app.post("/binary/upload", async (req, res) => {
   try {
@@ -1865,7 +2109,7 @@ app.post("/binary/upload", async (req, res) => {
     let fileRef = null;
     if (req.busboy) {
       req.pipe(req.busboy);
-      req.busboy.on('file', (_, file, info) => {
+      req.busboy.on("file", (_, file, info) => {
         const extension = mime.extension(info.mimeType);
         if (!extension) {
           didCancel = true;
@@ -1881,7 +2125,7 @@ app.post("/binary/upload", async (req, res) => {
           }
         }
         let fileData = null;
-        file.on('data', (data, err) => {
+        file.on("data", (data, err) => {
           if (err) {
             didCancel = true;
             res.sendStatus(400);
@@ -1889,13 +2133,13 @@ app.post("/binary/upload", async (req, res) => {
           }
           if (!didCancel) {
             if (fileData == null) {
-              fileData = data
+              fileData = data;
             } else {
               fileData = Buffer.concat([fileData, data]);
             }
           }
         });
-        file.on('end', async (err) => {
+        file.on("end", async (err) => {
           try {
             if (didCancel) {
               return;
@@ -1908,38 +2152,41 @@ app.post("/binary/upload", async (req, res) => {
             const sha = hashBinary(fileData);
             const filename = `${sha}.${extension}`;
             const binSubDir = path.join(vBinariesPath, sha.substring(0, 2));
-            const existsBinSubDir = await existsAsync(binSubDir)
+            const existsBinSubDir = await existsAsync(binSubDir);
             if (!existsBinSubDir) {
-              fs.promises.mkdir(binSubDir, {recursive: true});
+              fs.promises.mkdir(binSubDir, { recursive: true });
             }
             const fullPath = path.join(binSubDir, filename);
-            const exists = await existsAsync(fullPath)
+            const exists = await existsAsync(fullPath);
             if (!exists) {
               if (isBinaryFile(fileData)) {
                 await fs.promises.writeFile(fullPath, fileData);
               } else {
-                await fs.promises.writeFile(fullPath, fileData.toString(), 'utf8');
+                await fs.promises.writeFile(
+                  fullPath,
+                  fileData.toString(),
+                  "utf8"
+                );
               }
             }
             fileRef = filename;
             res.send({
-              fileRef
-            })
+              fileRef,
+            });
           } catch (e) {
             didCancel = true;
             res.sendStatus(400);
             return;
           }
-        })
+        });
       });
     }
-  } catch(e) {
-        res.sendStatus(400);
+  } catch (e) {
+    res.sendStatus(400);
   }
 });
 
 app.get("/binary/:binaryRef", async (req, res) => {
-
   res.header("Access-Control-Allow-Origin", "*");
   const binaryRef = req?.params?.["binaryRef"];
   const binSubDir = path.join(vBinariesPath, binaryRef.substring(0, 2));
@@ -1955,57 +2202,10 @@ app.get("/binary/:binaryRef", async (req, res) => {
     return;
   }
   const mimeType = mime.contentType(path.extname(fullPath));
-  res.setHeader('Content-Type', mimeType);
+  res.setHeader("Content-Type", mimeType);
   const readStream = fs.createReadStream(fullPath);
-  readStream.on('data', data => res.send(data));
-  readStream.on('close', () => res.end());
-});
-
-app.get("/plugins/:pluginName/dev@*",
-  cors(corsOptionsDelegate),
-async (req, res) => {
-  const pluginName = req?.params?.['pluginName'];
-  const pluginVersion = req.path.split("/")[3];
-  const [,version] = pluginVersion.split("@")
-  if (!version) {
-    res.sendStatus(404);
-    return;
-  }
-  const manifest = await readDevPluginManifest(pluginName, pluginVersion);
-  if (!manifest) {
-    res.sendStatus(404);
-    return;
-  }
-  const prodPath = `/plugins/${pluginName}/${version}`;
-  const basePath = `/plugins/${pluginName}/${pluginVersion}`;
-  const pathRemainer = req.path.substring(basePath.length)?.split('?')[0];
-  if (!pathRemainer || pathRemainer == "/" || pathRemainer == "/write" || pathRemainer == "/write/") {
-    const filePath = path.join(vDEVPath, pluginName, version, 'index.html');
-    const exists = await existsAsync(filePath)
-    if (!exists) {
-      res.sendStatus(404);
-      return;
-    }
-    const indexHtml = await fs.promises.readFile(filePath);
-    res.type('html');
-    res.send(indexHtml.toString().replaceAll(prodPath, basePath))
-    return;
-  }
-
-  const filePath = path.join(vDEVPath, pluginName, version, ...pathRemainer.split("/"));
-  const exists = await existsAsync(filePath)
-  if (!exists) {
-    res.sendStatus(404);
-    return;
-  }
-  const file = await fs.promises.readFile(filePath);
-  const contentType = mime.contentType(path.extname(filePath))
-  res.setHeader('content-type', contentType);
-  if (isBinaryFile(file)) {
-    res.send(file);
-    return;
-  }
-  res.send(file.toString().replaceAll(prodPath, basePath));
+  readStream.on("data", (data) => res.send(data));
+  readStream.on("close", () => res.end());
 });
 
 for (let plugin in pluginsJSON.plugins) {
@@ -2016,51 +2216,137 @@ for (let plugin in pluginsJSON.plugins) {
       secure: true,
       ws: false,
       changeOrigin: false,
-      logLevel: "silent"
+      logLevel: "silent",
     });
     app.use(proxy);
   }
 }
 
-app.get("/plugins/:pluginName/:pluginVersion*", async (req, res) => {
-  const pluginName = req?.params?.['pluginName'];
-  const pluginVersion = req?.params?.['pluginVersion'];
+app.get(
+  "/plugins/:pluginName/dev@*",
+  cors(corsOptionsDelegate),
+  async (req, res) => {
+    const pluginName = req?.params?.["pluginName"];
+    const pluginVersion = req.path.split("/")[3];
+    const [, version] = pluginVersion.split("@");
+    if (!version) {
+      res.sendStatus(404);
+      return;
+    }
+    const manifest = await readDevPluginManifest(pluginName, pluginVersion);
+    if (!manifest) {
+      res.sendStatus(404);
+      return;
+    }
+    const prodPath = `/plugins/${pluginName}/${version}`;
+    const basePath = `/plugins/${pluginName}/${pluginVersion}`;
+    const pathRemainer = req.path.substring(basePath.length)?.split("?")[0];
+    if (
+      !pathRemainer ||
+      pathRemainer == "/" ||
+      pathRemainer == "/write" ||
+      pathRemainer == "/write/"
+    ) {
+      const filePath = path.join(vDEVPath, pluginName, version, "index.html");
+      const exists = await existsAsync(filePath);
+      if (!exists) {
+        res.sendStatus(404);
+        return;
+      }
+      const indexHtml = await fs.promises.readFile(filePath);
+      res.type("html");
+      res.send(indexHtml.toString().replaceAll(prodPath, basePath));
+      return;
+    }
 
-  if (!pluginVersion) {
-    res.sendStatus(404);
-    return;
-  }
-  const manifest = await datasource.getPluginManifest(pluginName, pluginVersion);
-  if (!manifest) {
-    res.sendStatus(404);
-    return;
-  }
-  const basePath = `/plugins/${pluginName}/${pluginVersion}`;
-  const pathRemainer = req.path.substring(basePath.length)?.split('?')[0];
-  if (!pathRemainer || pathRemainer == "/" || pathRemainer == "/write" || pathRemainer == "/write/") {
-    const filePath = path.join(vPluginsPath, pluginName, pluginVersion, 'index.html');
-    const exists = await existsAsync(filePath)
+    const filePath = path.join(
+      vDEVPath,
+      pluginName,
+      version,
+      ...pathRemainer.split("/")
+    );
+    const exists = await existsAsync(filePath);
     if (!exists) {
       res.sendStatus(404);
       return;
     }
-    const indexHtml = await fs.promises.readFile(filePath);
-    res.type('html');
-    res.send(indexHtml.toString().replaceAll(basePath, basePath))
-    return;
+    const file = await fs.promises.readFile(filePath);
+    const contentType = mime.contentType(path.extname(filePath));
+    res.setHeader("content-type", contentType);
+    if (isBinaryFile(file)) {
+      res.send(file);
+      return;
+    }
+    res.send(file.toString().replaceAll(prodPath, basePath));
   }
+);
 
-  const filePath = path.join(vPluginsPath, pluginName, pluginVersion, ...pathRemainer.split("/"));
-  const exists = await existsAsync(filePath)
-  if (!exists) {
-    res.sendStatus(404);
-    return;
+app.get(
+  "/plugins/:pluginName/:pluginVersion*",
+  cors(corsOptionsDelegate),
+  async (req, res) => {
+    res.header("Access-Control-Allow-Origin", "*");
+    const pluginName = req?.params?.["pluginName"];
+    const pluginVersion = req?.params?.["pluginVersion"];
+
+    if (!pluginVersion) {
+      res.sendStatus(404);
+      return;
+    }
+    const manifest = await datasource.getPluginManifest(
+      pluginName,
+      pluginVersion
+    );
+    if (!manifest) {
+      res.sendStatus(404);
+      return;
+    }
+    const basePath = `/plugins/${pluginName}/${pluginVersion}`;
+    const pathRemainer = req.path.substring(basePath.length)?.split("?")[0];
+    if (
+      !pathRemainer ||
+      pathRemainer == "/" ||
+      pathRemainer == "/write" ||
+      pathRemainer == "/write/"
+    ) {
+      const filePath = path.join(
+        vPluginsPath,
+        pluginName,
+        pluginVersion,
+        "index.html"
+      );
+      const exists = await existsAsync(filePath);
+      if (!exists) {
+        res.sendStatus(404);
+        return;
+      }
+      const indexHtml = await fs.promises.readFile(filePath);
+      res.type("html");
+      res.send(indexHtml.toString().replaceAll(basePath, basePath));
+      return;
+    }
+
+    const filePath = path.join(
+      vPluginsPath,
+      pluginName,
+      pluginVersion,
+      ...pathRemainer.split("/")
+    );
+    const exists = await existsAsync(filePath);
+    if (!exists) {
+      res.sendStatus(404);
+      return;
+    }
+    const file = await fs.promises.readFile(filePath);
+    const contentType = mime.contentType(path.extname(filePath));
+    res.setHeader("content-type", contentType);
+    if (isBinaryFile(file)) {
+      res.send(file);
+      return;
+    }
+    res.send(file.toString());
   }
-  const file = await fs.promises.readFile(filePath);
-  const contentType = mime.contentType(path.extname(filePath))
-  res.setHeader('content-type', contentType);
-  res.send(file.toString());
-});
+);
 
 server.listen(port, host, () =>
   console.log("floro server started on " + host + ":" + port)
