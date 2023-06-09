@@ -70,7 +70,7 @@ export const buildFloroTemplate = async (
   cwd: string,
   name: string
 ): Promise<void> => {
-  if (!name || !PLUGIN_REGEX.test(name)) {
+  if (!name || !PLUGIN_REGEX.test(name) || name.toLowerCase().trim() == "home") {
     console.log(clc.redBright.bgBlack.underline("Invalid plugin name"));
     return;
   }

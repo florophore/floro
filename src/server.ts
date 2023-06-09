@@ -72,6 +72,7 @@ import {
   pull,
   getRepoCloneState,
   checkIsBranchProtected,
+  getCanRevert,
 } from "./repoapi";
 import {
   makeMemoizedDataSource,
@@ -612,6 +613,32 @@ app.get(
       }
       res.send({
         canAmend,
+      });
+    } catch (e) {
+      res.sendStatus(400);
+      return;
+    }
+  }
+);
+
+app.get(
+  "/repo/:repoId/sha/:sha/canrevert",
+  cors(corsOptionsDelegate),
+  async (req, res): Promise<void> => {
+    const repoId = req.params["repoId"];
+    if (!repoId) {
+      res.sendStatus(404);
+      return;
+    }
+    const sha = req.params["sha"];
+    try {
+      const canRevert = await getCanRevert(datasource, repoId, sha);
+      if (canRevert == null) {
+        res.sendStatus(400);
+        return;
+      }
+      res.send({
+        canRevert,
       });
     } catch (e) {
       res.sendStatus(400);

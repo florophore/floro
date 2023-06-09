@@ -210,6 +210,8 @@ export interface CommitHistory {
   parent: null | string;
   historicalParent: null | string;
   mergeBase: null | string;
+  revertFromSha: null | string;
+  revertToSha: null | string;
   idx: number;
   message: string;
 }
@@ -838,6 +840,12 @@ export const getHistory = async (
   repoId: string,
   sha: string | null
 ): Promise<Array<CommitHistory> | null> => {
+  if (datasource?.readCommitHistory) {
+    const history = await datasource.readCommitHistory(repoId, sha);
+    if (history) {
+      return history;
+    }
+  }
   if (sha == null) {
     return [];
   }
@@ -852,6 +860,8 @@ export const getHistory = async (
       idx: commit.idx,
       message: commit.message,
       mergeBase: commit.mergeBase,
+      revertFromSha: commit?.revertFromSha,
+      revertToSha: commit?.revertToSha,
       parent: commit.parent,
       historicalParent: commit.historicalParent,
     },
@@ -916,6 +926,10 @@ export const getCommitState = async (
 ): Promise<ApplicationKVState | null> => {
   if (!sha) {
     return EMPTY_COMMIT_STATE;
+  }
+  if (datasource?.readCommitApplicationState) {
+    const state = await datasource.readCommitApplicationState(repoId, sha);
+    return state;
   }
   if (checkedHot && hotCheckpoint) {
     if (hotCheckpoint[0] == sha) {
@@ -2082,6 +2096,7 @@ export const pushCommitData = async (
         },
       }
     );
+
     return ackUploadRequest?.data?.ack ?? false;
   } catch (e) {
     return null;

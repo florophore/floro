@@ -19,6 +19,7 @@ import {
   Branch,
   BranchesMetaState,
   CloneFile,
+  CommitHistory,
   RemoteSettings,
   RenderedApplicationState,
   RepoSetting,
@@ -59,6 +60,8 @@ export interface DataSource {
     state: RepoState
   ) => Promise<RepoState>;
 
+  readCommitHistory?: (repoId: string, sha: string) => Promise<Array<CommitHistory>>;
+
   readBranch?: (repoId: string, branchId: string) => Promise<Branch>;
   readBranches?: (repoId: string) => Promise<Array<Branch>>;
   deleteBranch?: (repoId: string, branchId: string) => Promise<boolean>;
@@ -75,7 +78,8 @@ export interface DataSource {
   ) => Promise<CommitData>;
   commitExists?: (repoId: string, sha: string) => Promise<boolean>;
   readCommit?: (repoId: string, sha: string) => Promise<CommitData>;
-  readCheckpoint?(repoId: string, sha: string): Promise<ApplicationKVState>;
+  readCheckpoint?(repoId: string, sha: string): Promise<ApplicationKVState|null>;
+  readCommitApplicationState?(repoId: string, sha: string): Promise<ApplicationKVState>;
 
   readCommits?: (repoId: string) => Promise<Array<SourceCommitNode>>;
 
@@ -83,15 +87,15 @@ export interface DataSource {
     repoId: string,
     sha: string,
     commitState: ApplicationKVState
-  ): Promise<ApplicationKVState>;
+  ): Promise<ApplicationKVState|null>;
 
-  readHotCheckpoint?(repoId: string): Promise<[string, ApplicationKVState]>;
+  readHotCheckpoint?(repoId: string): Promise<[string, ApplicationKVState]|null>;
 
   saveHotCheckpoint?(
     repoId: string,
     sha: string,
     commitState: ApplicationKVState
-  ): Promise<[string, ApplicationKVState]>;
+  ): Promise<[string, ApplicationKVState]|null>;
 
   deleteHotCheckpoint?(repoId: string): Promise<boolean>;
 
@@ -658,6 +662,8 @@ const readCommits = async (
             userId: commit.userId,
             authorUserId: commit.authorUserId,
             mergeBase: commit.mergeBase,
+            revertFromSha: commit.revertFromSha,
+            revertToSha: commit.revertToSha,
             idx: commit.idx,
             message: commit.message,
             timestamp: commit.timestamp,
@@ -674,7 +680,7 @@ const readCommits = async (
 
 const readHotCheckpoint = async (
   repoId: string
-): Promise<[string, ApplicationKVState]> => {
+): Promise<[string, ApplicationKVState]|null> => {
   try {
     const hotPath = path.join(vReposPath, repoId, "hotcheckpoint.json");
     const hotPointExists = await existsAsync(hotPath);
