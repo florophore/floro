@@ -287,6 +287,17 @@ export const getMergeSequence = (
   if (from.length == 0 && into.length == 0) {
     return [];
   }
+  const fromIsEqualToOrigin = sequencesAreEqual(origin, from);
+  const intoIsEqualToOrigin = sequencesAreEqual(origin, into);
+
+  if (fromIsEqualToOrigin && !intoIsEqualToOrigin) {
+    return into;
+  }
+
+  if (!fromIsEqualToOrigin && intoIsEqualToOrigin) {
+    return from;
+  }
+
   const lcs = getGreatestCommonLCS(origin, from, into);
   if (lcs.length == 0) {
     return getMergeSubSequence(from, into, direction);

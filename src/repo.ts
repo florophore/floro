@@ -276,6 +276,7 @@ export interface ApiResponse {
   stashSize?: number;
   conflictResolution?: ConflictList;
   checkedOutBranchIds: Array<string>;
+  binaryToken: string;
 }
 
 export interface SourceGraphResponse {
@@ -1309,6 +1310,21 @@ export const uniqueKVObj = <T>(
   }
   return out;
 };
+export const uniqueKVList = <T>(
+  kvList: Array<{ key: string; value: T }>
+): Array<{ key: string; value: T }> => {
+  let out: Array<{ key: string; value: T }> = [];
+  let seen = new Set();
+  for (let { key, value } of kvList) {
+    if (!seen.has(key + ":" + value)) {
+      seen.add(key + ":" + value);
+      out.push({ key, value });
+    }
+  }
+  return out;
+};
+
+
 
 export const uniqueStrings = (strings: Array<string>): Array<string> => {
   let out: Array<string> = [];
@@ -1509,6 +1525,7 @@ export const getMergedCommitState = async (
     };
 
     const mergeState = detokenizeStore(tokenizedState, tokenStore);
+
     mergeState.plugins = uniqueKV(mergeState.plugins);
     mergeState.licenses = uniqueKV(mergeState.licenses);
 

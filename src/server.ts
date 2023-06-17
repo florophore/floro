@@ -13,7 +13,6 @@ import {
   writeUser,
   removeUserSession,
   removeUser,
-  vReposPath,
   vDEVPath,
   vBinariesPath,
   vPluginsPath,
@@ -29,7 +28,7 @@ import { startSessionJob } from "./cron";
 import macaddres from "macaddress";
 import sha256 from "crypto-js/sha256";
 import HexEncode from "crypto-js/enc-hex";
-import { cloneRepo } from "./repo";
+import { cloneRepo, getCommitState, uniqueKVList, getUnstagedCommitState } from "./repo";
 import {
   convertRenderedCommitStateToKv,
   getApplicationState,
@@ -92,6 +91,8 @@ import {
   getUpstreamDependencyManifests,
 } from "./plugins";
 
+import binarySession from "./binary_session";
+
 const remoteHost = getRemoteHostSync();
 
 const app = express();
@@ -100,32 +101,26 @@ const datasource = makeMemoizedDataSource();
 
 const pluginsJSON = getPluginsJson();
 
-const pluginGuardedSafeOrginRegex =
-  /([A-Z])\w+^(https?:\/\/(localhost|127\.0\.0\.1):\d{1,5})|(https:\/\/floro.io)(\/(((?!plugins).)*))$/;
 const safeOriginRegex =
   /(https?:\/\/(localhost|127\.0\.0\.1):\d{1,5})|(https:\/\/floro.io)/;
-const corsOptionsDelegate = (req, callback) => {
+
+const corsNoNullOriginDelegate = (req, callback) => {
+  const origin = req.headers?.origin;
   if (
-    pluginGuardedSafeOrginRegex.test(req.connection.remoteAddress) ||
-    req.connection.remoteAddress == "127.0.0.1"
+    origin != 'null' && (
+      safeOriginRegex.test(req.connection.remoteAddress) ||
+      req.connection.remoteAddress == "127.0.0.1" ||
+      req.connection.remoteAddress
+    )
   ) {
     callback(null, {
       origin: true,
     });
   } else {
-    // TODO: fix this
-    callback("sorry", {
+    callback("Invalid origin", {
       origin: false,
     });
   }
-};
-
-const remoteHostCors = {
-  origin: pluginGuardedSafeOrginRegex,
-};
-
-const localPlugin = {
-  origin: safeOriginRegex,
 };
 
 const io = new Server(server, {
@@ -164,10 +159,10 @@ io.on("connection", (socket) => {
 
 app.use(busboy());
 
-app.use(express.json({ limit: "1gb" }));
+app.use(express.json({ limit: "20mb" }));
 
 app.use(function (_req, res, next) {
-  res.header("Access-Control-Allow-Origin", remoteHost);
+  res.header("Access-Control-Allow-Origin", "*");
   res.header(
     "Access-Control-Allow-Headers",
     "Origin, X-Requested-With, Content-Type, Accept"
@@ -177,7 +172,7 @@ app.use(function (_req, res, next) {
 
 app.get(
   "/ping",
-  cors(corsOptionsDelegate),
+  cors(corsNoNullOriginDelegate),
   async (_req, res): Promise<void> => {
     res.send("PONG");
   }
@@ -185,7 +180,7 @@ app.get(
 
 app.get(
   "/repos",
-  cors(corsOptionsDelegate),
+  cors(corsNoNullOriginDelegate),
   async (_req, res): Promise<void> => {
     const repos = await datasource.readRepos();
     res.send({
@@ -196,7 +191,7 @@ app.get(
 
 app.get(
   "/licenses",
-  cors(corsOptionsDelegate),
+  cors(corsNoNullOriginDelegate),
   async (_req, res): Promise<void> => {
     res.send(LicenseCodesList);
   }
@@ -204,7 +199,7 @@ app.get(
 
 app.get(
   "/repo/:repoId/exists",
-  cors(corsOptionsDelegate),
+  cors(corsNoNullOriginDelegate),
   async (req, res): Promise<void> => {
     const repoId = req.params["repoId"];
     const exists = await datasource.repoExists(repoId);
@@ -214,7 +209,7 @@ app.get(
 
 app.get(
   "/repo/:repoId/fetchinfo",
-  cors(corsOptionsDelegate),
+  cors(corsNoNullOriginDelegate),
   async (req, res): Promise<void> => {
     const repoId = req.params["repoId"];
     if (!repoId) {
@@ -256,7 +251,7 @@ app.get(
 
 app.post(
   "/repo/:repoId/push",
-  cors(corsOptionsDelegate),
+  cors(corsNoNullOriginDelegate),
   async (req, res): Promise<void> => {
     const repoId = req.params["repoId"];
     if (!repoId) {
@@ -287,7 +282,7 @@ app.post(
 )
 app.post(
   "/repo/:repoId/pull",
-  cors(corsOptionsDelegate),
+  cors(corsNoNullOriginDelegate),
   async (req, res): Promise<void> => {
     const repoId = req.params["repoId"];
     if (!repoId) {
@@ -319,7 +314,7 @@ app.post(
 
 app.get(
   "/repo/:repoId/current",
-  cors(corsOptionsDelegate),
+  cors(corsNoNullOriginDelegate),
   async (req, res): Promise<void> => {
     const repoId = req.params["repoId"];
     const [repoState, renderedState] = await Promise.all([
@@ -347,7 +342,7 @@ app.get(
 
 app.get(
   "/repo/:repoId/sourcegraph",
-  cors(corsOptionsDelegate),
+  cors(corsNoNullOriginDelegate),
   async (req, res): Promise<void> => {
     const repoId = req.params["repoId"];
     if (!repoId) {
@@ -372,7 +367,7 @@ app.get(
 
 app.post(
   "/repo/:repoId/command",
-  cors(corsOptionsDelegate),
+  cors(corsNoNullOriginDelegate),
   async (req, res): Promise<void> => {
     const repoId = req.params["repoId"];
     const repoState = await changeCommandMode(
@@ -402,7 +397,7 @@ app.post(
 
 app.post(
   "/repo/:repoId/comparison",
-  cors(corsOptionsDelegate),
+  cors(corsNoNullOriginDelegate),
   async (req, res): Promise<void> => {
     const repoId = req.params["repoId"];
     const against = req.body["against"] as "wip" | "branch" | "sha";
@@ -450,7 +445,7 @@ app.post(
 
 app.post(
   "/repo/:repoId/commit",
-  cors(corsOptionsDelegate),
+  cors(corsNoNullOriginDelegate),
   async (req, res): Promise<void> => {
     const repoId = req.params["repoId"];
     const message = req.body["message"];
@@ -495,7 +490,7 @@ app.post(
 
 app.get(
   "/repo/:repoId/branch",
-  cors(corsOptionsDelegate),
+  cors(corsNoNullOriginDelegate),
   async (req, res): Promise<void> => {
     const repoId = req.params["repoId"];
     const branch = await getCurrentRepoBranch(datasource, repoId);
@@ -509,7 +504,7 @@ app.get(
 
 app.get(
   "/repo/:repoId/sha/:sha/canswitchwip",
-  cors(corsOptionsDelegate),
+  cors(corsNoNullOriginDelegate),
   async (req, res): Promise<void> => {
     const repoId = req.params["repoId"];
     if (!repoId) {
@@ -533,7 +528,7 @@ app.get(
 
 app.get(
   "/repo/:repoId/sha/:sha/canautomerge",
-  cors(corsOptionsDelegate),
+  cors(corsNoNullOriginDelegate),
   async (req, res): Promise<void> => {
     const repoId = req.params["repoId"];
     if (!repoId) {
@@ -567,7 +562,7 @@ app.get(
 
 app.get(
   "/repo/:repoId/sha/:sha/cancherrypick",
-  cors(corsOptionsDelegate),
+  cors(corsNoNullOriginDelegate),
   async (req, res): Promise<void> => {
     const repoId = req.params["repoId"];
     if (!repoId) {
@@ -597,7 +592,7 @@ app.get(
 
 app.get(
   "/repo/:repoId/sha/:sha/canamend",
-  cors(corsOptionsDelegate),
+  cors(corsNoNullOriginDelegate),
   async (req, res): Promise<void> => {
     const repoId = req.params["repoId"];
     if (!repoId) {
@@ -623,7 +618,7 @@ app.get(
 
 app.get(
   "/repo/:repoId/sha/:sha/canrevert",
-  cors(corsOptionsDelegate),
+  cors(corsNoNullOriginDelegate),
   async (req, res): Promise<void> => {
     const repoId = req.params["repoId"];
     if (!repoId) {
@@ -649,7 +644,7 @@ app.get(
 
 app.get(
   "/repo/:repoId/sha/:sha/canautofix",
-  cors(corsOptionsDelegate),
+  cors(corsNoNullOriginDelegate),
   async (req, res): Promise<void> => {
     const repoId = req.params["repoId"];
     if (!repoId) {
@@ -675,7 +670,7 @@ app.get(
 
 app.post(
   "/repo/:repoId/sha/:sha/merge",
-  cors(corsOptionsDelegate),
+  cors(corsNoNullOriginDelegate),
   async (req, res): Promise<void> => {
     const repoId = req.params["repoId"];
     const sha = req.params["sha"];
@@ -719,7 +714,7 @@ app.post(
 
 app.post(
   "/repo/:repoId/merge/abort",
-  cors(corsOptionsDelegate),
+  cors(corsNoNullOriginDelegate),
   async (req, res): Promise<void> => {
     const repoId = req.params["repoId"];
     if (!repoId) {
@@ -754,7 +749,7 @@ app.post(
 
 app.post(
   "/repo/:repoId/merge/resolve",
-  cors(corsOptionsDelegate),
+  cors(corsNoNullOriginDelegate),
   async (req, res): Promise<void> => {
     const repoId = req.params["repoId"];
     if (!repoId) {
@@ -796,7 +791,7 @@ app.post(
 
 app.post(
   "/repo/:repoId/merge/direction/:direction",
-  cors(corsOptionsDelegate),
+  cors(corsNoNullOriginDelegate),
   async (req, res): Promise<void> => {
     const repoId = req.params["repoId"];
     const direction = req.params["direction"];
@@ -848,7 +843,7 @@ app.post(
 
 app.post(
   "/repo/:repoId/sha/:sha/cherrypick",
-  cors(corsOptionsDelegate),
+  cors(corsNoNullOriginDelegate),
   async (req, res): Promise<void> => {
     const repoId = req.params["repoId"];
     const sha = req.params["sha"];
@@ -892,7 +887,7 @@ app.post(
 
 app.post(
   "/repo/:repoId/sha/:sha/revert",
-  cors(corsOptionsDelegate),
+  cors(corsNoNullOriginDelegate),
   async (req, res): Promise<void> => {
     const repoId = req.params["repoId"];
     const sha = req.params["sha"];
@@ -944,7 +939,7 @@ app.post(
 
 app.post(
   "/repo/:repoId/sha/:sha/amend",
-  cors(corsOptionsDelegate),
+  cors(corsNoNullOriginDelegate),
   async (req, res): Promise<void> => {
     const repoId = req.params["repoId"];
     const sha = req.params["sha"];
@@ -994,7 +989,7 @@ app.post(
 
 app.post(
   "/repo/:repoId/sha/:sha/autofix",
-  cors(corsOptionsDelegate),
+  cors(corsNoNullOriginDelegate),
   async (req, res): Promise<void> => {
     const repoId = req.params["repoId"];
     const sha = req.params["sha"];
@@ -1046,7 +1041,7 @@ app.post(
 
 app.post(
   "/repo/:repoId/stash",
-  cors(corsOptionsDelegate),
+  cors(corsNoNullOriginDelegate),
   async (req, res): Promise<void> => {
     const repoId = req.params["repoId"];
     const renderedState = await stashChanges(datasource, repoId);
@@ -1071,7 +1066,7 @@ app.post(
 
 app.post(
   "/repo/:repoId/popstash",
-  cors(corsOptionsDelegate),
+  cors(corsNoNullOriginDelegate),
   async (req, res): Promise<void> => {
     const repoId = req.params["repoId"];
     const renderedState = await popStashedChanges(datasource, repoId);
@@ -1096,7 +1091,7 @@ app.post(
 
 app.post(
   "/repo/:repoId/discard",
-  cors(corsOptionsDelegate),
+  cors(corsNoNullOriginDelegate),
   async (req, res): Promise<void> => {
     const repoId = req.params["repoId"];
     const renderedState = await discardCurrentChanges(datasource, repoId);
@@ -1121,7 +1116,7 @@ app.post(
 
 app.post(
   "/repo/:repoId/branch",
-  cors(corsOptionsDelegate),
+  cors(corsNoNullOriginDelegate),
   async (req, res): Promise<void> => {
     const repoId = req.params["repoId"];
     if (!repoId) {
@@ -1188,7 +1183,7 @@ app.post(
 
 app.post(
   "/repo/:repoId/branch/update",
-  cors(corsOptionsDelegate),
+  cors(corsNoNullOriginDelegate),
   async (req, res): Promise<void> => {
     const repoId = req.params["repoId"];
     if (!repoId) {
@@ -1242,7 +1237,7 @@ app.post(
 
 app.post(
   "/repo/:repoId/branch/switch",
-  cors(corsOptionsDelegate),
+  cors(corsNoNullOriginDelegate),
   async (req, res): Promise<void> => {
     const repoId = req.params["repoId"];
     if (!repoId) {
@@ -1300,7 +1295,7 @@ app.post(
 
 app.get(
   "/repo/:repoId/branch/:branchId/is_protected",
-  cors(corsOptionsDelegate),
+  cors(corsNoNullOriginDelegate),
   async (req, res): Promise<void> => {
     const repoId = req.params["repoId"];
     if (!repoId) {
@@ -1327,7 +1322,7 @@ app.get(
 
 app.post(
   "/repo/:repoId/branch/:branchId/delete",
-  cors(corsOptionsDelegate),
+  cors(corsNoNullOriginDelegate),
   async (req, res): Promise<void> => {
     const repoId = req.params["repoId"];
     if (!repoId) {
@@ -1380,7 +1375,7 @@ app.post(
 
 app.get(
   "/repo/:repoId/settings",
-  cors(corsOptionsDelegate),
+  cors(corsNoNullOriginDelegate),
   async (req, res): Promise<void> => {
     const repoId = req.params["repoId"];
     const settings = await readSettings(datasource, repoId);
@@ -1394,7 +1389,7 @@ app.get(
 
 app.post(
   "/repo/:repoId/checkout/commit/:sha",
-  cors(corsOptionsDelegate),
+  cors(corsNoNullOriginDelegate),
   async (req, res): Promise<void> => {
     const repoId = req.params["repoId"];
     if (!repoId) {
@@ -1450,7 +1445,7 @@ app.post(
 
 app.get(
   "/repo/:repoId/branches",
-  cors(corsOptionsDelegate),
+  cors(corsNoNullOriginDelegate),
   async (req, res): Promise<void> => {
     const repoId = req.params["repoId"];
     const branches = await getRepoBranches(datasource, repoId);
@@ -1464,7 +1459,7 @@ app.get(
 
 app.post(
   "/repo/:repoId/description",
-  cors(corsOptionsDelegate),
+  cors(corsNoNullOriginDelegate),
   async (req, res): Promise<void> => {
     const repoId = req.params["repoId"];
     const renderedState = await writeRepoDescription(
@@ -1493,7 +1488,7 @@ app.post(
 
 app.post(
   "/repo/:repoId/licenses",
-  cors(corsOptionsDelegate),
+  cors(corsNoNullOriginDelegate),
   async (req, res): Promise<void> => {
     const repoId = req.params["repoId"];
     const renderedState = await writeRepoLicenses(
@@ -1522,7 +1517,7 @@ app.post(
 
 app.get(
   "/repo/:repoId/plugin/:pluginName/:version/compatability",
-  cors(corsOptionsDelegate),
+  cors(corsNoNullOriginDelegate),
   async (req, res): Promise<void> => {
     const repoId = req.params["repoId"];
     if (!repoId) {
@@ -1633,7 +1628,7 @@ app.get(
 
 app.get(
   "/repo/:repoId/plugin/:pluginName/:version/canuninstall",
-  cors(corsOptionsDelegate),
+  cors(corsNoNullOriginDelegate),
   async (req, res): Promise<void> => {
     const repoId = req.params["repoId"];
     if (!repoId) {
@@ -1672,7 +1667,7 @@ app.get(
 
 app.post(
   "/repo/:repoId/developmentplugins",
-  cors(corsOptionsDelegate),
+  cors(corsNoNullOriginDelegate),
   async (req, res) => {
     const repoId = req.params["repoId"];
     if (!repoId) {
@@ -1792,7 +1787,7 @@ app.post(
 
 app.post(
   "/repo/:repoId/plugin/:pluginName/canupdate",
-  cors(corsOptionsDelegate),
+  cors(corsNoNullOriginDelegate),
   async (req, res): Promise<void> => {
     const repoId = req.params["repoId"];
     if (!repoId) {
@@ -1867,7 +1862,7 @@ app.post(
 
 app.get(
   "/repo/:repoId/manifestlist",
-  cors(corsOptionsDelegate),
+  cors(corsNoNullOriginDelegate),
   async (req, res): Promise<void> => {
     const repoId = req.params["repoId"];
     if (!repoId) {
@@ -1881,9 +1876,38 @@ app.get(
       return null;
     }
 
+    let pluginList = renderedState.plugins;
+    const repoState = await datasource.readCurrentRepoState(repoId);
+    if (repoState.commandMode == "compare") {
+
+      if (repoState.comparison?.against == "branch") {
+        const comparatorBranch = repoState?.comparison?.branch
+          ? await datasource.readBranch(repoId, repoState?.comparison?.branch)
+          : null;
+        const branchState = await getCommitState(
+          datasource,
+          repoId,
+          comparatorBranch?.lastCommit
+        );
+        pluginList = uniqueKVList([...pluginList, ...branchState.plugins]);
+      }
+      if (repoState.comparison?.against == "sha") {
+        const commitState = await getCommitState(
+          datasource,
+          repoId,
+          repoState.comparison?.commit
+        );
+        pluginList = uniqueKVList([...pluginList, ...commitState.plugins]);
+      }
+      if (repoState.comparison?.against == "wip") {
+          const unstagedState = await getUnstagedCommitState(datasource, repoId);
+          pluginList = uniqueKVList([...pluginList, ...unstagedState.plugins]);
+      }
+    }
+
     const currentManifests = await getPluginManifests(
       datasource,
-      renderedState.plugins
+      pluginList
     );
     for (let manifest of currentManifests) {
       const upstreamDeps = await getUpstreamDependencyManifests(
@@ -1906,7 +1930,7 @@ app.get(
 
 app.get(
   "/repo/:repoId/plugin/:pluginName/:version/manifestlist",
-  cors(corsOptionsDelegate),
+  cors(corsNoNullOriginDelegate),
   async (req, res): Promise<void> => {
     const repoId = req.params["repoId"];
     if (!repoId) {
@@ -1956,7 +1980,7 @@ app.get(
 
 app.post(
   "/repo/:repoId/plugins",
-  cors(corsOptionsDelegate),
+  cors(corsNoNullOriginDelegate),
   async (req, res): Promise<void> => {
     const repoId = req.params["repoId"];
     const renderedState = await updatePlugins(
@@ -1985,7 +2009,7 @@ app.post(
 
 app.post(
   "/repo/:repoId/plugin/:pluginName/state",
-  cors(corsOptionsDelegate),
+  cors(corsNoNullOriginDelegate),
   async (req, res): Promise<void> => {
     const repoId = req.params["repoId"];
     const pluginName = req.params["pluginName"];
@@ -2046,7 +2070,7 @@ app.post(
 
 app.get(
   "/repo/:repoId/clone/state",
-  cors(corsOptionsDelegate),
+  cors(corsNoNullOriginDelegate),
   async (req, res): Promise<void> => {
     const repoId = req.params["repoId"];
     if (!repoId) {
@@ -2059,7 +2083,7 @@ app.get(
 
 app.get(
   "/repo/:repoId/clone",
-  cors(corsOptionsDelegate),
+  cors(corsNoNullOriginDelegate),
   async (req, res): Promise<void> => {
     const repoId = req.params["repoId"];
     if (!repoId) {
@@ -2074,7 +2098,7 @@ app.get(
   }
 );
 
-app.post("/login", cors(remoteHostCors), async (req, res) => {
+app.post("/login", cors(corsNoNullOriginDelegate), async (req, res) => {
   if (
     req?.body?.__typename == "PassedLoginAction" ||
     req?.body?.__typename == "AccountCreationSuccessAction"
@@ -2089,7 +2113,7 @@ app.post("/login", cors(remoteHostCors), async (req, res) => {
   }
 });
 
-app.post("/logout", cors(remoteHostCors), async (req, res) => {
+app.post("/logout", cors(corsNoNullOriginDelegate), async (req, res) => {
   try {
     await removeUserSession();
     await removeUser();
@@ -2100,14 +2124,14 @@ app.post("/logout", cors(remoteHostCors), async (req, res) => {
   res.send({ message: "ok" });
 });
 
-app.get("/device", cors(remoteHostCors), async (req, res) => {
+app.get("/device", cors(corsNoNullOriginDelegate), async (req, res) => {
   const mac = await macaddres.one();
   const hash = sha256(mac);
   const id = HexEncode.stringify(hash);
   res.send({ id });
 });
 
-app.post("/complete_signup", cors(remoteHostCors), async (req, res) => {
+app.post("/complete_signup", cors(corsNoNullOriginDelegate), async (req, res) => {
   if (req?.body?.__typename == "CompleteSignupAction") {
     broadcastAllDevices("complete_signup", req.body);
     broadcastToClient("desktop", "bring-to-front", null);
@@ -2128,6 +2152,11 @@ app.use(
 
 app.post("/binary/upload", async (req, res) => {
   try {
+    const token = req?.query?.token ?? ''
+    if (token != binarySession.token) {
+        res.sendStatus(400);
+        return;
+    }
     // fix this
     res.header("Access-Control-Allow-Origin", "*");
 
@@ -2214,6 +2243,11 @@ app.post("/binary/upload", async (req, res) => {
 });
 
 app.get("/binary/:binaryRef", async (req, res) => {
+  const token = req?.query?.token ?? ''
+  if (token != binarySession.token) {
+      res.sendStatus(400);
+      return;
+  }
   res.header("Access-Control-Allow-Origin", "*");
   const binaryRef = req?.params?.["binaryRef"];
   const binSubDir = path.join(vBinariesPath, binaryRef.substring(0, 2));
@@ -2235,27 +2269,13 @@ app.get("/binary/:binaryRef", async (req, res) => {
   readStream.on("close", () => res.end());
 });
 
-for (let plugin in pluginsJSON.plugins) {
-  let pluginInfo = pluginsJSON.plugins[plugin];
-  if (pluginInfo["proxy"]) {
-    const proxy = createProxyMiddleware("/plugins/" + plugin + "/dev", {
-      target: pluginInfo["host"],
-      secure: true,
-      ws: false,
-      changeOrigin: false,
-      logLevel: "silent",
-    });
-    app.use(proxy);
-  }
-}
-
 app.get(
   "/plugins/:pluginName/dev@*",
-  cors(corsOptionsDelegate),
   async (req, res) => {
     const pluginName = req?.params?.["pluginName"];
     const pluginVersion = req.path.split("/")[3];
     const [, version] = pluginVersion.split("@");
+    res.setHeader("Access-Control-Allow-Origin", "null");
     if (!version) {
       res.sendStatus(404);
       return;
@@ -2270,9 +2290,7 @@ app.get(
     const pathRemainer = req.path.substring(basePath.length)?.split("?")[0];
     if (
       !pathRemainer ||
-      pathRemainer == "/" ||
-      pathRemainer == "/write" ||
-      pathRemainer == "/write/"
+      pathRemainer == "/"
     ) {
       const filePath = path.join(vDEVPath, pluginName, version, "index.html");
       const exists = await existsAsync(filePath);
@@ -2308,9 +2326,22 @@ app.get(
   }
 );
 
+for (let plugin in pluginsJSON.plugins) {
+  let pluginInfo = pluginsJSON.plugins[plugin];
+  if (pluginInfo["proxy"]) {
+    const proxy = createProxyMiddleware("/plugins/" + plugin + "/dev", {
+      target: pluginInfo["host"],
+      secure: true,
+      ws: false,
+      changeOrigin: false,
+      logLevel: "silent",
+    });
+    app.use(proxy);
+  }
+}
+
 app.get(
   "/plugins/:pluginName/:pluginVersion*",
-  cors(corsOptionsDelegate),
   async (req, res) => {
     res.header("Access-Control-Allow-Origin", "*");
     const pluginName = req?.params?.["pluginName"];
@@ -2374,6 +2405,7 @@ app.get(
     res.send(file.toString());
   }
 );
+
 
 server.listen(port, host, () =>
   console.log("floro server started on " + host + ":" + port)

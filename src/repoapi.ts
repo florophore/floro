@@ -1,5 +1,6 @@
 import path from "path";
 import { existsAsync, vReposPath, getUserAsync } from "./filestructure";
+import binarySession from "./binary_session";
 import {
   getCurrentBranch,
   getUnstagedCommitState,
@@ -3729,6 +3730,8 @@ export const renderApiReponse = async (
     : null;
   const checkedOutBranchIds = await getCheckoutBranchIds(datasource, repoId);
 
+  const binaryToken = binarySession.token;
+
   if (repoState.commandMode == "edit") {
     const unstagedState = await getUnstagedCommitState(datasource, repoId);
     const isWIP =
@@ -3756,7 +3759,8 @@ export const renderApiReponse = async (
       canPopStashedChanges,
       stashSize,
       mergeCommit,
-      checkedOutBranchIds
+      checkedOutBranchIds,
+      binaryToken
     };
   }
 
@@ -3769,7 +3773,7 @@ export const renderApiReponse = async (
         repoId,
         repoState,
         unstagedState,
-        applicationKVState
+        applicationKVState,
       ));
     return {
       apiStoreInvalidity,
@@ -3781,7 +3785,8 @@ export const renderApiReponse = async (
       lastCommit,
       isWIP,
       mergeCommit,
-      checkedOutBranchIds
+      checkedOutBranchIds,
+      binaryToken
     };
   }
   if (repoState.commandMode == "compare") {
@@ -3830,7 +3835,8 @@ export const renderApiReponse = async (
         beforeManifests: manifests,
         beforeSchemaMap: schemaMap,
         mergeCommit,
-        checkedOutBranchIds
+        checkedOutBranchIds,
+        binaryToken
       };
     }
     return {
@@ -3849,7 +3855,8 @@ export const renderApiReponse = async (
       beforeSchemaMap,
       mergeCommit,
       conflictResolution,
-      checkedOutBranchIds
+      checkedOutBranchIds,
+      binaryToken
     };
   }
   return null;
