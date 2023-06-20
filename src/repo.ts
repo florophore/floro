@@ -889,8 +889,8 @@ export const getBaseDivergenceSha = (
 export const getDivergenceOriginSha = async (
   datasource: DataSource,
   repoId: string,
-  fromSha: string,
-  intoSha: string
+  fromSha?: string,
+  intoSha?: string
 ) => {
   const fromHistory = await getHistory(datasource, repoId, fromSha);
   if (!fromHistory) {

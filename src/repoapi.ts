@@ -54,9 +54,7 @@ import {
 import {
   CommitData,
   DiffElement,
-  getDiff,
   getDiffHash,
-  getTextDiff,
   splitTextForDiff,
 } from "./sequenceoperations";
 import {

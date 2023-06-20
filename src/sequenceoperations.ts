@@ -298,6 +298,10 @@ export const getMergeSequence = (
     return from;
   }
 
+  if (fromIsEqualToOrigin && intoIsEqualToOrigin) {
+    return origin;
+  }
+
   const lcs = getGreatestCommonLCS(origin, from, into);
   if (lcs.length == 0) {
     return getMergeSubSequence(from, into, direction);
