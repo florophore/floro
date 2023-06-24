@@ -6,6 +6,8 @@ import {
   getCurrentCommitSha,
   getCommitState,
   convertCommitStateToRenderedState,
+  branchIdIsCyclic,
+  Branch,
 } from "../src/repo";
 import {
   getApplicationState,
@@ -1853,4 +1855,52 @@ describe("repoapi", () => {
       });
     });
   });
+
+  describe("branch id cycles", () => {
+    test("returns true when branches are cyclic", () => {
+      const branches = [
+        {
+          id: "A",
+          baseBranchId: "C"
+        },
+        {
+          id: "B",
+          baseBranchId: "A"
+        },
+        {
+          id: "C",
+          baseBranchId: "B"
+        },
+      ] as Array<Branch>;
+      const isCylicA = branchIdIsCyclic("A", branches);
+      expect(isCylicA).toBe(true);
+      const isCylicB = branchIdIsCyclic("B", branches);
+      expect(isCylicB).toBe(true);
+      const isCylicC = branchIdIsCyclic("C", branches);
+      expect(isCylicC).toBe(true);
+    });
+
+    test("returns false when branches are acyclic", () => {
+      const branches = [
+        {
+          id: "A",
+          baseBranchId: null
+        },
+        {
+          id: "B",
+          baseBranchId: "A"
+        },
+        {
+          id: "C",
+          baseBranchId: "B"
+        },
+      ] as Array<Branch>;
+      const isCylicA = branchIdIsCyclic("A", branches);
+      expect(isCylicA).toBe(false);
+      const isCylicB = branchIdIsCyclic("B", branches);
+      expect(isCylicB).toBe(false);
+      const isCylicC = branchIdIsCyclic("C", branches);
+      expect(isCylicC).toBe(false);
+    });
+  })
 });

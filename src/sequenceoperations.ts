@@ -27,6 +27,7 @@ export type StringDiff = {
 
 export interface CommitData {
   sha?: string;
+  originalSha?: string;
   diff: StateDiff;
   userId: string;
   username: string;
@@ -119,7 +120,9 @@ export const getDiffHash = (commitData: CommitData): string => {
       commitData.idx
     }/mergeBase:${commitData?.mergeBase ?? "none"}/revertFromSha:${
       commitData.revertFromSha ?? "none"
-    }/revertToSha:${commitData.revertToSha ?? "none"}/diff:${diffString}`;
+    }/revertToSha:${commitData.revertToSha ?? "none"}/originalSha:${
+      commitData?.originalSha ?? "none"
+    }/diff:${diffString}`;
     return Crypto.SHA256(str);
   }
   if (!commitData.parent) {
@@ -135,7 +138,9 @@ export const getDiffHash = (commitData: CommitData): string => {
       commitData.idx
     }/mergeBase:${commitData?.mergeBase ?? "none"}/revertFromSha:${
       commitData.revertFromSha ?? "none"
-    }/revertToSha:${commitData.revertToSha ?? "none"}/diff:${diffString}`;
+    }/revertToSha:${commitData.revertToSha ?? "none"}/originalSha:${
+      commitData?.originalSha ?? "none"
+    }/diff:${diffString}`;
     return Crypto.SHA256(str);
   }
   if (!commitData.historicalParent) {
@@ -151,7 +156,7 @@ export const getDiffHash = (commitData: CommitData): string => {
       commitData?.mergeBase ?? "none"
     }/revertFromSha:${commitData.revertFromSha ?? "none"}/revertToSha:${
       commitData.revertToSha ?? "none"
-    }/diff:${diffString}`;
+    }/originalSha:${commitData?.originalSha ?? "none"}/diff:${diffString}`;
     return Crypto.SHA256(str);
   }
   const str = `userId:${commitData.userId}/username:${
@@ -166,7 +171,9 @@ export const getDiffHash = (commitData: CommitData): string => {
     commitData.idx
   }/mergeBase:${commitData?.mergeBase ?? "none"}/revertFromSha:${
     commitData.revertFromSha ?? "none"
-  }/revertToSha:${commitData.revertToSha ?? "none"}/diff:${diffString}`;
+  }/revertToSha:${commitData.revertToSha ?? "none"}/originalSha:${
+    commitData?.originalSha ?? "none"
+  }/diff:${diffString}`;
   return Crypto.SHA256(str);
 };
 

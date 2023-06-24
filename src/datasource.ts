@@ -657,6 +657,7 @@ const readCommits = async (
         return commits.map((commit) => {
           return {
             sha: commit.sha,
+            originalSha: commit.originalSha,
             parent: commit.parent,
             historicalParent: commit.historicalParent,
             userId: commit.userId,

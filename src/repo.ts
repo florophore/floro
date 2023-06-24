@@ -108,6 +108,7 @@ export interface Comparison {
   comparisonDirection: "forward" | "backward";
   branch: string | null;
   commit: string | null;
+  same: boolean;
 }
 
 export interface RepoState {
@@ -207,6 +208,7 @@ export interface BranchesMetaState {
 
 export interface CommitHistory {
   sha: null | string;
+  originalSha?: null | string;
   parent: null | string;
   historicalParent: null | string;
   mergeBase: null | string;
@@ -257,6 +259,16 @@ export interface ConflictList {
   };
 }
 
+export interface DivergenceOrigin {
+  trueOrigin: string|null;
+  fromOrigin: string|null;
+  intoOrigin: string|null;
+  fromLastCommonAncestor: string|null;
+  intoLastCommonAncestor: string|null;
+  basedOn: "into" | "from";
+  rebaseShas: Array<string>;
+}
+
 export interface ApiResponse {
   repoState: RepoState;
   applicationState: RenderedApplicationState;
@@ -277,6 +289,8 @@ export interface ApiResponse {
   conflictResolution?: ConflictList;
   checkedOutBranchIds: Array<string>;
   binaryToken: string;
+  divergenceOrigin?: DivergenceOrigin;
+  divergenceSha?: string;
 }
 
 export interface SourceGraphResponse {
@@ -858,6 +872,7 @@ export const getHistory = async (
   return [
     {
       sha,
+      originalSha: commit?.originalSha,
       idx: commit.idx,
       message: commit.message,
       mergeBase: commit.mergeBase,
@@ -870,28 +885,89 @@ export const getHistory = async (
   ];
 };
 
-export const getBaseDivergenceSha = (
-  history: Array<CommitHistory>,
-  origin: CommitData
-): CommitHistory => {
-  if (!origin) {
-    return null;
-  }
-  const baseIdx = origin.idx + 1;
-  for (const commit of history) {
-    if (commit.idx == baseIdx) {
-      return commit;
-    }
-  }
-  return null;
-};
+/***
+ * This is a kind of difficult problem to understand so I'm going to
+ * illustrate with ascii, in hopes that it helps explain a little or help recall the complexity.
+ * See the following version tree, branches are denoted by *
+ *
+ *                      * F2
+ *            - (I) -- (J)
+ *          /      * main
+ *  (A) -- (B) -- (C)
+ *     \           * F1
+ *       - (X) -- (Y)
+ *
+ * first we merge main -> F1 (into)
+ *
+ *                      * F2
+ *            - (I) -- (J)
+ *          /      * main
+ *  (A) -- (B) -- (C)
+ *     \                                  * F1
+ *       - (X) -- (Y) -- (B') -- (C') -- (M0)
+ *
+ * this is a simple merge since the true divergent origin really is just A
+ *
+ * next we merge main -> F2 (into)
+ *
+ *                                     * F2
+ *            - (I) -- (J) -- (C'') -- (M1)
+ *          /      * main
+ *  (A) -- (B) -- (C)
+ *     \                                  * F1
+ *       - (X) -- (Y) -- (B') -- (C') -- (M0)
+ *
+ * Again, this is a simple merge since the true divergent origin really is just A
+ *
+ * next we merge F1 -> main (into)
+ *
+ *
+ *                                     * F2
+ *            - (I) -- (J) -- (C'') -- (M1)
+ *          /
+ *  (A) -- (B) -- (C)
+ *     \                                  * F1, main
+ *       - (X) -- (Y) -- (B') -- (C') -- (M0)
+ *
+ * because F1 contains B', we know to just rebase any un-rebased sha onto the rebase list after (B) in A->B->C.
+ * because C is already rebased in A->X->Y->B'->C'->M0, the rebaseList is empty
+ * Since the list is empty, there is no merge to be performed and we simply shift the branch head
+ * of main, to M0
+ *
+ *
+ *
+ * next we merge F2 -> main (into)
+ *
+ *                                     * F2
+ *            - (I) -- (J) -- (C'') -- (M1)
+ *          /
+ *  (A) -- (B) -- (C)
+ *     \                                  * F1                             *main
+ *       - (X) -- (Y) -- (B') -- (C') -- (M0) -- (I') -- (J') -- (M1') -- (M2)
+ *
+ *
+ * Merging in either direction should result in exaclty the same tree lineage. origin of the two commits
+ * is really B and B'. Since the F2 tree A->B->I->J->C''->M1, contains the orginalSha of B, we skip over the
+ * C'' in the rebaseList due to the fact that it has already been accounted for in the M1 lineage. This merge is
+ * communative. The only difference is which branch head is ultimately updated by merging.
+ *
+ * subsequently if we merge F1 -> main (into) and F2 -> main (into). This is the minimum amount of commits we
+ * can theoretically produce, to create an idempotent history preserving lineage
+ *
+ *
+ *            - (I) -- (J) -- (C'') -- (M1)
+ *          /
+ *  (A) -- (B) -- (C)
+ *     \                                                                  *main, F1, F2
+ *       - (X) -- (Y) -- (B') -- (C') -- (M0) -- (I') -- (J') -- (M1') -- (M2)
+ */
 
-export const getDivergenceOriginSha = async (
+export const getDivergenceOrigin = async (
   datasource: DataSource,
   repoId: string,
   fromSha?: string,
   intoSha?: string
-) => {
+): Promise<DivergenceOrigin> => {
   const fromHistory = await getHistory(datasource, repoId, fromSha);
   if (!fromHistory) {
     throw "missing history";
@@ -906,16 +982,146 @@ export const getDivergenceOriginSha = async (
   const shorterHistory =
     fromHistory.length < intoHistory.length ? fromHistory : intoHistory;
   const visited = new Set();
+  const intoVisited: { [idx: number]: CommitHistory } = {};
+  const intoLookup: { [sha: string]: CommitHistory } = {};
+  const intoOriginalLookup: { [sha: string]: CommitHistory } = {};
+  const fromVisited: { [idx: number]: CommitHistory } = {};
+  const fromLookup: { [sha: string]: CommitHistory } = {};
+  const fromOriginalLookup: { [sha: string]: CommitHistory } = {};
   for (let historyObj of shorterHistory) {
     visited.add(historyObj.sha);
-  }
-  for (let historyObj of longerHistory) {
-    if (visited.has(historyObj.sha)) {
-      return historyObj.sha;
+    if (fromHistory.length >= intoHistory.length) {
+      if (historyObj?.originalSha) {
+        intoOriginalLookup[historyObj?.originalSha] = historyObj;
+      }
+      intoVisited[historyObj.idx] = historyObj;
+      intoLookup[historyObj.sha] = historyObj;
+    } else {
+      if (historyObj?.originalSha) {
+        fromOriginalLookup[historyObj?.originalSha] = historyObj;
+      }
+      fromVisited[historyObj.idx] = historyObj;
+      fromLookup[historyObj.sha] = historyObj;
     }
   }
-  return null;
+  let trueOriginObj: CommitHistory | null = null;
+  for (let historyObj of longerHistory) {
+    if (fromHistory.length >= intoHistory.length) {
+      if (historyObj?.originalSha) {
+        fromOriginalLookup[historyObj?.originalSha] = historyObj;
+      }
+      fromVisited[historyObj.idx] = historyObj;
+      fromLookup[historyObj.sha] = historyObj;
+    } else {
+      if (historyObj?.originalSha) {
+        intoOriginalLookup[historyObj?.originalSha] = historyObj;
+      }
+      intoVisited[historyObj.idx] = historyObj;
+      intoLookup[historyObj.sha] = historyObj;
+    }
+    if (visited.has(historyObj.sha)) {
+      trueOriginObj = historyObj;
+      break;
+    }
+  }
+
+  if (trueOriginObj) {
+    let fromLastCommonAncestor = trueOriginObj.sha;
+    let intoLastCommonAncestor = trueOriginObj.sha;
+    for (let i = trueOriginObj.idx; i <= (fromHistory?.[0]?.idx ?? -1); ++i) {
+      const historyObj = fromVisited[i];
+      const rebaseShas = [];
+      if (intoOriginalLookup[historyObj.sha] ) {
+        intoLastCommonAncestor = historyObj.sha;
+        fromLastCommonAncestor = intoOriginalLookup[historyObj?.sha].sha;
+        for (let j = i + 1; j <= (fromHistory?.[0]?.idx ?? -1); ++j) {
+          const rebaseObj = fromVisited[j];
+          if ((!rebaseObj?.originalSha && !intoOriginalLookup?.[rebaseObj.sha]) || (historyObj.originalSha && !intoOriginalLookup?.[rebaseObj.originalSha])) {
+            rebaseShas.push(rebaseObj.sha)
+          } else {
+            intoLastCommonAncestor = rebaseObj.sha;
+            fromLastCommonAncestor = rebaseObj?.originalSha ? intoOriginalLookup?.[rebaseObj.originalSha]?.sha : intoOriginalLookup?.[rebaseObj.sha]?.sha;
+          }
+        }
+        return {
+          trueOrigin: trueOriginObj.sha,
+          fromOrigin: historyObj.sha,
+          intoOrigin: intoOriginalLookup[historyObj?.sha].sha,
+          fromLastCommonAncestor,
+          intoLastCommonAncestor,
+          basedOn: "into",
+          rebaseShas
+        }
+      }
+    }
+    for (let i = trueOriginObj.idx; i <= (intoHistory?.[0]?.idx ?? -1); ++i) {
+      const historyObj = intoVisited[i];
+      const rebaseShas = [];
+      if (fromOriginalLookup[historyObj.sha]) {
+
+        intoLastCommonAncestor = fromOriginalLookup[historyObj?.sha ?? historyObj?.originalSha].sha;
+        fromLastCommonAncestor = historyObj.sha;
+        for (let j = i + 1; j <= (intoHistory?.[0]?.idx ?? -1); ++j) {
+          const rebaseObj = intoVisited[j];
+          if ((!rebaseObj?.originalSha && !fromOriginalLookup?.[rebaseObj.sha]) || (rebaseObj.originalSha && !fromOriginalLookup?.[rebaseObj.originalSha])) {
+            rebaseShas.push(rebaseObj.sha)
+          } else {
+            fromLastCommonAncestor = rebaseObj.sha;
+            intoLastCommonAncestor = rebaseObj?.originalSha ? fromOriginalLookup?.[rebaseObj.originalSha]?.sha : fromOriginalLookup?.[rebaseObj.sha]?.sha;
+          }
+        }
+
+        return {
+          trueOrigin: trueOriginObj.sha,
+          fromOrigin: fromOriginalLookup[historyObj?.sha ?? historyObj?.originalSha].sha,
+          intoOrigin: historyObj.sha,
+          fromLastCommonAncestor,
+          intoLastCommonAncestor,
+          basedOn: "from",
+          rebaseShas
+        }
+      }
+    }
+
+    const rebaseShas = [];
+    for (let i = trueOriginObj.idx + 1; i <= (fromHistory?.[0]?.idx ?? -1); ++i) {
+      const historyObj = fromVisited[i];
+      if (!intoOriginalLookup[historyObj.sha]) {
+          rebaseShas.push(historyObj.sha)
+      }
+    }
+    return {
+      trueOrigin: trueOriginObj.sha,
+      fromOrigin: trueOriginObj.sha,
+      intoOrigin: trueOriginObj.sha,
+      fromLastCommonAncestor,
+      intoLastCommonAncestor,
+      basedOn: "into",
+      rebaseShas
+    }
+  }
+  return {
+    trueOrigin: null,
+    fromOrigin: null,
+    intoOrigin: null,
+    fromLastCommonAncestor: null,
+    intoLastCommonAncestor: null,
+    basedOn: "into",
+    rebaseShas: []
+  }
 };
+
+export const getMergeOriginSha = (
+  divergeOrigin: DivergenceOrigin | null
+): null|string => {
+  if (!divergeOrigin) {
+    return null;
+  }
+  if (divergeOrigin.basedOn == "from") {
+    return divergeOrigin.fromOrigin;
+  }
+  return divergeOrigin.intoOrigin;
+}
 
 export const getCommitState = async (
   datasource: DataSource,
@@ -1074,10 +1280,25 @@ export const updateCurrentWithNewBranch = async (
     if (current.isInMergeConflict) {
       return null;
     }
+    let same = false;
+    if (current.comparison) {
+      if (current.comparison.against == "branch") {
+        const comparingBranch = await datasource.readBranch(repoId, current.branch);
+        same = comparingBranch?.lastCommit == branch?.lastCommit;
+      } else if (current.comparison.against == "sha") {
+        same = current.comparison.commit == branch?.lastCommit;
+      } else {
+        same = true;
+      }
+    }
     const updated = {
       ...current,
       commit: branch?.lastCommit,
       branch: branch.id,
+      comparison: current.comparison ? {
+        ...current.comparison,
+        same
+      } : null
     };
     await datasource.saveCurrentRepoState(repoId, updated);
     const unrenderedState = await getCommitState(
@@ -1096,6 +1317,22 @@ export const updateCurrentWithNewBranch = async (
   }
 };
 
+export const branchIdIsCyclic = (branchId: string, branches: Branch[], visited: Set<string> = new Set()) =>{
+  if (visited.has(branchId)) {
+    return true;
+  }
+  visited.add(branchId);
+  for (const branch of branches) {
+    if (branch?.baseBranchId && branch.baseBranchId == branchId) {
+      const hasCycle = branchIdIsCyclic(branch.id, branches, new Set(Array.from(visited)));
+      if (hasCycle) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 export const updateCurrentBranch = async (
   datasource: DataSource,
   repoId: string,
@@ -1107,10 +1344,26 @@ export const updateCurrentBranch = async (
       return null;
     }
     const branch = await datasource.readBranch(repoId, branchId);
+
+    let same = false
+    if (current.comparison) {
+      if (current.comparison.against == "branch") {
+        const comparingBranch = await datasource.readBranch(repoId, current.branch);
+        same = comparingBranch?.lastCommit == branch?.lastCommit;
+      } else if (current.comparison.against == "sha") {
+        same = current.comparison.commit == branch?.lastCommit;
+      } else {
+        same = true;
+      }
+    }
     const updated = {
       ...current,
       commit: branch.lastCommit,
       branch: branchId,
+      comparison: current?.comparison ? {
+        ...current?.comparison,
+        same
+      } : null
     };
     await datasource.saveBranch(repoId, branchId, branch);
     return await datasource.saveCurrentRepoState(repoId, updated);
@@ -1401,12 +1654,13 @@ export const getMergeCommitStates = async (
   intoSha: string
 ) => {
   try {
-    const originSha = await getDivergenceOriginSha(
+    const divergeOrigin = await getDivergenceOrigin(
       datasource,
       repoId,
       fromSha,
       intoSha
     );
+    const originSha = getMergeOriginSha(divergeOrigin);
     const fromCommitState = await getCommitState(datasource, repoId, fromSha);
     const intoCommitState = await getCommitState(datasource, repoId, intoSha);
     const originCommit = !!originSha
@@ -1837,6 +2091,8 @@ export const getApiDiffFromComparisonState = async (
   beforeApiStoreInvalidity: ApiStoreInvalidity;
   beforeManifests: Array<Manifest>;
   beforeSchemaMap: { [pluginName: string]: Manifest };
+  divergenceOrigin: DivergenceOrigin;
+  divergenceSha: string
 }> => {
   if (repoState.comparison?.against == "branch") {
     const comparatorBranch = repoState?.comparison?.branch
@@ -1865,12 +2121,22 @@ export const getApiDiffFromComparisonState = async (
       branchState.plugins
     );
     const beforeSchemaMap = manifestListToSchemaMap(beforeManifests);
+
+    const divergenceOrigin = await getDivergenceOrigin(
+      datasource,
+      repoId,
+      comparatorBranch?.lastCommit as string,
+      repoState?.commit
+    );
+    const divergenceSha = getMergeOriginSha(divergenceOrigin);
     return {
       beforeState,
       beforeApiStoreInvalidity,
       beforeManifests,
       beforeSchemaMap,
       diff,
+      divergenceOrigin,
+      divergenceSha,
       apiDiff:
         repoState.comparison.comparisonDirection == "forward"
           ? getApiDiff(branchState, applicationKVState, diff)
@@ -1901,12 +2167,21 @@ export const getApiDiffFromComparisonState = async (
       commitState.plugins
     );
     const beforeSchemaMap = manifestListToSchemaMap(beforeManifests);
+    const divergenceOrigin = await getDivergenceOrigin(
+      datasource,
+      repoId,
+      repoState.comparison?.commit,
+      repoState?.commit
+    );;
+    const divergenceSha = getMergeOriginSha(divergenceOrigin);
     return {
       beforeState,
       beforeApiStoreInvalidity,
       beforeManifests,
       beforeSchemaMap,
       diff,
+      divergenceSha,
+      divergenceOrigin,
       apiDiff:
         repoState.comparison.comparisonDirection == "forward"
           ? getApiDiff(commitState, applicationKVState, diff)
@@ -1935,6 +2210,16 @@ export const getApiDiffFromComparisonState = async (
     beforeManifests,
     beforeSchemaMap,
     diff,
+    divergenceOrigin: {
+      basedOn: "into",
+      trueOrigin: repoState?.commit,
+      fromOrigin: repoState?.commit,
+      intoOrigin: repoState?.commit,
+      fromLastCommonAncestor: repoState?.commit,
+      intoLastCommonAncestor: repoState?.commit,
+      rebaseShas: []
+    },
+    divergenceSha: repoState?.commit,
     apiDiff: getApiDiff(unstagedState, applicationKVState, diff),
   };
 };
