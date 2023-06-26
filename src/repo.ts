@@ -61,6 +61,10 @@ export interface FetchInfo {
   fetchFailed: boolean;
   commits: Array<CommitExchange>;
   branches: Array<Branch>;
+  hasUnreleasedPlugins: boolean;
+  hasInvalidPlugins: boolean;
+  hasRemoteBranchCycle: boolean;
+  hasLocalBranchCycle: boolean;
 }
 
 export interface BranchRuleSettings {
@@ -562,6 +566,7 @@ export const cloneRepo = async (
     const remote = await getRemoteHostAsync();
     const session = getUserSession();
     const cloneFileExists = await datasource.checkCloneFile(repoId);
+    debugger;
     if (!cloneFileExists) {
       try {
         const cloneRequest = await axios({
@@ -576,6 +581,9 @@ export const cloneRepo = async (
           branches: Array<Branch>;
           settings: RemoteSettings;
         } = cloneRequest?.data;
+        if (cloneRequest.status != 200) {
+          return false;
+        }
         const initCloneFile: CloneFile = {
           state: "in_progress",
           downloadedCommits: 0,
@@ -748,6 +756,7 @@ export const cloneRepo = async (
     }
     return true;
   } catch (e) {
+    console.log("E", e);
     return false;
   }
 };
@@ -2224,6 +2233,38 @@ export const getApiDiffFromComparisonState = async (
   };
 };
 
+const getPluginsFromLastRemoteState = async (
+  datasource: DataSource,
+  repoId: string,
+  branch: Branch
+): Promise<Array<{ name: string; version: string }>> => {
+  const branchMetaState = await datasource.readBranchesMetaState(repoId);
+  const branchMeta = branchMetaState?.allBranches?.find((b) => {
+    return b.branchId == branch.id;
+  });
+  const history = await getHistory(datasource, repoId, branch?.lastCommit);
+  const plugins: Array<{name: string, version: string}> = [];
+  const seen = new Set<string>();
+  for (const { sha } of history) {
+    if (sha == branchMeta?.lastRemoteCommit) {
+      break;
+    }
+    const commit = await datasource.readCommit(repoId, sha);
+    for (const { key, value} of Object.values(commit?.diff?.plugins?.add ?? {})) {
+      const pvKeyName = `${key}:${value}`;
+      if (seen.has(pvKeyName)) {
+        continue;
+      }
+      seen.add(pvKeyName);
+      plugins.push({
+        name: key,
+        version: value
+      })
+    }
+  }
+  return plugins;
+};
+
 export const getRemoteFetchInfo = async (datasource: DataSource, repoId: string): Promise<{
       commits: Array<CommitExchange>;
       branches: Array<Branch>;
@@ -2233,14 +2274,23 @@ export const getRemoteFetchInfo = async (datasource: DataSource, repoId: string)
         kvLink: string,
         stateLink: string,
       }>;
+      pluginStatuses: Array<{
+        name: string,
+        version: string,
+        status: "ok"|"unreleased"|"invalid"
+      }>;
       settings: RemoteSettings;
+      hasRemoteBranchCycle: boolean;
       status: "ok"|"fail"
 }> => {
   try {
+    const repoState = await datasource.readCurrentRepoState(repoId);
+    const branch = await datasource?.readBranch(repoId, repoState.branch);
     const remote = await getRemoteHostAsync();
     const session = getUserSession();
     const branchMetaState = await datasource.readBranchesMetaState(repoId);
     const branchLeaves = branchMetaState.allBranches.map(bms => bms.lastLocalCommit);
+    const plugins = await getPluginsFromLastRemoteState(datasource, repoId, branch);
     const fetchRequest = await axios({
       method: "post",
       url: `${remote}/api/repo/${repoId}/fetch`,
@@ -2248,7 +2298,9 @@ export const getRemoteFetchInfo = async (datasource: DataSource, repoId: string)
         ["session_key"]: session?.clientKey,
       },
       data: {
-        branchLeaves
+        branchLeaves,
+        branch,
+        plugins
       }
     });
     const fetchInfo: {
@@ -2261,6 +2313,12 @@ export const getRemoteFetchInfo = async (datasource: DataSource, repoId: string)
         kvLink: string,
         stateLink: string,
       }>;
+      pluginStatuses: Array<{
+        name: string;
+        version: string;
+        status: "ok"|"unreleased"|"invalid"
+      }>
+      hasRemoteBranchCycle: boolean;
     } = fetchRequest?.data;
     if (fetchInfo.settings) {
       await datasource.saveRemoteSettings(repoId, fetchInfo.settings);
@@ -2276,6 +2334,8 @@ export const getRemoteFetchInfo = async (datasource: DataSource, repoId: string)
       commits: [],
       branches: [],
       branchHeadLinks: [],
+      pluginStatuses: [],
+      hasRemoteBranchCycle: false,
       status: "fail"
     }
   }

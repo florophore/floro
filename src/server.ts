@@ -17,6 +17,8 @@ import {
   vBinariesPath,
   vPluginsPath,
   getPluginsJsonAsync,
+  getUserAsync,
+  getUserSessionAsync,
 } from "./filestructure";
 import { Server } from "socket.io";
 import { createProxyMiddleware } from "http-proxy-middleware";
@@ -175,6 +177,15 @@ app.get(
   cors(corsNoNullOriginDelegate),
   async (_req, res): Promise<void> => {
     res.send("PONG");
+  }
+);
+
+app.get(
+  "/session",
+  cors(corsNoNullOriginDelegate),
+  async (_req, res): Promise<void> => {
+    const session = await getUserSessionAsync();
+    res.send(session);
   }
 );
 
@@ -2090,6 +2101,7 @@ app.get(
       res.send({ status: "failed" });
     }
     const didSucceed = await cloneRepo(datasource, repoId);
+    console.log("BRO", didSucceed);
     if (didSucceed) {
       res.send({ status: "success" });
     } else {
@@ -2098,6 +2110,10 @@ app.get(
   }
 );
 
+app.post("/kill_oauth", cors(corsNoNullOriginDelegate), async (_req, res) => {
+    broadcastToClient("desktop", "kill_oauth", null);
+    res.send({ message: "ok" });
+});
 app.post("/login", cors(corsNoNullOriginDelegate), async (req, res) => {
   if (
     req?.body?.__typename == "PassedLoginAction" ||
@@ -2107,6 +2123,7 @@ app.post("/login", cors(corsNoNullOriginDelegate), async (req, res) => {
     await writeUser(req.body.user);
     broadcastAllDevices("login", req.body);
     broadcastToClient("desktop", "bring-to-front", null);
+    broadcastAllDevices("kill_oauth", null);
     res.send({ message: "ok" });
   } else {
     res.send({ message: "error" });
@@ -2135,6 +2152,7 @@ app.post("/complete_signup", cors(corsNoNullOriginDelegate), async (req, res) =>
   if (req?.body?.__typename == "CompleteSignupAction") {
     broadcastAllDevices("complete_signup", req.body);
     broadcastToClient("desktop", "bring-to-front", null);
+    broadcastAllDevices("kill_oauth", null);
     res.send({ message: "ok" });
   } else {
     res.send({ message: "error" });
