@@ -44,7 +44,7 @@ export interface CommitData {
   message: string;
 }
 
-const fastHash = (str) => {
+const fastHash = (str: string) => {
   let hash = 0;
   let hash2 = 0;
   for (let i = 0; i < str.length; i++) {

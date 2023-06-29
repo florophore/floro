@@ -6204,7 +6204,7 @@ export const useUploadFile = () => {
       setStatus("in_progress");
       setProgress(0);
       setUploadObject(
-        startUploadFile(file, pluginState.binaryUrls.upload + "?token=" + pluginState.binaryUrls?.binaryToken, onProgress)
+        startUploadFile(file, pluginState.binaryUrls.upload + (!pluginState.binaryUrls?.binaryToken ? "" : "?token=" + pluginState.binaryUrls?.binaryToken), onProgress)
       );
     },
     [status, pluginState.binaryUrls.upload, pluginState.binaryUrls?.binaryToken, onProgress]
@@ -6219,7 +6219,7 @@ export const useUploadFile = () => {
         return;
       }
       setUploadObject(
-        startUploadBlob(data, type, pluginState.binaryUrls.upload+ "?token=" + pluginState.binaryUrls?.binaryToken, onProgress)
+        startUploadBlob(data, type, pluginState.binaryUrls.upload + (!pluginState.binaryUrls?.binaryToken ? "" : "?token=" + pluginState.binaryUrls?.binaryToken), onProgress)
       );
       setStatus("in_progress");
       setProgress(0);
@@ -6272,11 +6272,10 @@ export const useBinaryRef = (fileRef?: FileRef|null) => {
       if (pluginState.binaryMap[fileRef]) {
         return (
           pluginState.binaryMap[fileRef] +
-          "?token=" +
-          pluginState.binaryUrls?.binaryToken
+          (!pluginState.binaryUrls?.binaryToken ? "" : "?token=" + pluginState.binaryUrls?.binaryToken)
         );
       }
-      return \`\$\{pluginState.binaryUrls.download}/\$\{fileRef}\` + "?token=" + pluginState.binaryUrls?.binaryToken;
+      return \`\$\{pluginState.binaryUrls.download}/\$\{fileRef}\` + (!pluginState.binaryUrls?.binaryToken ? "" : "?token=" + pluginState.binaryUrls?.binaryToken);
     }, [
       fileRef,
       pluginState.binaryMap?.[fileRef ?? ""],

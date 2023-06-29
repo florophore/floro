@@ -9,10 +9,11 @@ import axios from "axios";
 import { broadcastAllDevices } from "./multiplexer";
 
 const ONE_WEEK = 1000 * 60 * 60 * 24 * 7;
-const HOUR_CRON = "0 * * * *";
+//const HOUR_CRON = "0 * * * *";
+const HOUR_MS = 1000 * 60;
 
 export const startSessionJob = () => {
-  cron.schedule(HOUR_CRON, async () => {
+  const sessionTest = async () => {
     try {
       const currentSession = await getUserSessionAsync();
       if (!currentSession) {
@@ -42,5 +43,7 @@ export const startSessionJob = () => {
     } catch (e) {
       //log nothing
     }
-  });
+  }
+  setInterval(sessionTest, HOUR_MS);
+  sessionTest();
 };

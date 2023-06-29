@@ -1,5 +1,5 @@
 import path from "path";
-import { existsAsync, vReposPath, getUserAsync } from "./filestructure";
+import { existsAsync, vReposPath, getUserAsync, User } from "./filestructure";
 import binarySession from "./binary_session";
 import {
   getCurrentBranch,
@@ -81,9 +81,7 @@ import { DataSource } from "./datasource";
 import {
   SourceGraph,
   getPotentialBaseBranchesForSha,
-  getTargetBranchId,
 } from "./sourcegraph";
-import { isWithStatement } from "typescript";
 
 export const ILLEGAL_BRANCH_NAMES = new Set(["none"]);
 
@@ -1468,6 +1466,7 @@ export const getMergeRebaseCommitList = async (
   datasource: DataSource,
   repoId: string,
   fromSha: string,
+  user: User,
   includeMerge: boolean = true
 ): Promise<Array<CommitData>> => {
   if (!repoId) {
@@ -1481,7 +1480,6 @@ export const getMergeRebaseCommitList = async (
     return null;
   }
 
-  const user = await getUserAsync();
   if (!user?.id) {
     return null;
   }
@@ -1704,7 +1702,8 @@ export const mergeCommit = async (
       const rebaseList = await getMergeRebaseCommitList(
         datasource,
         repoId,
-        fromSha
+        fromSha,
+        user
       );
       if (rebaseList == null) {
         return null;
@@ -2027,6 +2026,7 @@ export const resolveMerge = async (datasource: DataSource, repoId: string) => {
       datasource,
       repoId,
       fromSha,
+      user,
       false
     );
 
@@ -4433,9 +4433,18 @@ export const getIsWip = async (
     const diff = await getMergeConflictDiff(datasource, repoId);
     return !diffIsEmpty(diff);
   }
-
   const diff = getStateDiffFromCommitStates(unstagedState, applicationKVState);
   return !diffIsEmpty(diff);
+};
+
+const combineBranches = (start: Branch[], end: Branch[]): Array<Branch> => {
+  const branchMap = [...start, ...end].reduce((acc, branch) => {
+    return {
+      ...acc,
+      [branch.id]: branch,
+    };
+  }, {} as { [branchId: string]: Branch });
+  return Object.values(branchMap);
 };
 
 export const getFetchInfo = async (
@@ -4492,14 +4501,10 @@ export const getFetchInfo = async (
     }
 
     const localBranches = await datasource.readBranches(repoId);
-    const hasLocalBranchCycle = localBranches.reduce(
-      (hasCycle, localBranch) => {
-        if (hasCycle) {
-          return true;
-        }
-        return branchIdIsCyclic(localBranch?.id, fetchInfo.branches);
-      },
-      false
+    const combinedBranches = combineBranches(localBranches, fetchInfo.branches);
+    const hasLocalBranchCycle = branchIdIsCyclic(
+      repoState?.branch,
+      combinedBranches
     );
 
     const hasUnreleasedPlugins = fetchInfo.pluginStatuses.reduce(
@@ -4836,16 +4841,15 @@ export const pull = async (
   });
   const branchesToAdd = [];
   const branchesToUpdate = [];
-  // HOW TO DEAL WITH CYCLES
   for (const branch of fetchInfo?.branches) {
     if (!localAllBranchIds.has(branch.id)) {
       const currentBranches = await datasource.readBranches(repoId);
       const isCyclic = branchIdIsCyclic(branch.id, [
-        ...currentBranches,
+        ...currentBranches.filter((b) => b.id != branch.id),
         branch,
       ]);
       if (isCyclic) {
-        return false;
+        continue;
       }
       branchesToAdd.push(branch);
       branchesMetaState.allBranches.push({
@@ -4856,14 +4860,16 @@ export const pull = async (
     } else {
       // TEST IF CYCLIC
       const currentBranches = await datasource.readBranches(repoId);
-      const isCyclic = branchIdIsCyclic(branch.id, [
-        ...currentBranches.filter((b) => b.id == branch.id),
-        branch,
+
+      const combinedBranches = combineBranches(currentBranches, [
+        ...branchesToAdd,
+        ...branchesToUpdate,
       ]);
-      if (isCyclic) {
-        return false;
-      }
+      const isCyclic = branchIdIsCyclic(branch.id, combinedBranches);
       if (branch?.id == repoState.branch) {
+        if (isCyclic) {
+          return false;
+        }
         const branchMetaData = branchesMetaState.allBranches.find(
           (b) => b.branchId == branch.id
         );
@@ -4926,6 +4932,9 @@ export const pull = async (
             return false;
           }
         } else {
+          if (isCyclic) {
+            continue;
+          }
           branchesToUpdate.push(branch);
           branchMetaData.lastLocalCommit = branch.lastCommit;
           const updated = {
@@ -4945,6 +4954,9 @@ export const pull = async (
           await datasource.saveCurrentRepoState(repoId, updated);
         }
       } else {
+        if (isCyclic) {
+          continue;
+        }
         const localBranch = await datasource.readBranch(repoId, branch.id);
         let isBranchDescendent = false;
         let currentSha = branch.lastCommit;
@@ -4972,11 +4984,24 @@ export const pull = async (
     await datasource.deleteBranch(repoId, branchIdToEvict);
   }
 
+  const currentBranches = await datasource.readBranches(repoId);
+  const combinedBranches = combineBranches(currentBranches, [
+    ...branchesToAdd,
+    ...branchesToUpdate,
+  ]);
   for (const branch of branchesToAdd) {
+    const isCyclic = branchIdIsCyclic(branch.id, combinedBranches);
+    if (isCyclic) {
+      continue;
+    }
     await datasource.saveBranch(repoId, branch.id, branch);
   }
 
   for (const branch of branchesToUpdate) {
+    const isCyclic = branchIdIsCyclic(branch.id, combinedBranches);
+    if (isCyclic) {
+      continue;
+    }
     await datasource.saveBranch(repoId, branch.id, branch);
   }
 
