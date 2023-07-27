@@ -2,6 +2,7 @@ import path from "path";
 import os from 'os';
 import fs from 'fs';
 import { Manifest } from "./plugins";
+import { Session } from "inspector";
 
 // DIRECTORIES
 // ~/
@@ -164,7 +165,7 @@ export const removeUserSession = () => {
   return fs.promises.rm(userSessionPath);
 }
 
-export const getUserSession = () => {
+export const getUserSession = (): {clientKey: string, expiresAt: string, user: User}|null => {
   try {
     const userSessionJSON = fs.readFileSync(userSessionPath, { encoding: 'utf-8' });
     return JSON.parse(userSessionJSON);
@@ -173,7 +174,7 @@ export const getUserSession = () => {
   }
 }
 
-export const getUserSessionAsync = async () => {
+export const getUserSessionAsync = async (): Promise<{clientKey: string, expiresAt: string, user: User}|null> => {
   try {
     const userSessionJSON = await fs.promises.readFile(userSessionPath, { encoding: 'utf-8' });
     return JSON.parse(userSessionJSON);

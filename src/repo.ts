@@ -2,7 +2,7 @@ import axios from "axios";
 import fs, { createWriteStream, existsSync } from "fs";
 import path from "path";
 import mime from "mime-types";
-import FormData from "form-data";
+import FormData, { from } from "form-data";
 import { DataSource } from "./datasource";
 import {
   existsAsync,
@@ -65,6 +65,7 @@ export interface FetchInfo {
   hasInvalidPlugins: boolean;
   hasRemoteBranchCycle: boolean;
   hasLocalBranchCycle: boolean;
+  hasOpenMergeRequestConflict: boolean;
 }
 
 export interface BranchRuleSettings {
@@ -75,7 +76,6 @@ export interface BranchRuleSettings {
   automaticallyDeletesMergedFeatureBranches: boolean;
   canCreateMergeRequests: boolean;
   canMergeWithApproval: boolean;
-  canMergeMergeRequests: boolean;
   canApproveMergeRequests: boolean;
   canRevert: boolean;
   canAutofix: boolean;
@@ -83,8 +83,8 @@ export interface BranchRuleSettings {
 
 export interface RemoteSettings {
   defaultBranchId: string;
+  canReadRepo: boolean;
   canPushBranches: boolean;
-  canDeleteBranches: boolean;
   canChangeSettings: boolean;
   accountInGoodStanding: boolean;
   branchRules: Array<BranchRuleSettings>;
@@ -566,7 +566,6 @@ export const cloneRepo = async (
     const remote = await getRemoteHostAsync();
     const session = getUserSession();
     const cloneFileExists = await datasource.checkCloneFile(repoId);
-    debugger;
     if (!cloneFileExists) {
       try {
         const cloneRequest = await axios({
@@ -974,8 +973,8 @@ export const getHistory = async (
 export const getDivergenceOrigin = async (
   datasource: DataSource,
   repoId: string,
-  fromSha?: string,
-  intoSha?: string
+  intoSha?: string,
+  fromSha?: string
 ): Promise<DivergenceOrigin> => {
   const fromHistory = await getHistory(datasource, repoId, fromSha);
   if (!fromHistory) {
@@ -1031,6 +1030,77 @@ export const getDivergenceOrigin = async (
     if (visited.has(historyObj.sha)) {
       trueOriginObj = historyObj;
       break;
+    }
+  }
+  if (!trueOriginObj) {
+    let fromLastCommonAncestor = null;
+    let intoLastCommonAncestor = null;
+    for (let i = 0; i <= (fromHistory?.[0]?.idx ?? -1); ++i) {
+      const historyObj = fromVisited[i];
+      const rebaseShas = [];
+      if (intoOriginalLookup[historyObj.sha] ) {
+        intoLastCommonAncestor = historyObj.sha;
+        fromLastCommonAncestor = intoOriginalLookup[historyObj?.sha].sha;
+        for (let j = i + 1; j <= (fromHistory?.[0]?.idx ?? -1); ++j) {
+          const rebaseObj = fromVisited[j];
+          if ((!rebaseObj?.originalSha && !intoOriginalLookup?.[rebaseObj.sha]) || (historyObj.originalSha && !intoOriginalLookup?.[rebaseObj.originalSha])) {
+            rebaseShas.push(rebaseObj.sha)
+          } else {
+            intoLastCommonAncestor = rebaseObj.sha;
+            fromLastCommonAncestor = rebaseObj?.originalSha ? intoOriginalLookup?.[rebaseObj.originalSha]?.sha : intoOriginalLookup?.[rebaseObj.sha]?.sha;
+          }
+        }
+        return {
+          trueOrigin: null,
+          fromOrigin: historyObj.sha,
+          intoOrigin: intoOriginalLookup[historyObj?.sha].sha,
+          fromLastCommonAncestor,
+          intoLastCommonAncestor,
+          basedOn: "into",
+          rebaseShas
+        }
+      }
+    }
+    for (let i = 0; i <= (intoHistory?.[0]?.idx ?? -1); ++i) {
+      const historyObj = intoVisited[i];
+      const rebaseShas = [];
+      if (fromOriginalLookup[historyObj.sha]) {
+
+        intoLastCommonAncestor = fromOriginalLookup[historyObj?.sha ?? historyObj?.originalSha].sha;
+        fromLastCommonAncestor = historyObj.sha;
+        for (let j = i + 1; j <= (intoHistory?.[0]?.idx ?? -1); ++j) {
+          const rebaseObj = intoVisited[j];
+          if ((!rebaseObj?.originalSha && !fromOriginalLookup?.[rebaseObj.sha]) || (rebaseObj.originalSha && !fromOriginalLookup?.[rebaseObj.originalSha])) {
+            rebaseShas.push(rebaseObj.sha)
+          } else {
+            fromLastCommonAncestor = rebaseObj.sha;
+            intoLastCommonAncestor = rebaseObj?.originalSha ? fromOriginalLookup?.[rebaseObj.originalSha]?.sha : fromOriginalLookup?.[rebaseObj.sha]?.sha;
+          }
+        }
+
+        return {
+          trueOrigin: null,
+          fromOrigin: fromOriginalLookup[historyObj?.sha ?? historyObj?.originalSha].sha,
+          intoOrigin: historyObj.sha,
+          fromLastCommonAncestor,
+          intoLastCommonAncestor,
+          basedOn: "from",
+          rebaseShas
+        }
+      }
+    }
+    const rebaseShas = [];
+    for (let i = intoHistory.length - 1; i >= 0; --i) {
+      rebaseShas.push(intoHistory[i].sha);
+    }
+    return {
+      trueOrigin: null,
+      fromOrigin: null,
+      intoOrigin: null,
+      fromLastCommonAncestor: null,
+      intoLastCommonAncestor: null,
+      basedOn: "from",
+      rebaseShas
     }
   }
 
@@ -1239,7 +1309,7 @@ export const getUnstagedCommitState = async (
   repoId: string
 ): Promise<ApplicationKVState> => {
   const currentRepoState = await datasource.readCurrentRepoState(repoId);
-  if (currentRepoState.isInMergeConflict) {
+  if (currentRepoState?.isInMergeConflict) {
     if (currentRepoState?.merge?.mergeState) {
       return currentRepoState?.merge?.mergeState;
     }
@@ -1286,7 +1356,7 @@ export const updateCurrentWithNewBranch = async (
 ): Promise<RepoState | null> => {
   try {
     const current = await datasource.readCurrentRepoState(repoId);
-    if (current.isInMergeConflict) {
+    if (current?.isInMergeConflict) {
       return null;
     }
     let same = false;
@@ -1666,8 +1736,8 @@ export const getMergeCommitStates = async (
     const divergeOrigin = await getDivergenceOrigin(
       datasource,
       repoId,
+      intoSha,
       fromSha,
-      intoSha
     );
     const originSha = getMergeOriginSha(divergeOrigin);
     const fromCommitState = await getCommitState(datasource, repoId, fromSha);
@@ -2088,6 +2158,38 @@ export const getLastCommitFromRepoState = async (
   return (await datasource.readCommit(repoId, repoState?.commit)) ?? null;
 };
 
+export const readComparisonState = async (
+  repoId: string,
+  datasource: DataSource,
+  repoState: RepoState,
+) => {
+
+  if (repoState.comparison?.against == "branch") {
+    const comparatorBranch = repoState?.comparison?.branch
+      ? await datasource.readBranch(repoId, repoState?.comparison?.branch)
+      : null;
+    const branchState = await getCommitState(
+      datasource,
+      repoId,
+      comparatorBranch?.lastCommit
+    );
+    return await convertCommitStateToRenderedState(
+      datasource,
+      branchState
+    );
+  }
+
+  if (repoState.comparison?.against == "sha") {
+    return await getCommitState(
+      datasource,
+      repoId,
+      repoState.comparison?.commit
+    );
+  }
+  // "WIP"
+  return await getUnstagedCommitState(datasource, repoId);
+}
+
 export const getApiDiffFromComparisonState = async (
   repoId: string,
   datasource: DataSource,
@@ -2134,8 +2236,8 @@ export const getApiDiffFromComparisonState = async (
     const divergenceOrigin = await getDivergenceOrigin(
       datasource,
       repoId,
+      repoState?.commit,
       comparatorBranch?.lastCommit as string,
-      repoState?.commit
     );
     const divergenceSha = getMergeOriginSha(divergenceOrigin);
     return {
@@ -2179,8 +2281,8 @@ export const getApiDiffFromComparisonState = async (
     const divergenceOrigin = await getDivergenceOrigin(
       datasource,
       repoId,
+      repoState?.commit,
       repoState.comparison?.commit,
-      repoState?.commit
     );;
     const divergenceSha = getMergeOriginSha(divergenceOrigin);
     return {
@@ -2281,6 +2383,7 @@ export const getRemoteFetchInfo = async (datasource: DataSource, repoId: string)
       }>;
       settings: RemoteSettings;
       hasRemoteBranchCycle: boolean;
+      hasOpenMergeRequest: boolean;
       status: "ok"|"fail"
 }> => {
   try {
@@ -2319,9 +2422,22 @@ export const getRemoteFetchInfo = async (datasource: DataSource, repoId: string)
         status: "ok"|"unreleased"|"invalid"
       }>
       hasRemoteBranchCycle: boolean;
+      hasOpenMergeRequest: boolean;
     } = fetchRequest?.data;
-    if (fetchInfo.settings) {
+    if (typeof fetchRequest?.data != "string") {
       await datasource.saveRemoteSettings(repoId, fetchInfo.settings);
+    } else {
+      const currentRemoteSettings = await datasource.readRemoteSettings(repoId);
+      return {
+        settings: currentRemoteSettings,
+        commits: [],
+        branches: [],
+        branchHeadLinks: [],
+        pluginStatuses: [],
+        hasRemoteBranchCycle: false,
+        hasOpenMergeRequest: false,
+        status: "fail"
+      }
     }
     return {
       ...fetchInfo,
@@ -2336,6 +2452,7 @@ export const getRemoteFetchInfo = async (datasource: DataSource, repoId: string)
       branchHeadLinks: [],
       pluginStatuses: [],
       hasRemoteBranchCycle: false,
+      hasOpenMergeRequest: false,
       status: "fail"
     }
   }

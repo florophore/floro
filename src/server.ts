@@ -30,7 +30,7 @@ import { startSessionJob } from "./cron";
 import macaddres from "macaddress";
 import sha256 from "crypto-js/sha256";
 import HexEncode from "crypto-js/enc-hex";
-import { cloneRepo, getCommitState, uniqueKVList, getUnstagedCommitState } from "./repo";
+import { cloneRepo, getCommitState, uniqueKVList, getUnstagedCommitState, getLastCommitFromRepoState, readComparisonState } from "./repo";
 import {
   convertRenderedCommitStateToKv,
   getApplicationState,
@@ -74,6 +74,7 @@ import {
   getRepoCloneState,
   checkIsBranchProtected,
   getCanRevert,
+  getIsMerged,
 } from "./repoapi";
 import {
   makeMemoizedDataSource,
@@ -94,6 +95,7 @@ import {
 } from "./plugins";
 
 import binarySession from "./binary_session";
+import { Session } from "inspector";
 
 const remoteHost = getRemoteHostSync();
 
@@ -189,6 +191,28 @@ app.get(
   }
 );
 
+app.post(
+  "/session",
+  cors(corsNoNullOriginDelegate),
+  async (req, res): Promise<void> => {
+    const session = await getUserSessionAsync();
+    const postedSession: { clientKey: string}|null = req.body.session;
+    const postedUser: any|null = req.body.user;
+    if (postedSession?.clientKey) {
+      if (!session || session?.clientKey != postedSession?.clientKey) {
+        await writeUserSession(postedSession);
+        await writeUser(postedUser);
+        res.send({
+          status: "ok"
+        })
+        return;
+      }
+    }
+    res.sendStatus(400);
+    return;
+  }
+);
+
 app.get(
   "/repos",
   cors(corsNoNullOriginDelegate),
@@ -248,6 +272,7 @@ app.get(
           accountInGoodStanding: true,
           pullCanMergeWip: false,
           fetchFailed: true,
+          hasOpenMergeRequestConflict: false,
           commits: [],
           branches: [],
         });
@@ -312,6 +337,7 @@ app.post(
         return;
       }
       const fetchInfo = await getFetchInfo(datasource, repoId);
+
       if (!fetchInfo) {
         res.sendStatus(400);
         return;
@@ -546,16 +572,25 @@ app.get(
       res.sendStatus(404);
       return;
     }
-    const sha = req.params["sha"];
+    const fromSha = req.params["sha"];
+
+    const repoState = await datasource.readCurrentRepoState(repoId);
+    if (!repoState) {
+      res.sendStatus(400);
+      return;
+    }
     try {
-      const [canAutoMergeOnTopOfCurrentState, canAutoMergeOnUnStagedState] =
+      const lastCommit = await getLastCommitFromRepoState(repoId, datasource, repoState);
+      const [canAutoMergeOnTopOfCurrentState, canAutoMergeOnUnStagedState, isMerged] =
         await Promise.all([
-          getCanAutoMergeOnTopCurrentState(datasource, repoId, sha),
-          getCanAutoMergeOnUnStagedState(datasource, repoId, sha),
+          getCanAutoMergeOnTopCurrentState(datasource, repoId, fromSha),
+          getCanAutoMergeOnUnStagedState(datasource, repoId, fromSha),
+          getIsMerged(datasource, repoId, lastCommit?.sha, fromSha)
         ]);
       if (
         canAutoMergeOnTopOfCurrentState == null ||
-        canAutoMergeOnUnStagedState == null
+        canAutoMergeOnUnStagedState == null ||
+        isMerged == null
       ) {
         res.sendStatus(400);
         return;
@@ -563,6 +598,7 @@ app.get(
       res.send({
         canAutoMergeOnTopOfCurrentState,
         canAutoMergeOnUnStagedState,
+        isMerged
       });
     } catch (e) {
       res.sendStatus(400);
@@ -1881,6 +1917,7 @@ app.get(
       return null;
     }
 
+    const currentRepoState = await datasource.readCurrentRepoState(repoId);
     const renderedState = await datasource.readRenderedState(repoId);
     if (!renderedState) {
       res.sendStatus(400);
@@ -1889,6 +1926,10 @@ app.get(
 
     let pluginList = renderedState.plugins;
     const repoState = await datasource.readCurrentRepoState(repoId);
+    if (currentRepoState?.commandMode == "compare") {
+      const comparisonState = await readComparisonState(repoId, datasource, currentRepoState);
+      pluginList = uniqueKVList([...pluginList, ...comparisonState.plugins]);
+    }
     if (repoState.commandMode == "compare") {
 
       if (repoState.comparison?.against == "branch") {
@@ -2101,7 +2142,6 @@ app.get(
       res.send({ status: "failed" });
     }
     const didSucceed = await cloneRepo(datasource, repoId);
-    console.log("BRO", didSucceed);
     if (didSucceed) {
       res.send({ status: "success" });
     } else {
@@ -2114,6 +2154,7 @@ app.post("/kill_oauth", cors(corsNoNullOriginDelegate), async (_req, res) => {
     broadcastToClient("desktop", "kill_oauth", null);
     res.send({ message: "ok" });
 });
+
 app.post("/login", cors(corsNoNullOriginDelegate), async (req, res) => {
   if (
     req?.body?.__typename == "PassedLoginAction" ||
@@ -2423,7 +2464,6 @@ app.get(
     res.send(file.toString());
   }
 );
-
 
 server.listen(port, host, () =>
   console.log("floro server started on " + host + ":" + port)

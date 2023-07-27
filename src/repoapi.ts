@@ -293,23 +293,20 @@ export const updateLocalBranch = async (
     if (!canSwitch) {
       return null;
     }
-    const commits = await datasource.readCommits(repoId);
-    const branchesMetaState = await datasource.readBranchesMetaState(repoId);
-    const sourcegraph = new SourceGraph(commits, branchesMetaState, repoState);
-    const pointers = sourcegraph.getPointers();
     const branches = await datasource.readBranches(repoId);
-    const potentialBaseBranches = getPotentialBaseBranchesForSha(
-      branchHeadSha,
-      branches,
-      pointers
-    )?.filter((v) => v.id != originalBranch.id);
+    const potentialBaseBranches = branches?.filter((v) => v.id != originalBranch.id);
+    const branchId = getBranchIdFromName(branchName);
 
-    const baseBranchIds = potentialBaseBranches?.map((b) => b.id);
-    if (baseBranchId && !baseBranchIds.includes(baseBranchId)) {
+    const combinedBranches = combineBranches(potentialBaseBranches, [
+      {
+        id: branchId,
+        baseBranchId,
+      } as Branch
+    ]);
+    if (baseBranchId && branchIdIsCyclic(branchId, combinedBranches)) {
       return null;
     }
 
-    const branchId = getBranchIdFromName(branchName);
     const branchAlreadyExists = branches
       .filter((v) => v.id != originalBranch.id)
       .map((v) => v.id)
@@ -1436,11 +1433,12 @@ export const getCanMerge = async (
     const { fromCommitState, intoCommitState, originCommit } =
       commitStateResult;
 
+    //QA
     const originSha = await getDivergenceOrigin(
       datasource,
       repoId,
+      currentRepoState.commit,
       fromSha,
-      currentRepoState.commit
     );
 
     if (originSha?.intoOrigin == currentRepoState.commit) {
@@ -1494,11 +1492,12 @@ export const getMergeRebaseCommitList = async (
     const { fromCommitState, intoCommitState, originCommit } =
       commitStateResult;
 
+    //QA
     const divergnceOrigin = await getDivergenceOrigin(
       datasource,
       repoId,
-      fromSha,
-      currentRepoState.commit
+      currentRepoState.commit,
+      fromSha
     );
     const mergeBase = getMergeOriginSha(divergnceOrigin);
     const canAutoCommitMergeStates =
@@ -1634,8 +1633,8 @@ export const mergeCommit = async (
     const divergenceOrigin = await getDivergenceOrigin(
       datasource,
       repoId,
+      currentRepoState.commit,
       fromSha,
-      currentRepoState.commit
     );
     const { fromCommitState, intoCommitState, originCommit } =
       commitStateResult;
@@ -2018,10 +2017,7 @@ export const resolveMerge = async (datasource: DataSource, repoId: string) => {
     if (!currentRepoState.isInMergeConflict) {
       return null;
     }
-    const intoSha = currentRepoState.merge.intoSha;
     const fromSha = currentRepoState.merge.fromSha;
-
-    const intoCommitState = await getCommitState(datasource, repoId, intoSha);
     const rebaseList = await getMergeRebaseCommitList(
       datasource,
       repoId,
@@ -2038,23 +2034,30 @@ export const resolveMerge = async (datasource: DataSource, repoId: string) => {
       datasource,
       currentAppState
     );
+
+    const divergenceOrigin = await getDivergenceOrigin(
+      datasource,
+      repoId,
+      currentRepoState.commit,
+      fromSha,
+    );
+    const headCommit =
+      divergenceOrigin.basedOn == "from"
+        ? await datasource.readCommit(repoId, fromSha)
+        : await datasource.readCommit(repoId, currentRepoState.commit);
+    const finalCommit = rebaseList[rebaseList?.length - 1] ?? headCommit;
+
+    const intoCommitState = await getCommitState(
+      datasource,
+      repoId,
+      finalCommit?.sha
+    );
+
     const mergeDiff = getStateDiffFromCommitStates(
       intoCommitState,
       currentKVState
     );
-
-    const divergnceOrigin = await getDivergenceOrigin(
-      datasource,
-      repoId,
-      fromSha,
-      currentRepoState.commit
-    );
-    const headCommit =
-      divergnceOrigin.basedOn == "from"
-        ? await datasource.readCommit(repoId, fromSha)
-        : await datasource.readCommit(repoId, currentRepoState.commit);
-    const finalCommit = rebaseList[rebaseList?.length - 1] ?? headCommit;
-    const mergeBase = getMergeOriginSha(divergnceOrigin);
+    const mergeBase = getMergeOriginSha(divergenceOrigin);
     const mergeCommit: CommitData = {
       parent: finalCommit.sha,
       historicalParent: finalCommit.sha,
@@ -2132,6 +2135,7 @@ export const resolveMerge = async (datasource: DataSource, repoId: string) => {
     await datasource.saveCurrentRepoState(repoId, updated);
     return currentAppState;
   } catch (e) {
+    console.log("E", e);
     return null;
   }
 };
@@ -2225,7 +2229,7 @@ export const stashChanges = async (datasource: DataSource, repoId: string) => {
       datasource,
       renderedState
     );
-    return await datasource.saveRenderedState(repoId, sanitiziedRenderedState);
+    return await datasource.saveRenderedState(repoId, unstagedState);
   } catch (e) {
     return null;
   }
@@ -3710,7 +3714,7 @@ export const renderApiReponse = async (
     datasource,
     repoState
   );
-  const mergeCommit = repoState.isInMergeConflict
+  const mergeCommit = repoState?.isInMergeConflict
     ? await datasource.readCommit(repoId, repoState?.merge.fromSha)
     : null;
   const checkedOutBranchIds = await getCheckoutBranchIds(datasource, repoId);
@@ -3895,6 +3899,7 @@ export const changeCommandMode = async (
     await datasource.saveCurrentRepoState(repoId, nextRepoState);
     return nextRepoState;
   } catch (e) {
+    console.log("E", e)
     return null;
   }
 };
@@ -4023,6 +4028,56 @@ export const getCanAutoMergeOnTopCurrentState = async (
       fromState,
       originCommit
     );
+  } catch (e) {
+    return null;
+  }
+};
+export const getIsMerged = async (
+  datasource: DataSource,
+  repoId: string,
+  intoSha: string,
+  fromSha: string
+) => {
+  try {
+    const currentUser = await getUserAsync();
+    const rebaseList = await getMergeRebaseCommitList(datasource, repoId, fromSha, currentUser, false);
+    const divergenceOrigin = await getDivergenceOrigin(
+      datasource,
+      repoId,
+      intoSha,
+      fromSha
+    );
+    const divergenceSha: string = getMergeOriginSha(divergenceOrigin) as string;
+    if (rebaseList.length > 0) {
+      return false;
+    }
+
+    const { originCommit } = await getMergeCommitStates(
+      datasource,
+      repoId,
+      intoSha,
+      fromSha
+    );
+    const currentRenderedState = await datasource.readRenderedState(repoId);
+    const currentAppKVstate = await convertRenderedCommitStateToKv(
+      datasource,
+      currentRenderedState
+    );
+
+    const fromState = await getCommitState(datasource, repoId, fromSha);
+    const canAutoMerge = await canAutoMergeCommitStates(
+      datasource,
+      currentAppKVstate,
+      fromState,
+      originCommit
+    )
+    if (canAutoMerge) {
+      if (intoSha != divergenceSha) {
+        return false;
+      }
+      return true;
+    }
+    return false;
   } catch (e) {
     return null;
   }
@@ -4253,6 +4308,7 @@ export const getComparisonDirection = async (
       return "forward";
     }
 
+    // QA
     const divergenceOrigin = await getDivergenceOrigin(
       datasource,
       repoId,
@@ -4473,6 +4529,7 @@ export const getFetchInfo = async (
         branches: [],
         hasRemoteBranchCycle: false,
         hasLocalBranchCycle: false,
+        hasOpenMergeRequestConflict: false
       };
     }
 
@@ -4497,6 +4554,7 @@ export const getFetchInfo = async (
         branches: [],
         hasRemoteBranchCycle: false,
         hasLocalBranchCycle: false,
+        hasOpenMergeRequestConflict: false
       };
     }
 
@@ -4571,8 +4629,10 @@ export const getFetchInfo = async (
       localBranch
     );
     const nothingToPull = branchHeadsDiverge || localIdx >= remoteIdx;
-    const nothingToPush = branchHeadsDiverge || localIdx <= remoteIdx;
+    const nothingToPush = (branchHeadsDiverge || localIdx <= remoteIdx) && branchesAreEquivalent(localBranch, remoteBranch);
     const hasConflict = branchHeadsDiverge;
+
+    const hasOpenMergeRequestConflict = fetchInfo?.hasOpenMergeRequest && localBranch?.baseBranchId != remoteBranch?.baseBranchId;
 
     let currentSha = localBranch.lastCommit;
     let containsDevPlugins = false;
@@ -4634,6 +4694,7 @@ export const getFetchInfo = async (
             !baseBranchRequiresPush &&
             !fetchInfo.hasRemoteBranchCycle &&
             !hasUnreleasedPlugins &&
+            !hasOpenMergeRequestConflict &&
             !hasInvalidPlugins,
           userHasPermissionToPush,
           branchPushDisabled: branchRule?.directPushingDisabled ?? false,
@@ -4652,6 +4713,7 @@ export const getFetchInfo = async (
           hasLocalBranchCycle,
           hasUnreleasedPlugins,
           hasInvalidPlugins,
+          hasOpenMergeRequestConflict
         };
       }
     }
@@ -4733,6 +4795,7 @@ export const getFetchInfo = async (
           !baseBranchRequiresPush &&
           !fetchInfo.hasRemoteBranchCycle &&
           !hasUnreleasedPlugins &&
+          !hasOpenMergeRequestConflict &&
           !hasInvalidPlugins,
         userHasPermissionToPush,
         branchPushDisabled: branchRule?.directPushingDisabled ?? false,
@@ -4751,6 +4814,7 @@ export const getFetchInfo = async (
         hasLocalBranchCycle,
         hasUnreleasedPlugins,
         hasInvalidPlugins,
+        hasOpenMergeRequestConflict
       };
     }
     return {
@@ -4763,6 +4827,7 @@ export const getFetchInfo = async (
         !baseBranchRequiresPush &&
         !fetchInfo.hasRemoteBranchCycle &&
         !hasUnreleasedPlugins &&
+        !hasOpenMergeRequestConflict &&
         !hasInvalidPlugins,
       userHasPermissionToPush,
       branchPushDisabled: branchRule?.directPushingDisabled ?? false,
@@ -4781,6 +4846,7 @@ export const getFetchInfo = async (
       hasLocalBranchCycle,
       hasUnreleasedPlugins,
       hasInvalidPlugins,
+      hasOpenMergeRequestConflict
     };
   } catch (e) {
     return null;
