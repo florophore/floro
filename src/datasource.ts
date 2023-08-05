@@ -1046,6 +1046,7 @@ export const makeDataSource = (datasource: DataSource = {}) => {
     saveBranch,
     saveCommit,
     readCommit,
+    commitExists,
     readCommits,
     readCheckpoint,
     saveCheckpoint,

@@ -1,8 +1,8 @@
 import axios from "axios";
-import fs, { createWriteStream, existsSync } from "fs";
+import fs from "fs";
 import path from "path";
 import mime from "mime-types";
-import FormData, { from } from "form-data";
+import FormData from "form-data";
 import { DataSource } from "./datasource";
 import {
   existsAsync,
@@ -58,6 +58,7 @@ export interface FetchInfo {
   baseBranchRequiresPush: boolean;
   remoteBranch?: Branch;
   pullCanMergeWip: boolean;
+  remoteAhead: boolean;
   fetchFailed: boolean;
   commits: Array<CommitExchange>;
   branches: Array<Branch>;
@@ -73,6 +74,7 @@ export interface BranchRuleSettings {
   branchName: string;
   directPushingDisabled: boolean;
   requiresApprovalToMerge: boolean;
+  requireReapprovalOnPushToMerge: boolean;
   automaticallyDeletesMergedFeatureBranches: boolean;
   canCreateMergeRequests: boolean;
   canMergeWithApproval: boolean;
@@ -388,30 +390,6 @@ export const saveRemoteSha = async (
     const session = getUserSession();
     const commitExists = await datasource.commitExists(repoId, sha);
     if (commitExists) {
-      if (isCloning) {
-        // save on top of clonefile
-        const clonefile = await datasource.readCloneFile(repoId);
-        if (!clonefile) {
-          return false;
-        }
-        const isSaved =
-          clonefile?.commits?.find((c) => c.sha == sha)?.saved ?? false;
-        if (!isSaved) {
-          const commits = clonefile.commits.map((c) => {
-            if (c.sha == sha) {
-              return {
-                ...c,
-                saved: true,
-              };
-            }
-            return c;
-          });
-          clonefile.commits = commits;
-          const result = await datasource.saveCloneFile(repoId, clonefile);
-          return !!result;
-        }
-      }
-
       if (isCloning) {
         // save on top of clonefile
         const clonefile = await datasource.readCloneFile(repoId);
@@ -820,6 +798,7 @@ export const canCommit = async (
   if (commit) {
     // ensure safe
     // check that the index is really + 1
+    // apply state and ensure no keys overlap
   }
   const currentState = await datasource.readCurrentRepoState(repoId);
   if (!currentState) {

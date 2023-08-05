@@ -424,7 +424,7 @@ const sequencesAreEqual = (a: Array<string>, b: Array<string>) => {
  *
  * MAIN BRANCH:    (commit: A, value: [A, B, C, D]) ---> (commit: B, value: [A, X, B, C, Y, D])
  *                                                 \
- * FEATURE BRANCH:                 —-------------------------> (commit: C, value: [A, D])
+ * FEATURE BRANCH:                                  ---------> (commit: C, value: [A, D])
  *
  * TO MERGE B into C, we have to find the greatest longest common subsequence (GLCS) amongst all 3 commits
  * which is
@@ -455,7 +455,7 @@ const sequencesAreEqual = (a: Array<string>, b: Array<string>) => {
  *
  * MAIN BRANCH:    (commit: A, value: [A, B, C, D]) ---> (commit: B, value: [A, X, B, C, Y, D])
  *                                                 \
- * FEATURE BRANCH:                 —-------------------------> (commit: C, value: [A, Z, D])
+ * FEATURE BRANCH:                                  ---------> (commit: C, value: [A, Z, D])
  *
  * TO MERGE B into C, we have to find the greatest longest common subsequence (GLCS) amonst all 3 commits
  * which is

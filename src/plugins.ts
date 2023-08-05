@@ -1616,18 +1616,43 @@ export const indexArrayDuplicates = (
   return out;
 };
 
+const hasParentPath = (decodedPath: Array<string | DiffElement>): boolean => {
+  for (let i = decodedPath.length -1; i >=0; --i) {
+    if (typeof decodedPath[i] == "object") {
+      return true;
+    }
+  }
+  return false;
+}
+
+const parentKeyPath = (pluginName: string, decodedPath: Array<string | DiffElement>): string => {
+  for (let i = decodedPath.length -1; i >=0; --i) {
+    if (typeof decodedPath[i] == "object") {
+      return writePathString([pluginName, ...decodedPath.slice(0, i - 1)]);
+    }
+  }
+  return null;
+}
+
 export const buildObjectsAtPath = (
   rootSchema: Manifest,
   path: string,
   properties: { [key: string]: number | string | boolean },
   visitedLists = {},
+  visitedKeys = new Set<string>([]),
   out = {}
 ): object => {
   // ignore $(store)
-  const [, ...decodedPath] = decodeSchemaPath(path);
+  const [pluginName, ...decodedPath] = decodeSchemaPath(path);
   let current = out;
   let currentSchema = rootSchema;
   const partialPath = [];
+  if (hasParentPath(decodedPath)) {
+    const parentKey = parentKeyPath(pluginName as string, decodedPath);
+    if (!visitedKeys.has(parentKey)) {
+      return out;
+    }
+  }
   for (const part of decodedPath) {
     partialPath.push(part);
     if (typeof part == "string" && currentSchema?.[part]?.type == "set") {
@@ -1678,6 +1703,7 @@ export const buildObjectsAtPath = (
   for (const prop in properties) {
     current[prop] = properties[prop];
   }
+  visitedKeys.add(path);
   return out;
 };
 
@@ -1975,12 +2001,14 @@ export const getStateFromKVForPlugin = (
   const kvArray = indexArrayDuplicates(kv);
   let out = {};
   let memo = {};
+  let visitedKeys = new Set<string>([]);
   for (const pair of kvArray) {
     out = buildObjectsAtPath(
       rootSchema as unknown as Manifest,
       pair.key,
       pair.value,
       memo,
+      visitedKeys,
       out
     );
   }

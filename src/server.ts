@@ -30,7 +30,7 @@ import { startSessionJob } from "./cron";
 import macaddres from "macaddress";
 import sha256 from "crypto-js/sha256";
 import HexEncode from "crypto-js/enc-hex";
-import { cloneRepo, getCommitState, uniqueKVList, getUnstagedCommitState, getLastCommitFromRepoState, readComparisonState } from "./repo";
+import { cloneRepo, getCommitState, uniqueKVList, getUnstagedCommitState, getLastCommitFromRepoState, readComparisonState, FetchInfo } from "./repo";
 import {
   convertRenderedCommitStateToKv,
   getApplicationState,
@@ -272,10 +272,11 @@ app.get(
           accountInGoodStanding: true,
           pullCanMergeWip: false,
           fetchFailed: true,
+          remoteAhead: false,
           hasOpenMergeRequestConflict: false,
           commits: [],
           branches: [],
-        });
+        } as FetchInfo);
         return;
       }
       res.send(fetchInfo);
@@ -342,7 +343,26 @@ app.post(
         res.sendStatus(400);
         return;
       }
-      res.send(fetchInfo);
+
+      const [repoState, renderedState] = await Promise.all([
+        datasource.readCurrentRepoState(repoId),
+        getApplicationState(datasource, repoId),
+      ]);
+      const applicationState = await convertRenderedCommitStateToKv(
+        datasource,
+        renderedState
+      );
+      const apiResponse = await renderApiReponse(
+        repoId,
+        datasource,
+        renderedState,
+        applicationState,
+        repoState
+      );
+      res.send({
+        fetchInfo,
+        apiResponse
+      });
     } catch (e) {
       res.sendStatus(400);
     }
@@ -674,7 +694,8 @@ app.get(
     }
     const sha = req.params["sha"];
     try {
-      const canRevert = await getCanRevert(datasource, repoId, sha);
+      const user = await getUserAsync();
+      const canRevert = await getCanRevert(datasource, repoId, sha, user);
       if (canRevert == null) {
         res.sendStatus(400);
         return;
@@ -700,7 +721,8 @@ app.get(
     }
     const sha = req.params["sha"];
     try {
-      const canAutoFix = await getCanAutofixReversion(datasource, repoId, sha);
+      const user = await getUserAsync();
+      const canAutoFix = await getCanAutofixReversion(datasource, repoId, sha, user);
       if (canAutoFix == null) {
         res.sendStatus(400);
         return;

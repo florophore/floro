@@ -22,6 +22,7 @@ import {
 import { makeSignedInUser, makeTestPlugin } from "./helpers/fsmocks";
 import { SIMPLE_PLUGIN_MANIFEST } from "./helpers/pluginmocks";
 import { DataSource, makeMemoizedDataSource } from "../src/datasource";
+import { applyDiff, getDiff } from "../src/sequenceoperations";
 
 jest.mock("fs");
 jest.mock("fs/promises");
@@ -196,6 +197,347 @@ describe("plugins", () => {
           {
             aKey: "$(A).aObjects.xKey<def>",
             zVal: 2,
+          },
+        ],
+      });
+    });
+
+    test("ignores sub keys if parents not present in state", async () => {
+      const ARRAY_PLUGIN_MANIFEST = {
+        version: "0.0.0",
+        name: "simple",
+        displayName: "Simple",
+        icon: {
+          light: "./palette-plugin-icon.svg",
+          dark: "./palette-plugin-icon.svg",
+        },
+        imports: {},
+        types: {
+          entity: {
+            name: {
+              type: "string",
+              isKey: true,
+            },
+            list: {
+              type: "array",
+              values: {
+                someProp: {
+                  type: "string",
+                },
+                subList: {
+                  type: "array",
+                  values: {
+                    subProp: {
+                      type: "int",
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        store: {
+          objects: {
+            type: "set",
+            values: "entity",
+          },
+        },
+      };
+      const stateMap = {
+        [ARRAY_PLUGIN_MANIFEST.name]: {
+          objects: [
+            {
+              name: "abc",
+              list: [
+                {
+                  someProp: "first prop",
+                  subList: [
+                    {
+                      subProp: 1,
+                    },
+                    {
+                      subProp: 2,
+                    },
+                    {
+                      subProp: 2,
+                    },
+                    {
+                      subProp: 1,
+                    },
+                  ],
+                },
+                {
+                  someProp: "second prop",
+                  subList: [
+                    {
+                      subProp: 1,
+                    },
+                    {
+                      subProp: 2,
+                    },
+                    {
+                      subProp: 2,
+                    },
+                  ],
+                },
+                {
+                  someProp: "first prop",
+                  subList: [
+                    {
+                      subProp: 1,
+                    },
+                    {
+                      subProp: 2,
+                    },
+                    {
+                      subProp: 2,
+                    },
+                    {
+                      subProp: 1,
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      };
+      const kvs = await getKVStateForPlugin(
+        {
+          ...datasource,
+          getPluginManifest: async () => {
+            return ARRAY_PLUGIN_MANIFEST;
+          },
+        },
+        { [ARRAY_PLUGIN_MANIFEST.name]: ARRAY_PLUGIN_MANIFEST },
+        ARRAY_PLUGIN_MANIFEST.name,
+        stateMap
+      );
+      const fullKeys = [
+        {
+          key: "$(simple)",
+          value: {},
+        },
+        {
+          key: "$(simple).objects.name<abc>",
+          value: {
+            name: "abc",
+          },
+        },
+        {
+          key: "$(simple).objects.name<abc>.list.(id)<ow46z0>",
+          value: {
+            "(id)": "ow46z0",
+            someProp: "first prop",
+          },
+        },
+        {
+          key: "$(simple).objects.name<abc>.list.(id)<ow46z0>.subList.(id)<-ecxqqe>",
+          value: {
+            "(id)": "-ecxqqe",
+            subProp: 1,
+          },
+        },
+        {
+          key: "$(simple).objects.name<abc>.list.(id)<ow46z0>.subList.(id)<-ecdy51>",
+          value: {
+            "(id)": "-ecdy51",
+            subProp: 2,
+          },
+        },
+        {
+          key: "$(simple).objects.name<abc>.list.(id)<ow46z0>.subList.(id)<-ecdy51>",
+          value: {
+            "(id)": "-ecdy51",
+            subProp: 2,
+          },
+        },
+        {
+          key: "$(simple).objects.name<abc>.list.(id)<ow46z0>.subList.(id)<-ecxqqe>",
+          value: {
+            "(id)": "-ecxqqe",
+            subProp: 1,
+          },
+        },
+        {
+          key: "$(simple).objects.name<abc>.list.(id)<-s6ligc>",
+          value: {
+            "(id)": "-s6ligc",
+            someProp: "second prop",
+          },
+        },
+        {
+          key: "$(simple).objects.name<abc>.list.(id)<-s6ligc>.subList.(id)<-ecxqqe>",
+          value: {
+            "(id)": "-ecxqqe",
+            subProp: 1,
+          },
+        },
+        {
+          key: "$(simple).objects.name<abc>.list.(id)<-s6ligc>.subList.(id)<-ecdy51>",
+          value: {
+            "(id)": "-ecdy51",
+            subProp: 2,
+          },
+        },
+        {
+          key: "$(simple).objects.name<abc>.list.(id)<-s6ligc>.subList.(id)<-ecdy51>",
+          value: {
+            "(id)": "-ecdy51",
+            subProp: 2,
+          },
+        }
+      ];
+
+      const s1 = getStateFromKVForPlugin(
+        { [ARRAY_PLUGIN_MANIFEST.name]: ARRAY_PLUGIN_MANIFEST },
+        fullKeys,
+        ARRAY_PLUGIN_MANIFEST.name
+      );
+      expect(s1).toEqual({
+        objects: [
+          {
+            name: "abc",
+            list: [
+              {
+                someProp: "first prop",
+                subList: [
+                  {
+                    subProp: 1,
+                  },
+                  {
+                    subProp: 2,
+                  },
+                  {
+                    subProp: 2,
+                  },
+                  {
+                    subProp: 1,
+                  },
+                ],
+              },
+              {
+                someProp: "second prop",
+                subList: [
+                  {
+                    subProp: 1,
+                  },
+                  {
+                    subProp: 2,
+                  },
+                  {
+                    subProp: 2,
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      });
+      const partialKeys = [
+        {
+          key: "$(simple)",
+          value: {},
+        },
+        {
+          key: "$(simple).objects.name<abc>",
+          value: {
+            name: "abc",
+          },
+        },
+        // MISSING ON PURPOSE!!!!
+        // DON'T REMOVE!!!!
+        //{
+        //  key: "$(simple).objects.name<abc>.list.(id)<ow46z0>",
+        //  value: {
+        //    "(id)": "ow46z0",
+        //    someProp: "first prop",
+        //  },
+        //},
+        // DON'T REMOVE!!!!
+        {
+          key: "$(simple).objects.name<abc>.list.(id)<ow46z0>.subList.(id)<-ecxqqe>",
+          value: {
+            "(id)": "-ecxqqe",
+            subProp: 1,
+          },
+        },
+        {
+          key: "$(simple).objects.name<abc>.list.(id)<ow46z0>.subList.(id)<-ecdy51>",
+          value: {
+            "(id)": "-ecdy51",
+            subProp: 2,
+          },
+        },
+        {
+          key: "$(simple).objects.name<abc>.list.(id)<ow46z0>.subList.(id)<-ecdy51>",
+          value: {
+            "(id)": "-ecdy51",
+            subProp: 2,
+          },
+        },
+        {
+          key: "$(simple).objects.name<abc>.list.(id)<ow46z0>.subList.(id)<-ecxqqe>",
+          value: {
+            "(id)": "-ecxqqe",
+            subProp: 1,
+          },
+        },
+        {
+          key: "$(simple).objects.name<abc>.list.(id)<-s6ligc>",
+          value: {
+            "(id)": "-s6ligc",
+            someProp: "second prop",
+          },
+        },
+        {
+          key: "$(simple).objects.name<abc>.list.(id)<-s6ligc>.subList.(id)<-ecxqqe>",
+          value: {
+            "(id)": "-ecxqqe",
+            subProp: 1,
+          },
+        },
+        {
+          key: "$(simple).objects.name<abc>.list.(id)<-s6ligc>.subList.(id)<-ecdy51>",
+          value: {
+            "(id)": "-ecdy51",
+            subProp: 2,
+          },
+        },
+        {
+          key: "$(simple).objects.name<abc>.list.(id)<-s6ligc>.subList.(id)<-ecdy51>",
+          value: {
+            "(id)": "-ecdy51",
+            subProp: 2,
+          },
+        },
+      ];
+
+      const s2 = getStateFromKVForPlugin(
+        { [ARRAY_PLUGIN_MANIFEST.name]: ARRAY_PLUGIN_MANIFEST },
+        partialKeys,
+        ARRAY_PLUGIN_MANIFEST.name
+      );
+      expect(s2).toEqual({
+        objects: [
+          {
+            name: "abc",
+            list: [
+              {
+                someProp: "second prop",
+                subList: [
+                  {
+                    subProp: 1,
+                  },
+                  {
+                    subProp: 2,
+                  },
+                  {
+                    subProp: 2,
+                  },
+                ],
+              },
+            ],
           },
         ],
       });
