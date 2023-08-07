@@ -106,15 +106,14 @@ const datasource = makeMemoizedDataSource();
 const pluginsJSON = getPluginsJson();
 
 const safeOriginRegex =
-  /(https?:\/\/(localhost|127\.0\.0\.1):\d{1,5})|(https:\/\/floro.io)/;
+  /^(https?:\/\/(localhost|127\.0\.0\.1):\d{1,5})|(https:\/\/floro\.io)/;
 
 const corsNoNullOriginDelegate = (req, callback) => {
   const origin = req.headers?.origin;
   if (
     origin != 'null' && (
       safeOriginRegex.test(req.connection.remoteAddress) ||
-      req.connection.remoteAddress == "127.0.0.1" ||
-      req.connection.remoteAddress
+      req.connection.remoteAddress == "127.0.0.1"
     )
   ) {
     callback(null, {
@@ -1447,7 +1446,7 @@ app.get(
   cors(corsNoNullOriginDelegate),
   async (req, res): Promise<void> => {
     const repoId = req.params["repoId"];
-    const settings = await readSettings(datasource, repoId);
+    const settings = await datasource.readRemoteSettings(repoId);
     if (!settings) {
       res.sendStatus(400);
       return;

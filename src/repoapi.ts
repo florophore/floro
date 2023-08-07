@@ -3717,7 +3717,7 @@ export const renderApiReponse = async (
 
   const binaryToken = binarySession.token;
 
-  if (repoState.commandMode == "edit") {
+  if (repoState?.commandMode == "edit") {
     const unstagedState = await getUnstagedCommitState(datasource, repoId);
     const isWIP =
       unstagedState &&
