@@ -2958,7 +2958,7 @@ export const copyState = async (
       );
       const keys = kvs.filter(kv => {
         const keyPath = decodeSchemaPath(kv.key)
-        const lastPart = keyPath[keyPath.length];
+        const lastPart = keyPath[keyPath.length - 1];
         if (typeof lastPart == "string") {
           return false;
         }
@@ -3013,7 +3013,8 @@ const copySetsFromCopyFromOntoCopyInto = async (
   let copyIntoReferences = compileStateRefs(copyIntoStaticSetPaths, copyIntoStateMap);
 
   for (const pluginName in copyGroup) {
-    for (const parentSetPath in copyGroup[pluginName].sets) {
+    const keysToTraverse = Object.keys(copyGroup[pluginName].sets).sort((a, b) => a.length >= b.length ? 1 : -1);
+    for (const parentSetPath of keysToTraverse) {
       const referenceKeys = copyGroup[pluginName].sets[parentSetPath];
       const [, ...decodedParentPath] = decodeSchemaPath(parentSetPath);
       const parentPath = [pluginName, ...decodedParentPath];
@@ -3029,22 +3030,21 @@ const copySetsFromCopyFromOntoCopyInto = async (
         }
       });
 
-      const copyIntoKV = Object.keys(copyIntoParentSet.values).map(key => {
+      const copyIntoKV = Object.keys(copyIntoParentSet?.values ?? {}).map(key => {
         return {
           key: `${parentSetPath}.${setKey}<${key}>`,
           value: copyIntoParentSet.values[key]
         }
       });
       const copiedKV = copyKV(copyFromKV, copyIntoKV, referenceKeys, priority);
-      const parentReplacement = copiedKV.map(v => v.value.instance);
-      copyIntoParentSet.parent.splice(0, copyIntoParentSet.parent.length);
+      const parentReplacement = copiedKV?.filter(v => !!v?.value?.instance).map(v => v.value.instance);
+      copyIntoParentSet.parent.splice(0, copyIntoParentSet?.parent?.length ?? 0);
       copyIntoParentSet.parent.push(...parentReplacement);
       copyIntoReferences = compileStateRefs(copyIntoStaticSetPaths, copyIntoStateMap);
       const subSchema = getSchemaAtPath(copyIntoRootSchemaMap[pluginName], referenceKeys[0]);
-      // we need to collect
       const subRefs = copiedKV.filter(v => {
         return referenceKeys.includes(v.key)
-      }).map(v => v.value.instance)?.flatMap(subState => {
+      })?.filter(v => !!v?.value?.instance).map(v => v.value.instance)?.flatMap(subState => {
         return collectRefsInStateMap(subSchema as TypeStruct, subState);
       });
 
@@ -5686,6 +5686,8 @@ export const drawDiffableReturnTypes = (
 }
 
 export const drawProviderApiCode = () => `
+type ValueOf<T> = T[keyof T];
+
 interface Packet {
   id: string;
   chunk: string;
@@ -5707,6 +5709,8 @@ interface PluginState {
     binaryToken: null|string,
   };
   binaryMap: {[key: string]: string};
+  isCopyMode: boolean;
+  copyList: Array<ValueOf<QueryTypes>>;
 }
 
 interface IFloroContext {
@@ -5720,6 +5724,9 @@ interface IFloroContext {
   hasLoaded: boolean;
   saveState: <T extends keyof SchemaRoot>(pluginName: T, state: SchemaRoot|null) => string | null;
   setPluginState: (state: PluginState) => void;
+  saveCopyList: (copyList: Array<ValueOf<QueryTypes>>) => void;
+  isCopyMode: boolean;
+  copyList: Array<ValueOf<QueryTypes>>;
   pluginState: PluginState;
   loadingIds: Set<string>;
 }
@@ -5735,9 +5742,14 @@ const FloroContext = createContext({
   hasLoaded: false,
   saveState: (_state: null) => null,
   setPluginState: (_state: PluginState) => {},
+  saveCopyList: (_copyList: Array<ValueOf<QueryTypes>>) => {},
+  isCopyMode: false,
+  copyList: [],
   pluginState: {
     commandMode: "view",
     compareFrom: "none",
+    isCopyMode: false,
+    copyList: [],
     applicationState: null,
     apiStoreInvalidity: {},
     conflictList: [],
@@ -5757,7 +5769,7 @@ export interface Props {
 }
 
 const MAX_DATA_SIZE = 10_000;
-const sendMessagetoParent = (id: string, pluginName: string, command: string, data: object) => {
+const sendMessagetoParent = (id: string, pluginName: string|null, command: string, data: object) => {
   const dataString = JSON.stringify({ command, data });
   const totalPackets = Math.floor(dataString.length / MAX_DATA_SIZE);
   for (let i = 0; i < dataString.length; i += MAX_DATA_SIZE) {
@@ -5794,10 +5806,18 @@ export const FloroProvider = (props: Props) => {
       binaryToken: null,
     },
     binaryMap: {},
+    isCopyMode: false,
+    copyList: []
   });
   const [hasLoaded, setHasLoaded] = useState(false);
   const [loadingIds, setLoadingIds] = useState<Set<string>>(new Set());
   const ids = useRef<Set<string>>(new Set());
+  const [copyList, setCopyList] = useState<Array<ValueOf<QueryTypes>>>([]);
+
+
+  useEffect(() => {
+    setCopyList(pluginState?.copyList);
+  }, [pluginState?.isCopyMode])
 
   const incoming = useRef({});
 
@@ -5887,6 +5907,40 @@ export const FloroProvider = (props: Props) => {
     [commandMode, loadingIds]
   );
 
+  const saveCopyList = useCallback((copyList: Array<ValueOf<QueryTypes>>) => {
+    if (!pluginState.isCopyMode) {
+      return;
+    }
+    setCopyList(copyList);
+    if (ids.current) {
+      const id = Math.random().toString(16).substring(2);
+      ids.current = new Set([...Array.from(ids.current), id]);
+      setLoadingIds(ids.current);
+      new Promise((resolve) => {
+        const onReturnId = ({ data }) => {
+          if (data.id == id) {
+            if (
+              incoming.current[data.id] &&
+              incoming.current[data.id].counter == data.totalPackets + 1
+            ) {
+              ids.current = new Set([
+                ...Array.from(ids.current).filter((i) => i != id),
+              ]);
+              setLoadingIds(ids.current);
+              delete incoming.current[data.id];
+              window.removeEventListener("message", onReturnId);
+              resolve(id);
+            }
+          }
+        };
+        window.addEventListener("message", onReturnId);
+        sendMessagetoParent(id, null, "update-copy", copyList);
+      });
+      return id;
+    }
+      return null;
+  }, [pluginState.isCopyMode])
+
   const applicationState = useMemo(() => {
     if (!hasLoaded) {
       return {} as SchemaRoot;
@@ -5963,6 +6017,9 @@ export const FloroProvider = (props: Props) => {
         setPluginState,
         pluginState,
         loadingIds,
+        saveCopyList,
+        isCopyMode: pluginState.isCopyMode,
+        copyList
       }}
     >
       {props.children}
@@ -5984,6 +6041,33 @@ function getPluginNameFromQuery(query: string|null): keyof SchemaRoot|null {
     return null;
   }
   return pluginName as keyof SchemaRoot;
+}
+
+export const useCopyApi = (pointer: ValueOf<QueryTypes>|null) => {
+  const { copyList, saveCopyList, isCopyMode } = useFloroContext();
+  const isCopied = useMemo(() => {
+    if (!pointer) {
+      return false;
+    }
+    return copyList.includes(pointer);
+  }, [copyList, pointer]);
+
+  const toggleCopy = useCallback(() => {
+    if (!isCopyMode || !pointer) {
+      return;
+    }
+    if (!isCopied) {
+      const nextList = [...copyList, pointer];
+      saveCopyList(nextList);
+    } else {
+      const nextList = copyList.filter(copiedPointer => copiedPointer != pointer);
+      saveCopyList(nextList);
+    }
+  }, [isCopied, isCopyMode, copyList, pointer])
+  return {
+    isCopied,
+    toggleCopy
+  }
 }
 `;
 

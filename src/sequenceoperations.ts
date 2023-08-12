@@ -627,6 +627,9 @@ export const getCopySequence = (
   copySet: Set<string>
 ): Array<string> => {
   const lcs = getLCS(copyFrom, copyInto);
+  if (lcs.length == 0) {
+    return [...copyInto, ...copyFrom.filter(s => copySet.has(s))];
+  }
   const intoBoundaryOffests = getLCSBoundaryOffsets(copyInto, lcs);
   const intoMergeSegments = getLCSOffsetMergeSeqments(
     copyInto,

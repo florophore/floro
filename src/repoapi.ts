@@ -2229,7 +2229,7 @@ export const stashChanges = async (datasource: DataSource, repoId: string) => {
       datasource,
       renderedState
     );
-    return await datasource.saveRenderedState(repoId, unstagedState);
+    return await datasource.saveRenderedState(repoId, sanitiziedRenderedState);
   } catch (e) {
     return null;
   }

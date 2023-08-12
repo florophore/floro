@@ -22,6 +22,7 @@ import {
   CommitHistory,
   RemoteSettings,
   RenderedApplicationState,
+  RepoInfo,
   RepoSetting,
   RepoState,
 } from "./repo";
@@ -146,6 +147,9 @@ export interface DataSource {
 
   saveLocalSettings?: (repoId: string, settings: RemoteSettings) => Promise<RemoteSettings>;
   readLocalSettings?: (repoId: string) => Promise<RemoteSettings>;
+
+  saveInfo?: (repoId: string, repoInfo: RepoInfo) => Promise<RepoInfo>;
+  readInfo?: (repoId: string) => Promise<RepoInfo>;
 }
 
 export const readDevPlugins = async (): Promise<Array<string>> => {
@@ -1031,6 +1035,35 @@ const saveLocalSettings = async (
   }
 };
 
+const readInfo = async (repoId: string): Promise<RepoInfo> => {
+  try {
+    const repoPath = path.join(vReposPath, repoId);
+    const infoPath = path.join(repoPath, `info.json`);
+    const current = await fs.promises.readFile(infoPath);
+    return JSON.parse(current.toString());
+  } catch (e) {
+    return null;
+  }
+}
+
+const saveInfo = async (
+  repoId: string,
+  repoInfo: RepoInfo
+): Promise<RepoInfo> => {
+  try {
+    const repoPath = path.join(vReposPath, repoId);
+    const infoPath = path.join(repoPath, `info.json`);
+    await fs.promises.writeFile(
+      infoPath,
+      Buffer.from(JSON.stringify(repoInfo, null, 2)),
+      "utf-8"
+    );
+    return repoInfo;
+  } catch (e) {
+    return null;
+  }
+};
+
 export const makeDataSource = (datasource: DataSource = {}) => {
   const defaultDataSource: DataSource = {
     readRepos,
@@ -1069,6 +1102,8 @@ export const makeDataSource = (datasource: DataSource = {}) => {
     saveRemoteSettings,
     readLocalSettings,
     saveLocalSettings,
+    readInfo,
+    saveInfo,
   };
   return {
     ...defaultDataSource,

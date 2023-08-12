@@ -8,6 +8,7 @@ import {
   existsAsync,
   getRemoteHostAsync,
   getUserSession,
+  getUserSessionAsync,
   User,
   vBinariesPath,
   vReposPath,
@@ -67,6 +68,15 @@ export interface FetchInfo {
   hasRemoteBranchCycle: boolean;
   hasLocalBranchCycle: boolean;
   hasOpenMergeRequestConflict: boolean;
+}
+
+export interface RepoInfo {
+  id: string;
+  name: string;
+  organizationId: string|null;
+  userId: string|null;
+  ownerHandle: string;
+  repoType: "user_repo"|"org_repo";
 }
 
 export interface BranchRuleSettings {
@@ -387,7 +397,7 @@ export const saveRemoteSha = async (
 ): Promise<boolean> => {
   try {
     const remote = await getRemoteHostAsync();
-    const session = getUserSession();
+    const session = await getUserSessionAsync();
     const commitExists = await datasource.commitExists(repoId, sha);
     if (commitExists) {
       if (isCloning) {
@@ -535,6 +545,42 @@ export const saveRemoteSha = async (
     return false;
   }
 };
+
+const fetchRepoInfo = async (repoId: string) => {
+  try {
+    const remote = await getRemoteHostAsync();
+    const session = getUserSession();
+    const infoRequest = await axios({
+      method: "get",
+      url: `${remote}/api/repo/${repoId}/info`,
+      headers: {
+        ["session_key"]: session?.clientKey,
+      },
+    });
+    const info: RepoInfo = infoRequest?.data;
+    if (infoRequest.status != 200) {
+      return null;
+    }
+    return info;
+  } catch(e) {
+    return null;
+  }
+}
+
+export const getRepoInfo = async (
+  datasource: DataSource,
+  repoId: string
+): Promise<RepoInfo|null> => {
+  const repoInfo = await datasource.readInfo(repoId);
+  if (!repoInfo) {
+    const remoteInfo = await fetchRepoInfo(repoId);
+    if (remoteInfo) {
+      return datasource.saveInfo(repoId, remoteInfo);
+    }
+    return null;
+  }
+  return repoInfo;
+}
 
 export const cloneRepo = async (
   datasource: DataSource,
@@ -724,6 +770,10 @@ export const cloneRepo = async (
       cloneFile.settings
     );
     if (!savedLocalSettings) {
+      return false;
+    }
+    const repoInfo = await getRepoInfo(datasource, repoId);
+    if (!repoInfo) {
       return false;
     }
 

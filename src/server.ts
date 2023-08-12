@@ -19,6 +19,7 @@ import {
   getPluginsJsonAsync,
   getUserAsync,
   getUserSessionAsync,
+  getRemoteHostAsync,
 } from "./filestructure";
 import { Server } from "socket.io";
 import { createProxyMiddleware } from "http-proxy-middleware";
@@ -30,7 +31,7 @@ import { startSessionJob } from "./cron";
 import macaddres from "macaddress";
 import sha256 from "crypto-js/sha256";
 import HexEncode from "crypto-js/enc-hex";
-import { cloneRepo, getCommitState, uniqueKVList, getUnstagedCommitState, getLastCommitFromRepoState, readComparisonState, FetchInfo } from "./repo";
+import { cloneRepo, getCommitState, uniqueKVList, getUnstagedCommitState, getLastCommitFromRepoState, readComparisonState, FetchInfo, getRepoInfo, uniqueStrings } from "./repo";
 import {
   convertRenderedCommitStateToKv,
   getApplicationState,
@@ -75,6 +76,7 @@ import {
   checkIsBranchProtected,
   getCanRevert,
   getIsMerged,
+  sanitizeApplicationKV
 } from "./repoapi";
 import {
   makeMemoizedDataSource,
@@ -83,7 +85,7 @@ import {
   readDevPluginVersions,
 } from "./datasource";
 import busboy from "connect-busboy";
-import { hashBinary } from "./sequenceoperations";
+import { DiffElement, hashBinary } from "./sequenceoperations";
 import { LicenseCodesList } from "./licensecodes";
 import {
   getDependenciesForManifest,
@@ -92,10 +94,19 @@ import {
   pluginManifestIsSubsetOfManifest,
   getDownstreamDepsInSchemaMap,
   getUpstreamDependencyManifests,
+  PluginElement,
+  CopyInstructions,
+  copyState,
+  Manifest,
+  collectFileRefs,
+  enforceBoundedSets,
+  cascadePluginState,
+  nullifyMissingFileRefs
 } from "./plugins";
 
 import binarySession from "./binary_session";
 import { Session } from "inspector";
+import axios from "axios";
 
 const remoteHost = getRemoteHostSync();
 
@@ -205,6 +216,13 @@ app.post(
           status: "ok"
         })
         return;
+      } else {
+        if (session && session?.clientKey == postedSession?.clientKey) {
+          res.send({
+            status: "ok"
+          })
+          return;
+        }
       }
     }
     res.sendStatus(400);
@@ -219,6 +237,27 @@ app.get(
     const repos = await datasource.readRepos();
     res.send({
       repos,
+    });
+  }
+);
+
+app.get(
+  "/repos/info",
+  cors(corsNoNullOriginDelegate),
+  async (_req, res): Promise<void> => {
+    const repoIds = await datasource.readRepos();
+    const unfilteredRepoInfos = await Promise.all(
+      repoIds.filter(id => !!id).map(async (id) => {
+        const cloneFile = await datasource.readCloneFile(id);
+        if (cloneFile) {
+          return null;
+        }
+        return await getRepoInfo(datasource, id);
+      })
+    )
+    const repoInfos = unfilteredRepoInfos.filter(info => !!info);
+    res.send({
+      repoInfos,
     });
   }
 );
@@ -1951,7 +1990,7 @@ app.get(
       const comparisonState = await readComparisonState(repoId, datasource, currentRepoState);
       pluginList = uniqueKVList([...pluginList, ...comparisonState.plugins]);
     }
-    if (repoState.commandMode == "compare") {
+    if (repoState?.commandMode == "compare") {
 
       if (repoState.comparison?.against == "branch") {
         const comparatorBranch = repoState?.comparison?.branch
@@ -2080,11 +2119,154 @@ app.post(
   }
 );
 
+app.post("/repo/:repoId/paste", cors(corsNoNullOriginDelegate),async (req, res): Promise<void> => {
+  try {
+    const repoId = req.params["repoId"] as string;
+    const fromRepoId = req.body["fromRepoId"] as string;
+    const fromStateMap = req.body["fromStateMap"] as {[pluginName: string]: object};
+    const fromSchemaMap = req.body["fromSchemaMap"] as {[pluginName: string]: Manifest};
+    const fromPluginsToAdd = req.body["pluginsToAdd"] as Array<PluginElement>;
+    const copyInstructions = req.body["copyInstructions"] as CopyInstructions;
+    let pluginKeys = new Set<string>([]);
+    for ( const {key, value} of fromPluginsToAdd) {
+      await datasource.getPluginManifest(key, value, false);
+      pluginKeys.add(key);
+    }
+    const currentRenderedState = await datasource.readRenderedState(repoId);
+    if (!currentRenderedState?.plugins) {
+      res.sendStatus(400);
+      return;
+    }
+    const nextPlugins = [
+      ...currentRenderedState?.plugins.filter((p) => !pluginKeys.has(p.key)),
+      ...fromPluginsToAdd,
+    ];
+    const intoState = await updatePlugins(
+      datasource,
+      repoId,
+      nextPlugins
+    );
+    for (const pluginToAdd of fromPluginsToAdd) {
+      if (!copyInstructions?.[pluginToAdd.key].isManualCopy) {
+        intoState.store[pluginToAdd.key] = fromStateMap[pluginToAdd.key];
+      }
+    }
+    const intoManifestList = await getPluginManifests(datasource, nextPlugins, false);
+    const intoSchemaMap = manifestListToSchemaMap(intoManifestList)
+    const copiedOverRenderedStore = await copyState(
+      datasource,
+      fromSchemaMap,
+      fromStateMap,
+      intoSchemaMap,
+      intoState.store,
+      copyInstructions
+    );
+    const binaryRefs = await collectFileRefs(datasource, intoSchemaMap, copiedOverRenderedStore);
+    const binariesToAdd: Array<string> = [];
+    for (const binRef of binaryRefs) {
+        const existsAlready = await datasource.checkBinary(
+          binRef
+        );
+        if (!existsAlready && !binariesToAdd.includes(binRef)) {
+          binariesToAdd.push(binRef)
+        }
+    }
+
+    const remote = await getRemoteHostAsync();
+    const session = await getUserSessionAsync();
+    const binaryLinksRequest = await axios({
+      method: "post",
+      url: `${remote}/api/repo/${fromRepoId}/binary/links`,
+      headers: {
+        ["session_key"]: session?.clientKey,
+      },
+      data: {
+        links: binaryRefs,
+      },
+    });
+    if (!binaryLinksRequest.data) {
+      res.sendStatus(400);
+      return;
+    }
+
+    const binDownwloads: Promise<boolean>[] = [];
+    const binaryLinks: Array<{ fileName: string; link: string }> =
+      binaryLinksRequest.data;
+    for (const binaryLink of binaryLinks) {
+      binDownwloads.push(
+        new Promise(async () => {
+          try {
+            const existsAlready = await datasource.checkBinary(
+              binaryLink.fileName
+            );
+            if (existsAlready) {
+              return true;
+            }
+            const content = await axios({
+              method: "get",
+              url: binaryLink.link,
+            });
+            if (!content?.data) {
+              return false;
+            }
+            await datasource.writeBinary(binaryLink.fileName, content as any);
+            return true;
+          } catch (e) {
+            return false;
+          }
+        })
+      );
+    }
+    const binResults = await Promise.all(binDownwloads);
+    for (let didDownload of binResults) {
+      if (!didDownload) {
+        res.sendStatus(400);
+        return;
+      }
+    }
+
+    await enforceBoundedSets(datasource, intoSchemaMap, copiedOverRenderedStore);
+    let store = await cascadePluginState(datasource, intoSchemaMap, copiedOverRenderedStore);
+    store = await nullifyMissingFileRefs(datasource, intoSchemaMap, store);
+    const binaries = uniqueStrings(await collectFileRefs(datasource, intoSchemaMap, store));
+
+    intoState.store = store;
+    intoState.binaries = binaries;
+
+    const sanitiziedRenderedState = await sanitizeApplicationKV(
+      datasource,
+      intoState
+    );
+    await datasource.saveRenderedState(repoId, sanitiziedRenderedState);
+
+    const [repoState, applicationState] = await Promise.all([
+      datasource.readCurrentRepoState(repoId),
+      convertRenderedCommitStateToKv(datasource, sanitiziedRenderedState),
+    ]);
+    const apiResponse = await renderApiReponse(
+      repoId,
+      datasource,
+      sanitiziedRenderedState,
+      applicationState,
+      repoState
+    );
+    if (!apiResponse) {
+      res.sendStatus(404);
+      return;
+    }
+    res.send(apiResponse);
+  } catch(e) {
+    console.log("E", e)
+      res.sendStatus(400);
+  }
+})
+
 app.post(
   "/repo/:repoId/plugin/:pluginName/state",
   cors(corsNoNullOriginDelegate),
   async (req, res): Promise<void> => {
     const repoId = req.params["repoId"];
+    const fromRepoId = req.params["fromRepoId"];
     const pluginName = req.params["pluginName"];
     const state = req.body["state"];
     const pluginNameToUpdate = req.body["pluginName"];
