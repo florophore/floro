@@ -76,6 +76,7 @@ export interface RepoInfo {
   organizationId: string|null;
   userId: string|null;
   ownerHandle: string;
+  isPrivate: boolean;
   repoType: "user_repo"|"org_repo";
 }
 
