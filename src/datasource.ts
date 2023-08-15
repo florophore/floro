@@ -35,6 +35,7 @@ import { broadcastAllDevices } from "./multiplexer";
 import tar from "tar";
 import { SourceCommitNode } from "./sourcegraph";
 import { Stream } from "stream";
+import { dir } from "console";
 
 axios.defaults.validateStatus = function () {
   return true;
@@ -150,6 +151,11 @@ export interface DataSource {
 
   saveInfo?: (repoId: string, repoInfo: RepoInfo) => Promise<RepoInfo>;
   readInfo?: (repoId: string) => Promise<RepoInfo>;
+
+  readPluginClientStorage?: (repoId: string, pluginName: string) => Promise<object|null>
+  savePluginClientStorage?: (repoId: string, pluginName: string, storage: object) => Promise<object|null>
+  clearPluginClientStorage?: (repoId: string, pluginName: string) => Promise<boolean>
+
 }
 
 export const readDevPlugins = async (): Promise<Array<string>> => {
@@ -1064,6 +1070,92 @@ const saveInfo = async (
   }
 };
 
+const readPluginClientStorage = async (
+  repoId: string,
+  pluginId: string
+): Promise<object> => {
+  try {
+    const repoPath = path.join(vReposPath, repoId);
+    const pluginStorageDirPath = path.join(repoPath, "plugin_storage");
+    const dirExists = fs.existsSync(pluginStorageDirPath);
+    if (!dirExists) {
+      await fs.promises.mkdir(pluginStorageDirPath, { recursive: true });
+      if (process.env.NODE_ENV != "test") {
+        await fs.promises.chmod(pluginStorageDirPath, 0o755);
+      }
+    }
+    const pluginPath = path.join(pluginStorageDirPath, `${pluginId}.json`);
+    const storageExists = fs.existsSync(pluginPath);
+    if (!storageExists) {
+      await fs.promises.writeFile(
+        pluginPath,
+        JSON.stringify({}),
+        "utf8"
+      );
+      if (process.env.NODE_ENV != "test") {
+        await fs.promises.chmod(pluginPath, 0o755);
+      }
+      return {};
+    }
+    const storageString = await fs.promises.readFile(pluginPath);
+    return JSON.parse(storageString.toString()) as object;
+
+  } catch(e) {
+    return {};
+  }
+}
+
+const clearPluginClientStorage = async (
+  repoId: string,
+  pluginId: string
+): Promise<boolean> => {
+  try {
+    await savePluginClientStorage(repoId, pluginId, {});
+    return true;
+  } catch(e) {
+    return false;
+  }
+}
+
+const savePluginClientStorage = async (
+  repoId: string,
+  pluginId: string,
+  storage: object
+) => {
+  try {
+    const repoPath = path.join(vReposPath, repoId);
+    const pluginStorageDirPath = path.join(repoPath, "plugin_storage");
+    const dirExists = fs.existsSync(pluginStorageDirPath);
+    if (!dirExists) {
+      await fs.promises.mkdir(pluginStorageDirPath, { recursive: true });
+      if (process.env.NODE_ENV != "test") {
+        await fs.promises.chmod(pluginStorageDirPath, 0o755);
+      }
+    }
+    const pluginPath = path.join(pluginStorageDirPath, `${pluginId}.json`);
+    const storageExists = fs.existsSync(pluginPath);
+    if (!storageExists) {
+      await fs.promises.writeFile(
+        pluginPath,
+        JSON.stringify(storage),
+        "utf8"
+      );
+      if (process.env.NODE_ENV != "test") {
+        await fs.promises.chmod(pluginPath, 0o755);
+      }
+      return storage;
+    }
+    await fs.promises.writeFile(
+      pluginPath,
+      JSON.stringify(storage),
+      "utf8"
+    );
+    return storage;
+  } catch(e) {
+    return {};
+  }
+}
+
 export const makeDataSource = (datasource: DataSource = {}) => {
   const defaultDataSource: DataSource = {
     readRepos,
@@ -1104,6 +1196,9 @@ export const makeDataSource = (datasource: DataSource = {}) => {
     saveLocalSettings,
     readInfo,
     saveInfo,
+    readPluginClientStorage,
+    clearPluginClientStorage,
+    savePluginClientStorage
   };
   return {
     ...defaultDataSource,

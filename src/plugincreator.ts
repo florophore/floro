@@ -687,7 +687,8 @@ export const generateTypeScriptAPI = async (
     true
   );
 
-  let code = useReact ? "import React, { useEffect, createContext, useMemo, useCallback, useState, useContext, useRef } from 'react';\n\n" : "";
+  let code = useReact ? "import React, { useEffect, createContext, useMemo, useCallback, useState, useContext, useRef } from 'react';\n" : "";
+  code += "import mdiff from \"mdiff\";\n\n";
   code += "export type FileRef = `${string}.${string}`;\n\n";
 
   const partialDiffableQueryTypes = drawDiffableQueryTypes(

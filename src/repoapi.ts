@@ -1304,7 +1304,7 @@ export const updatePlugins = async (
       currentRenderedState
     );
     sanitizedRenderedState.store = {
-      ...storeBefore, // this is so uninstalling doesn't delete the plugin state from the store until commit
+      //...storeBefore, // this is so uninstalling doesn't delete the plugin state from the store until commit
       ...sanitizedRenderedState.store,
     };
     await datasource.saveRenderedState(repoId, sanitizedRenderedState);
@@ -3687,6 +3687,14 @@ export const updateCurrentWithSHA = async (
   }
 };
 
+export const getPluginClientStorage = async(datasource: DataSource, repoId: string, pluginIds: string[]) => {
+  const out = {};
+  for (const pluginId of pluginIds) {
+    out[pluginId] = await datasource.readPluginClientStorage(repoId, pluginId);
+  }
+  return out;
+}
+
 export const renderApiReponse = async (
   repoId: string,
   datasource: DataSource,
@@ -3718,6 +3726,11 @@ export const renderApiReponse = async (
   const binaryToken = binarySession.token;
 
   if (repoState?.commandMode == "edit") {
+    const storageMap = await getPluginClientStorage(
+      datasource,
+      repoId,
+      renderedApplicationState.plugins.map((kv) => kv.key)
+    );
     const unstagedState = await getUnstagedCommitState(datasource, repoId);
     const isWIP =
       unstagedState &&
@@ -3736,6 +3749,7 @@ export const renderApiReponse = async (
       apiStoreInvalidity,
       repoState,
       applicationState: renderedApplicationState,
+      kvState: applicationKVState,
       schemaMap,
       branch,
       baseBranch,
@@ -3746,10 +3760,16 @@ export const renderApiReponse = async (
       mergeCommit,
       checkedOutBranchIds,
       binaryToken,
+      storageMap
     };
   }
 
   if (repoState.commandMode == "view") {
+    const storageMap = await getPluginClientStorage(
+      datasource,
+      repoId,
+      renderedApplicationState.plugins.map((kv) => kv.key)
+    );
     const unstagedState = await getUnstagedCommitState(datasource, repoId);
     const isWIP =
       unstagedState &&
@@ -3764,6 +3784,7 @@ export const renderApiReponse = async (
       apiStoreInvalidity,
       repoState,
       applicationState: renderedApplicationState,
+      kvState: applicationKVState,
       schemaMap,
       branch,
       baseBranch,
@@ -3772,6 +3793,7 @@ export const renderApiReponse = async (
       mergeCommit,
       checkedOutBranchIds,
       binaryToken,
+      storageMap
     };
   }
   if (repoState.commandMode == "compare") {
@@ -3790,6 +3812,7 @@ export const renderApiReponse = async (
       apiDiff,
       diff,
       beforeState,
+      beforeKvState,
       beforeApiStoreInvalidity,
       beforeManifests,
       beforeSchemaMap,
@@ -3801,6 +3824,16 @@ export const renderApiReponse = async (
       repoState,
       applicationKVState
     );
+    const storageMap = await getPluginClientStorage(
+      datasource,
+      repoId,
+      Array.from(
+        new Set([
+          ...renderedApplicationState.plugins.map((kv) => kv.key),
+          ...beforeState.plugins.map((kv) => kv.key),
+        ])
+      )
+    );
 
     const conflictResolution = repoState?.isInMergeConflict
       ? getConflictResolution(diff, repoState?.merge?.conflictList)
@@ -3811,6 +3844,8 @@ export const renderApiReponse = async (
         apiStoreInvalidity: beforeApiStoreInvalidity,
         repoState,
         applicationState: beforeState,
+        kvState: beforeKvState,
+        beforeKvState: applicationKVState,
         schemaMap: beforeSchemaMap,
         branch,
         baseBranch,
@@ -3826,12 +3861,14 @@ export const renderApiReponse = async (
         binaryToken,
         divergenceOrigin,
         divergenceSha,
+        storageMap
       };
     }
     return {
       apiStoreInvalidity,
       repoState,
       applicationState: renderedApplicationState,
+      kvState: applicationKVState,
       schemaMap,
       branch,
       baseBranch,
@@ -3839,6 +3876,7 @@ export const renderApiReponse = async (
       isWIP,
       apiDiff,
       beforeState,
+      beforeKvState,
       beforeApiStoreInvalidity,
       beforeManifests,
       beforeSchemaMap,
@@ -3848,6 +3886,7 @@ export const renderApiReponse = async (
       binaryToken,
       divergenceOrigin,
       divergenceSha,
+      storageMap
     };
   }
   return null;

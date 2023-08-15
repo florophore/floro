@@ -1560,6 +1560,10 @@ export const flattenStateToSchemaPathKV = (
     });
   }
   for (const prop of sets) {
+    if (!(state?.[prop] ?? []).forEach) {
+      console.log("WHAT THE HELL", state);
+
+    }
     (state?.[prop] ?? []).forEach((element) => {
       kv.push(
         ...flattenStateToSchemaPathKV(
@@ -5494,6 +5498,478 @@ const updateObjectInStateMap = (
   last[indexPath[indexPath.length - 1]] = objectToUpdate;
   return stateMap;
 };
+
+
+export type StringDiff = {
+  add: {
+    [key: number]: string;
+  };
+  remove: {
+    [key: number]: string;
+  };
+};
+
+export type Diff = {
+  add: {
+    [key: string]: DiffElement;
+  };
+  remove: {
+    [key: string]: DiffElement;
+  };
+};
+
+export interface DiffElement {
+  key: string;
+  value: any;
+}
+
+const fastHash = (str: string) => {
+  let hash = 0;
+  let hash2 = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = (hash * hash2) ^ ((hash << 5) - hash + str.charCodeAt(i));
+    hash2 = (hash2 << 5) - hash + str.charCodeAt(i);
+    hash |= 0;
+    hash2 |= 0;
+  }
+  return hash.toString(36).padEnd(6) + hash2.toString(36).padEnd(6);
+};
+
+export const getLCS = (
+  left: Array<string>,
+  right: Array<string>
+): Array<string> => {
+  const diff = mdiff(left, right);
+  const lcs = diff.getLcs();
+  return lcs ?? [];
+};
+
+export const getArrayStringDiff = (
+  past: Array<string>,
+  present: Array<string>
+): StringDiff => {
+  const longestSequence = getLCS(past, present);
+
+  let diff = {
+    add: {},
+    remove: {},
+  };
+
+  for (let i = 0, removeIndex = 0; i < past.length; ++i) {
+    if (longestSequence[removeIndex] == past[i]) {
+      removeIndex++;
+    } else {
+      diff.remove[i] = past[i];
+    }
+  }
+
+  for (let i = 0, addIndex = 0; i < present.length; ++i) {
+    if (longestSequence[addIndex] == present[i]) {
+      addIndex++;
+    } else {
+      diff.add[i] = present[i];
+    }
+  }
+  return diff;
+};
+
+export const getRowHash = (obj: {
+  key: string;
+  value: {
+    [key: string]: number | string | boolean | Array<number | string | boolean>;
+  };
+}): string => {
+  return fastHash(obj.key + JSON.stringify(obj.value));
+};
+
+export const getDiff = (
+  before: Array<DiffElement>,
+  after: Array<DiffElement>
+): Diff => {
+  const past = before.map(getRowHash);
+  const present = after.map(getRowHash);
+  const longestSequence = getLCS(past, present);
+  let removeIndex = 0;
+  let diff = {
+    add: {},
+    remove: {},
+  };
+  for (let i = 0; i < past.length; ++i) {
+    if (longestSequence[removeIndex] == past[i]) {
+      removeIndex++;
+    } else {
+      diff.remove[i] = before[i];
+    }
+  }
+
+  let addIndex = 0;
+  for (let i = 0; i < present.length; ++i) {
+    if (longestSequence[addIndex] == present[i]) {
+      addIndex++;
+    } else {
+      diff.add[i] = after[i];
+    }
+  }
+  return diff;
+};
+
+export interface ManifestNode {
+  type: string;
+  isKey?: boolean;
+  values?: string | TypeStruct;
+  ref?: string;
+  refKeyType?: string;
+  refType?: string;
+  nullable?: boolean;
+  emptyable?: boolean;
+  bounded?: boolean;
+  manualOrdering?: boolean;
+  onDelete?: "delete" | "nullify";
+  default?: unknown|Array<unknown>;
+}
+
+export interface TypeStruct {
+  [key: string]: ManifestNode | TypeStruct;
+}
+
+export interface Manifest {
+  version: string;
+  name: string;
+  displayName: string;
+  description?: string;
+  codeDocsUrl?: string;
+  codeRepoUrl?: string;
+  managedCopy?: boolean;
+  icon:
+    | string
+    | {
+        light: string;
+        dark: string;
+        selected?:
+          | string
+          | {
+              dark?: string;
+              light?: string;
+            };
+      };
+  imports: {
+    [name: string]: string;
+  };
+  types: TypeStruct;
+  store: TypeStruct;
+  seed?: unknown;
+}
+
+const primitives = new Set(["int", "float", "boolean", "string", "file"]);
+
+const writePathString = (
+  pathParts: Array<DiffElement | string>
+): string => {
+  return pathParts
+    .map((part) => {
+      if (typeof part == "string") {
+        return part;
+      }
+      return \`\$\{part.key\}<\$\{part.value\}>\`;
+    })
+    .join(".");
+};
+
+const generateKVFromStateWithRootSchema = (
+  rootSchema: TypeStruct,
+  pluginName: string,
+  state: object
+): Array<DiffElement> => {
+  const flattenedState = flattenStateToSchemaPathKV(
+    rootSchema as unknown as Manifest,
+    state,
+    [\`$(\$\{pluginName\})\`]
+  );
+  return (
+    flattenedState?.map?.(({ key, value }) => {
+      return {
+        key: writePathString(key as unknown as Array<string | DiffElement>),
+        value,
+      };
+    }) ?? []
+  );
+};
+
+const generateKVState = (
+  rootSchema: TypeStruct,
+  state: object
+) => {
+  const out:Array<DiffElement> = [];
+  for (const pluginName in rootSchema) {
+    out.push(
+      ...generateKVFromStateWithRootSchema(
+        rootSchema[pluginName] as TypeStruct,
+        pluginName,
+        state[pluginName]
+      )
+    );
+  }
+  return out;
+}
+
+const getStateId = (schema: TypeStruct, state: object): string => {
+  const hashPairs: Array<DiffElement> = [];
+  const sortedProps = Object.keys(schema).sort();
+  for (const prop of sortedProps) {
+    if (!schema[prop].type) {
+      hashPairs.push({
+        key: prop,
+        value: getStateId(schema[prop] as TypeStruct, state[prop]),
+      });
+    }
+    if (primitives.has(schema[prop].type as string)) {
+      hashPairs.push({
+        key: prop,
+        value: fastHash(\`\$\{state[prop]\}\`),
+      });
+    }
+    if (schema[prop].type == "set" || schema[prop].type == "array") {
+      hashPairs.push({
+        key: prop,
+        value: state[prop]?.reduce((s: string, element: object) => {
+          if (
+            typeof schema[prop].values == "string" &&
+            primitives.has(schema[prop].values as string)
+          ) {
+            return fastHash(s + \`\$\{element\}\`);
+          }
+          return fastHash(
+            s + getStateId(schema[prop].values as TypeStruct, element)
+          );
+        }, ""),
+      });
+    }
+  }
+  return fastHash(
+    hashPairs.reduce((s, { key, value }) => {
+      if (key == "(id)") {
+        return s;
+      }
+      if (s == "") {
+        return \`\$\{key\}:\$\{value\}\`;
+      }
+      return s + "/" + \`\$\{key\}:\$\{value\}\`;
+    }, "")
+  );
+};
+
+const decodeSchemaPath = (
+  pathString: string
+): Array<DiffElement | string> => {
+  return splitPath(pathString).map((part) => {
+    if (/^(.+)<(.+)>$/.test(part) && getCounterArrowBalanance(part) == 0) {
+      const { key, value } = extractKeyValueFromRefString(part);
+      return {
+        key,
+        value,
+      };
+    }
+    return part;
+  });
+};
+
+const writePathStringWithArrays = (
+  pathParts: Array<DiffElement | string | number>
+): string => {
+  return pathParts
+    .map((part) => {
+      if (typeof part == "string") {
+        return part;
+      }
+      if (typeof part == "number") {
+        return \`[\$\{part\}]\`;
+      }
+      return \`\$\{part.key\}<\$\{part.value\}>\`;
+    })
+    .join(".");
+};
+
+
+
+const reIndexSchemaArrays = (kvs: Array<DiffElement>): Array<string> => {
+  const out: string[] = [];
+  const listStack: Array<string> = [];
+  let indexStack: Array<number> = [];
+  for (const { key } of kvs) {
+    const decodedPath = decodeSchemaPath(key);
+    const lastPart = decodedPath[decodedPath.length - 1];
+    if (typeof lastPart == "object" && lastPart.key == "(id)") {
+      const parentPath = decodedPath.slice(0, -1);
+      const parentPathString = writePathString(parentPath);
+      const peek = listStack?.[listStack.length - 1];
+      if (peek != parentPathString) {
+        if (!peek || key.startsWith(peek)) {
+          listStack.push(parentPathString);
+          indexStack.push(0);
+        } else {
+          while (
+            listStack.length > 0 &&
+            !key.startsWith(listStack[listStack.length - 1])
+          ) {
+            listStack.pop();
+            indexStack.pop();
+          }
+          indexStack[indexStack.length - 1]++;
+        }
+      } else {
+        const currIndex = indexStack.pop();
+        indexStack.push((currIndex ?? 0) + 1);
+      }
+      let pathIdx = 0;
+      const pathWithNumbers = decodedPath.map((part) => {
+        if (typeof part == "object" && part.key == "(id)") {
+          return indexStack[pathIdx++];
+        }
+        return part;
+      });
+      const arrayPath = writePathStringWithArrays(pathWithNumbers);
+      out.push(arrayPath);
+    } else {
+      out.push(key);
+    }
+  }
+  return out;
+};
+
+
+
+const flattenStateToSchemaPathKV = (
+  schemaRoot: Manifest,
+  state: object,
+  traversalPath: Array<string | DiffElement>
+): Array<{
+  key: string | Array<string | DiffElement>;
+  value: unknown;
+}> => {
+  const kv: Array<{
+    key: string | Array<string | DiffElement>;
+    value: unknown;
+  }> = [];
+  const sets: Array<string> = [];
+  const arrays: Array<string> = [];
+  const nestedStructures: Array<string> = [];
+  const value = {};
+  let primaryKey: null | DiffElement = null;
+  const sortedProps = Object.keys(schemaRoot).sort();
+  for (const prop of sortedProps) {
+    if (schemaRoot[prop].isKey) {
+      primaryKey = {
+        key: prop,
+        value: state[prop],
+      };
+    }
+
+    if (
+      schemaRoot[prop]?.type == "set" &&
+      !primitives.has(schemaRoot[prop].values)
+    ) {
+      sets.push(prop);
+      continue;
+    }
+    if (
+      schemaRoot[prop]?.type == "array" &&
+      !primitives.has(schemaRoot[prop].values)
+    ) {
+      arrays.push(prop);
+      continue;
+    }
+    if (
+      !primitives.has(schemaRoot[prop]?.type) &&
+      !(
+        (schemaRoot[prop]?.type == "array" ||
+          schemaRoot[prop]?.type == "set") &&
+        primitives.has(schemaRoot[prop]?.values)
+      ) &&
+      schemaRoot[prop]?.type != "ref"
+    ) {
+      nestedStructures.push(prop);
+      continue;
+    }
+    value[prop] = state[prop];
+  }
+
+  kv.push({
+    key: [...traversalPath, ...(primaryKey ? [primaryKey] : [])],
+    value,
+  });
+
+  for (const prop of nestedStructures) {
+    kv.push(
+      ...flattenStateToSchemaPathKV(schemaRoot[prop], state[prop], [
+        ...traversalPath,
+        ...(primaryKey ? [primaryKey] : []),
+        prop,
+      ])
+    );
+  }
+  for (const prop of arrays) {
+    (state?.[prop] ?? []).forEach((element) => {
+      const id = getStateId(schemaRoot[prop].values, element);
+      kv.push(
+        ...flattenStateToSchemaPathKV(
+          schemaRoot[prop].values,
+          { ...element, ["(id)"]: id },
+          [
+            ...traversalPath,
+            ...(primaryKey ? [primaryKey] : []),
+            prop
+          ],
+        )
+      );
+    });
+  }
+  for (const prop of sets) {
+    (state?.[prop] ?? []).forEach((element) => {
+      kv.push(
+        ...flattenStateToSchemaPathKV(
+          schemaRoot[prop].values,
+          element,
+          [
+          ...traversalPath,
+          ...(primaryKey ? [primaryKey] : []),
+          prop,
+        ])
+      );
+    });
+  }
+  return kv;
+};
+
+const getNextApplicationState = (currentApplicationState: {[key: string]: object}, nextApplicationState: {[key: string]: object}, rootSchemaMap: TypeStruct, lastEditKey: React.MutableRefObject<null|string>): SchemaRoot | null => {
+  try {
+    if (!currentApplicationState && !nextApplicationState) {
+      return null;
+    }
+    if (!currentApplicationState) {
+      return nextApplicationState as SchemaRoot;
+    }
+    if (!nextApplicationState) {
+      return currentApplicationState as SchemaRoot;
+    }
+    const currentKV = generateKVState(rootSchemaMap, currentApplicationState);
+    const nextKV = generateKVState(rootSchemaMap, nextApplicationState);
+    const diff = getDiff(currentKV, nextKV);
+    if (Object.keys(diff.add).length == 0 && Object.keys(diff.remove).length == 0) {
+      return currentApplicationState as SchemaRoot;
+    }
+    const removedKeys = new Set(Object.values(diff.remove).map(kv => kv.key));
+    const updatedKeys = Object.values(diff.add).filter(kv => removedKeys.has(kv.key));
+    const reIndexedUpdatedKeys = reIndexSchemaArrays(updatedKeys);
+    const updatedKeysSet = new Set(reIndexedUpdatedKeys)
+    const key = lastEditKey.current;
+    if (key && updatedKeysSet.has(key) && updatedKeysSet.size == 1) {
+      return currentApplicationState as SchemaRoot;
+    }
+    return nextApplicationState as SchemaRoot;
+  } catch(e) {
+    return nextApplicationState as SchemaRoot;
+  }
+}
 `;
 
 export const drawGetPluginStore = (
@@ -5689,7 +6165,7 @@ export const drawProviderApiCode = () => `
 type ValueOf<T> = T[keyof T];
 
 interface Packet {
-  id: string;
+  id: number;
   chunk: string;
   index: number;
   totalPackets: number;
@@ -5711,6 +6187,8 @@ interface PluginState {
   binaryMap: {[key: string]: string};
   isCopyMode: boolean;
   copyList: Array<ValueOf<QueryTypes>>;
+  rootSchemaMap: TypeStruct;
+  clientStorage: object;
 }
 
 interface IFloroContext {
@@ -5722,13 +6200,16 @@ interface IFloroContext {
   apiStoreInvaliditySets: {[key: string]: Set<string>};
   conflictSet: Set<string>;
   hasLoaded: boolean;
-  saveState: <T extends keyof SchemaRoot>(pluginName: T, state: SchemaRoot|null) => string | null;
+  saveState: <T extends keyof SchemaRoot>(pluginName: T, state: SchemaRoot|null) => number | null;
   setPluginState: (state: PluginState) => void;
   saveCopyList: (copyList: Array<ValueOf<QueryTypes>>) => void;
+  saveClientStorage: (_: object) => void;
+  clearClientStorage: () => void;
   isCopyMode: boolean;
   copyList: Array<ValueOf<QueryTypes>>;
   pluginState: PluginState;
-  loadingIds: Set<string>;
+  clientStorage: object;
+  lastEditKey: React.MutableRefObject<string|null>
 }
 
 const FloroContext = createContext({
@@ -5743,13 +6224,20 @@ const FloroContext = createContext({
   saveState: (_state: null) => null,
   setPluginState: (_state: PluginState) => {},
   saveCopyList: (_copyList: Array<ValueOf<QueryTypes>>) => {},
+  saveClientStorage: (_storage: object) => {},
+  clearClientStorage: () => {},
   isCopyMode: false,
   copyList: [],
+  pathKeys: [],
+  rootSchemaMap: {},
+  clientStorage: {},
+  lastEditKey: { current: null},
   pluginState: {
     commandMode: "view",
     compareFrom: "none",
     isCopyMode: false,
     copyList: [],
+    pathKeys: [],
     applicationState: null,
     apiStoreInvalidity: {},
     conflictList: [],
@@ -5760,8 +6248,9 @@ const FloroContext = createContext({
       binaryToken: null,
     },
     binaryMap: {},
+    rootSchemaMap: {},
+    clientStorage: {},
   },
-  loadingIds: new Set([]),
 } as IFloroContext);
 
 export interface Props {
@@ -5769,7 +6258,7 @@ export interface Props {
 }
 
 const MAX_DATA_SIZE = 10_000;
-const sendMessagetoParent = (id: string, pluginName: string|null, command: string, data: object) => {
+const sendMessagetoParent = (id: number, pluginName: string|null, command: string, data: object) => {
   const dataString = JSON.stringify({ command, data });
   const totalPackets = Math.floor(dataString.length / MAX_DATA_SIZE);
   for (let i = 0; i < dataString.length; i += MAX_DATA_SIZE) {
@@ -5807,23 +6296,40 @@ export const FloroProvider = (props: Props) => {
     },
     binaryMap: {},
     isCopyMode: false,
-    copyList: []
+    copyList: [],
+    rootSchemaMap: {},
+    clientStorage: {}
   });
+  const currentPluginAppState = useRef<PluginState["applicationState"]>({...pluginState.applicationState} as PluginState["applicationState"]);
+  const currentClientStorage = useRef<object>({...pluginState.clientStorage});
+  const rootSchemaMap = useRef(pluginState.rootSchemaMap);
   const [hasLoaded, setHasLoaded] = useState(false);
-  const [loadingIds, setLoadingIds] = useState<Set<string>>(new Set());
-  const ids = useRef<Set<string>>(new Set());
+  const ids = useRef<Set<number>>(new Set());
   const [copyList, setCopyList] = useState<Array<ValueOf<QueryTypes>>>([]);
+  const outboundTimeout = useRef<NodeJS.Timeout>();
+  const updateTimeout = useRef<NodeJS.Timeout>();
+  const lastEditKey = useRef<string|null>(null);
+  const currentPluginState = useRef<PluginState>(pluginState);
 
+  useEffect(() => {
+    currentPluginState.current = pluginState;
+  }, [pluginState])
 
   useEffect(() => {
     setCopyList(pluginState?.copyList);
   }, [pluginState?.isCopyMode])
 
-  const incoming = useRef({});
+  const incoming = useRef<{[id: number]: {
+    data: Array<string>,
+    counter: number
+  }}>({});
+  const updateCounter = useRef(1);
 
   const commandMode = useMemo(() => {
     return pluginState.commandMode;
   }, [pluginState.commandMode]);
+
+  const commandModeRef = useRef(commandMode);
 
   const compareFrom = useMemo(() => {
     return pluginState.compareFrom;
@@ -5869,77 +6375,82 @@ export const FloroProvider = (props: Props) => {
   }, []);
 
   const saveState = useCallback(
-    <T extends keyof SchemaRoot>(pluginName: T, state: SchemaRoot|null): string | null => {
+    <T extends keyof SchemaRoot>(pluginName: T, state: SchemaRoot|null): number | null => {
       if (commandMode != "edit") {
         return null;
       }
       if (state == null || state[pluginName] == null) {
         return null;
       }
+      clearTimeout(updateTimeout.current);
       if (ids.current) {
-        const id = Math.random().toString(16).substring(2);
+        updateCounter.current += 2;
+        const id = updateCounter.current;
         ids.current = new Set([...Array.from(ids.current), id]);
-        setLoadingIds(ids.current);
-        new Promise((resolve) => {
-          const onReturnId = ({ data }) => {
-            if (data.id == id) {
-              if (
-                incoming.current[data.id] &&
-                incoming.current[data.id].counter == data.totalPackets + 1
-              ) {
-                ids.current = new Set([
-                  ...Array.from(ids.current).filter((i) => i != id),
-                ]);
-                setLoadingIds(ids.current);
-                delete incoming.current[data.id];
-                window.removeEventListener("message", onReturnId);
-                resolve(id);
-              }
-            }
-          };
-          window.addEventListener("message", onReturnId);
+
+        currentPluginAppState.current = { ...state};
+        clearTimeout(outboundTimeout.current);
+        outboundTimeout.current = setTimeout(() => {
           sendMessagetoParent(id, pluginName, "save", state[pluginName]);
-        });
+        }, 0);
         return id;
       }
       return null;
     },
-    [commandMode, loadingIds]
+    [commandMode]
   );
 
   const saveCopyList = useCallback((copyList: Array<ValueOf<QueryTypes>>) => {
     if (!pluginState.isCopyMode) {
       return;
     }
+    clearTimeout(updateTimeout.current);
     setCopyList(copyList);
     if (ids.current) {
-      const id = Math.random().toString(16).substring(2);
+      updateCounter.current += 2;
+      const id = updateCounter.current;
       ids.current = new Set([...Array.from(ids.current), id]);
-      setLoadingIds(ids.current);
-      new Promise((resolve) => {
-        const onReturnId = ({ data }) => {
-          if (data.id == id) {
-            if (
-              incoming.current[data.id] &&
-              incoming.current[data.id].counter == data.totalPackets + 1
-            ) {
-              ids.current = new Set([
-                ...Array.from(ids.current).filter((i) => i != id),
-              ]);
-              setLoadingIds(ids.current);
-              delete incoming.current[data.id];
-              window.removeEventListener("message", onReturnId);
-              resolve(id);
-            }
-          }
-        };
-        window.addEventListener("message", onReturnId);
+      clearTimeout(outboundTimeout.current);
+      outboundTimeout.current = setTimeout(() => {
         sendMessagetoParent(id, null, "update-copy", copyList);
-      });
+      }, 0);
       return id;
     }
       return null;
   }, [pluginState.isCopyMode])
+
+
+  const saveClientStorage = useCallback((clientStorage: object) => {
+    if (commandMode != "edit") {
+      return null;
+    }
+    clearTimeout(updateTimeout.current);
+    if (ids.current) {
+      updateCounter.current += 2;
+      const id = updateCounter.current;
+      ids.current = new Set([...Array.from(ids.current), id]);
+      currentClientStorage.current = {...clientStorage};
+      clearTimeout(outboundTimeout.current);
+      outboundTimeout.current = setTimeout(() => {
+        sendMessagetoParent(id, null, "update-client-storage", clientStorage);
+      }, 0);
+      return id;
+    }
+    return null;
+  }, [commandMode, pluginState]);
+
+
+  const clearClientStorage = useCallback(() => {
+    if (ids.current) {
+      currentClientStorage.current = {};
+      window.parent?.postMessage("clear-client-storage", "*");
+      setPluginState({
+        ...pluginState,
+        clientStorage: {}
+      })
+    }
+    return null;
+  }, [pluginState]);
 
   const applicationState = useMemo(() => {
     if (!hasLoaded) {
@@ -5983,16 +6494,62 @@ export const FloroProvider = (props: Props) => {
         );
         if (response.event == "load") {
             const state: PluginState = response.data as PluginState;
+            rootSchemaMap.current = state.rootSchemaMap;
             setPluginState(state);
+            currentPluginAppState.current = state.applicationState;
+            commandModeRef.current = state.commandMode;
             setHasLoaded(true);
         }
         if (response.event == "ack" || response.event == "update") {
             const state: PluginState = response.data as PluginState;
-            setPluginState(state);
+            let skip = false;
+            if (response.event == "update" && state.commandMode == "edit" && commandModeRef.current == "edit" && data.id < updateCounter.current) {
+              skip = true;
+            }
+            if (!skip) {
+              if (currentPluginAppState.current && state.applicationState) {
+                clearTimeout(updateTimeout.current);
+                const nextApplicationState = getNextApplicationState(
+                  currentPluginAppState.current,
+                  state.applicationState,
+                  state.rootSchemaMap,
+                  lastEditKey
+                );
+                lastEditKey.current = null;
+                const didChangeStorage = JSON.stringify(state.clientStorage) !=
+                    JSON.stringify(currentClientStorage.current);
+                const nextClientStorage =
+                  didChangeStorage
+                    ? state.clientStorage
+                    : { ...currentClientStorage.current };
+                const nextState = {
+                  ...state,
+                  applicationState: nextApplicationState ? nextApplicationState : currentClientStorage.current as SchemaRoot,
+                  clientStorage: nextClientStorage
+                }
+                rootSchemaMap.current = state.rootSchemaMap;
+                currentPluginAppState.current = {...nextState.applicationState} as SchemaRoot;
+                currentClientStorage.current = {...nextClientStorage};
+                commandModeRef.current = state.commandMode;
+                if (nextState.applicationState) {
+                  clearTimeout(updateTimeout.current);
+                  updateTimeout.current = setTimeout(() => {
+                    setPluginState(nextState);
+                  }, 200);
+                }
+              }
+            }
         }
-        if (!ids.current.has(data.id)) {
-          delete incoming.current[data.id];
+        for (const id in incoming.current) {
+          const idInt = parseInt(id);
+          if (idInt < (updateCounter?.current ?? 0)) {
+              delete incoming.current[data.id];
+              ids.current.delete(idInt);
+          }
         }
+      }
+      if (data.id > updateCounter.current) {
+        updateCounter.current = data.id + 1;
       }
     };
     window.addEventListener("message", onMessage, true);
@@ -6016,10 +6573,13 @@ export const FloroProvider = (props: Props) => {
         saveState,
         setPluginState,
         pluginState,
-        loadingIds,
+        clientStorage: pluginState.clientStorage,
         saveCopyList,
+        saveClientStorage,
+        clearClientStorage,
         isCopyMode: pluginState.isCopyMode,
-        copyList
+        copyList,
+        lastEditKey
       }}
     >
       {props.children}
@@ -6068,6 +6628,53 @@ export const useCopyApi = (pointer: ValueOf<QueryTypes>|null) => {
     isCopied,
     toggleCopy
   }
+}
+
+export const useClientStorageApi = <T,> (clientStorageKey: string): [T|null, (value: T|null) => void, () => void] => {
+  const { clientStorage, saveClientStorage, pluginState, setPluginState, commandMode } = useFloroContext();
+
+  const value = useMemo((): T|null => {
+    return clientStorage?.[clientStorageKey] ?? null
+  }, [clientStorageKey, clientStorage?.[clientStorageKey], commandMode]);
+  const [getter, setter] = useState<T|null>(value);
+  const timeout = useRef<NodeJS.Timeout>();
+  useEffect(() => {
+    clearTimeout(timeout?.current);
+    timeout.current = setTimeout(() => {
+      if (value != getter) {
+        setter(value);
+      }
+    }, 300);
+    return () => {
+      clearTimeout(timeout.current);
+    }
+  }, [value])
+
+  const set = useCallback((value: T|null) => {
+    if (commandMode != "edit") {
+      return;
+    }
+    const next = {
+      ...clientStorage,
+      [clientStorageKey]: value
+    };
+    setter(value);
+    saveClientStorage(next)
+  }, [clientStorage, clientStorageKey, pluginState, commandMode, setPluginState, saveClientStorage]);
+
+  const remove = useCallback(() => {
+    if (commandMode != "edit") {
+      return;
+    }
+    const next = {
+      ...clientStorage,
+    };
+    delete next[clientStorageKey];
+    setter(null);
+    saveClientStorage(next)
+  }, [clientStorage, clientStorageKey, pluginState, commandMode, setPluginState, saveClientStorage]);
+
+  return [getter, set, remove];
 }
 `;
 
@@ -6492,30 +7099,16 @@ export const drawUseFloroStateFunction = (
   let code = "";
   for (let diffable of diffables) {
     const wildcard = renderDiffableToWildcard(diffable);
-    code += `export function useFloroState(query: PointerTypes['${wildcard}'], defaultData?: SchemaTypes['${wildcard}'], mutateStoreWithDefault?: boolean): [SchemaTypes['${wildcard}']|null, (t: SchemaTypes['${wildcard}'], doSave?: boolean) => void, boolean, () => void];\n`;
+    code += `export function useFloroState(query: PointerTypes['${wildcard}'], defaultData?: SchemaTypes['${wildcard}'], mutateStoreWithDefault?: boolean): [SchemaTypes['${wildcard}']|null, (t: SchemaTypes['${wildcard}']) => void, () => void];\n`;
   }
   code += USE_FLORO_STATE_FUNCTION + "\n";
   return code;
 }
 
 export const USE_FLORO_STATE_FUNCTION = `
-export function useFloroState<T>(query: string, defaultData?: T, mutateStoreWithDefault = true): [T|null, (t: T, doSave?: boolean) => void, boolean, () => void] {
+export function useFloroState<T>(query: string, defaultData?: T, mutateStoreWithDefault = true): [T|null, (t: T) => void, () => void] {
   const ctx = useFloroContext();
   const pluginName = useMemo(() => getPluginNameFromQuery(query), [query]);
-  const objString = useMemo(() => {
-    if (!ctx.applicationState) {
-        return null;
-    }
-    const existingObj = getObjectInStateMap(
-      ctx.applicationState as SchemaRoot,
-      query
-    );
-    if (!existingObj) {
-      return null;
-    }
-    return JSON.stringify(existingObj);
-  }, [ctx.applicationState, query])
-
 
   const obj = useMemo((): T|null => {
     if (!ctx.hasLoaded) {
@@ -6540,47 +7133,44 @@ export function useFloroState<T>(query: string, defaultData?: T, mutateStoreWith
 
   const [getter, setter] = useState<T|null>(obj ?? defaultData ?? null);
 
-  const [id, setId] = useState<string | null>(null);
+  const objString = useMemo(() => {
+    if (!obj) {
+      return null;
+    }
+    return JSON.stringify(obj);
+  }, [obj, query])
 
   useEffect(() => {
     setter(obj);
   }, [objString]);
 
-  const isLoading = useMemo(
-    () => !!id && ctx.loadingIds.has(id),
-    [id, ctx.loadingIds]
-  );
-
   const save = useCallback(() => {
     if (ctx.applicationState && pluginName && getter && ctx.commandMode == "edit") {
+      ctx.lastEditKey.current = query;
       updateObjectInStateMap(ctx.applicationState, query, getter);
       ctx.setPluginState({
         ...ctx.pluginState,
         applicationState: ctx.applicationState
       });
-      const id = ctx.saveState(pluginName, ctx.applicationState);
-      if (id) {
-        setId(id);
-      }
+      ctx.saveState(pluginName, ctx.applicationState);
     }
   }, [query, pluginName, ctx.pluginState, ctx.applicationState, ctx.commandMode, getter]);
 
-  const set = useCallback((obj: T, save: boolean = false) => {
+  const set = useCallback((obj: T) => {
     setter(obj);
-    if (save && ctx.applicationState && pluginName && obj && ctx.commandMode == "edit") {
+    ctx.lastEditKey.current = query;
+    if (ctx.applicationState && pluginName && obj && ctx.commandMode == "edit") {
       updateObjectInStateMap(ctx.applicationState, query, obj);
       ctx.setPluginState({
         ...ctx.pluginState,
         applicationState: ctx.applicationState
       });
-      const id = ctx.saveState(pluginName, ctx.applicationState);
-      if (id) {
-        setId(id);
-      }
+      ctx.saveState(pluginName, ctx.applicationState);
     }
-  }, [query, pluginName, ctx.pluginState, ctx.applicationState, ctx.commandMode])
-  return [getter, set, isLoading, save];
-};`;
+  }, [query, pluginName, ctx.pluginState, ctx.applicationState, ctx.commandMode]);
+  return [getter, set, save];
+};
+`;
 
 export const drawUseIsFloroInvalidFunction = (
   diffables: Array<Array<string|DiffableElement>>

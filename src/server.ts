@@ -76,7 +76,8 @@ import {
   checkIsBranchProtected,
   getCanRevert,
   getIsMerged,
-  sanitizeApplicationKV
+  sanitizeApplicationKV,
+  readCurrentState
 } from "./repoapi";
 import {
   makeMemoizedDataSource,
@@ -2266,7 +2267,6 @@ app.post(
   cors(corsNoNullOriginDelegate),
   async (req, res): Promise<void> => {
     const repoId = req.params["repoId"];
-    const fromRepoId = req.params["fromRepoId"];
     const pluginName = req.params["pluginName"];
     const state = req.body["state"];
     const pluginNameToUpdate = req.body["pluginName"];
@@ -2322,6 +2322,76 @@ app.post(
     res.send(apiResponse);
   }
 );
+
+app.post(
+  "/repo/:repoId/plugin/:pluginName/storage",
+  cors(corsNoNullOriginDelegate),
+  async (req, res): Promise<void> => {
+    try {
+      const repoId = req.params["repoId"];
+      const pluginName = req.params["pluginName"];
+      const storage = req.body["storage"];
+      await datasource.savePluginClientStorage(repoId, pluginName, storage)
+      const renderedState = await readCurrentState(
+        datasource,
+        repoId,
+      );
+      const [repoState, applicationState] = await Promise.all([
+        datasource.readCurrentRepoState(repoId),
+        convertRenderedCommitStateToKv(datasource, renderedState),
+      ]);
+      const apiResponse = await renderApiReponse(
+        repoId,
+        datasource,
+        renderedState,
+        applicationState,
+        repoState
+      );
+      if (!apiResponse) {
+        res.sendStatus(404);
+        return;
+      }
+      res.send(apiResponse);
+    } catch(e) {
+      res.sendStatus(400);
+    }
+  }
+);
+
+app.post(
+  "/repo/:repoId/plugin/:pluginName/storage/clear",
+  cors(corsNoNullOriginDelegate),
+  async (req, res): Promise<void> => {
+    try {
+      const repoId = req.params["repoId"];
+      const pluginName = req.params["pluginName"];
+      await datasource.clearPluginClientStorage(repoId, pluginName);
+      const renderedState = await readCurrentState(
+        datasource,
+        repoId,
+      );
+      const [repoState, applicationState] = await Promise.all([
+        datasource.readCurrentRepoState(repoId),
+        convertRenderedCommitStateToKv(datasource, renderedState),
+      ]);
+      const apiResponse = await renderApiReponse(
+        repoId,
+        datasource,
+        renderedState,
+        applicationState,
+        repoState
+      );
+      if (!apiResponse) {
+        res.sendStatus(404);
+        return;
+      }
+      res.send(apiResponse);
+    } catch(e) {
+      res.sendStatus(400);
+    }
+  }
+);
+
 
 app.get(
   "/repo/:repoId/clone/state",

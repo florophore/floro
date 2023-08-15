@@ -289,11 +289,13 @@ export interface DivergenceOrigin {
 export interface ApiResponse {
   repoState: RepoState;
   applicationState: RenderedApplicationState;
-  schemaMap: { [key: string]: Manifest };
+  kvState: ApplicationKVState;
+  schemaMap: { [pluginId: string]: Manifest };
   beforeState?: RenderedApplicationState;
+  beforeKvState?: ApplicationKVState;
   beforeApiStoreInvalidity?: ApiStoreInvalidity;
   beforeManifests?: Array<Manifest>;
-  beforeSchemaMap?: { [pluginName: string]: Manifest };
+  beforeSchemaMap?: { [pluginId: string]: Manifest };
   apiDiff?: ApiDiff;
   apiStoreInvalidity?: ApiStoreInvalidity;
   isWIP?: boolean;
@@ -308,6 +310,7 @@ export interface ApiResponse {
   binaryToken: string;
   divergenceOrigin?: DivergenceOrigin;
   divergenceSha?: string;
+  storageMap?: { [pluginId: string]: object };
 }
 
 export interface SourceGraphResponse {
@@ -2229,6 +2232,7 @@ export const getApiDiffFromComparisonState = async (
   apiDiff: ApiDiff;
   diff: StateDiff;
   beforeState: RenderedApplicationState;
+  beforeKvState: ApplicationKVState;
   beforeApiStoreInvalidity: ApiStoreInvalidity;
   beforeManifests: Array<Manifest>;
   beforeSchemaMap: { [pluginName: string]: Manifest };
@@ -2272,6 +2276,7 @@ export const getApiDiffFromComparisonState = async (
     const divergenceSha = getMergeOriginSha(divergenceOrigin);
     return {
       beforeState,
+      beforeKvState: branchState,
       beforeApiStoreInvalidity,
       beforeManifests,
       beforeSchemaMap,
@@ -2317,6 +2322,7 @@ export const getApiDiffFromComparisonState = async (
     const divergenceSha = getMergeOriginSha(divergenceOrigin);
     return {
       beforeState,
+      beforeKvState: commitState,
       beforeApiStoreInvalidity,
       beforeManifests,
       beforeSchemaMap,
@@ -2347,6 +2353,7 @@ export const getApiDiffFromComparisonState = async (
   const beforeSchemaMap = manifestListToSchemaMap(beforeManifests);
   return {
     beforeState,
+    beforeKvState: unstagedState,
     beforeApiStoreInvalidity,
     beforeManifests,
     beforeSchemaMap,
