@@ -3764,7 +3764,7 @@ export const renderApiReponse = async (
     };
   }
 
-  if (repoState.commandMode == "view") {
+  if (repoState?.commandMode == "view") {
     const storageMap = await getPluginClientStorage(
       datasource,
       repoId,
@@ -3796,7 +3796,7 @@ export const renderApiReponse = async (
       storageMap
     };
   }
-  if (repoState.commandMode == "compare") {
+  if (repoState?.commandMode == "compare") {
     const unstagedState = await getUnstagedCommitState(datasource, repoId);
 
     const isWIP =

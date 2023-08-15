@@ -3027,23 +3027,25 @@ const copySetsFromCopyFromOntoCopyInto = async (
       // before getting to the children sets
       const copyIntoParentSet = accessSetInReferenceMap(copyIntoReferences, parentPath);
       const setKey = (decodeSchemaPath(referenceKeys[0]).pop() as DiffElement).key;
-      const copyFromKV = Object.keys(copyFromParentSet.values).map(key => {
+      const copyParentSetFromValues = copyFromParentSet ?? copyIntoParentSet;
+      const copyFromKV = Object.keys(copyParentSetFromValues.values).map(key => {
         return {
           key: `${parentSetPath}.${setKey}<${key}>`,
-          value: copyFromParentSet.values[key]
+          value: copyParentSetFromValues.values[key]
         }
       });
 
-      const copyIntoKV = Object.keys(copyIntoParentSet?.values ?? {}).map(key => {
+      const copyParentSetIntoValues = copyIntoParentSet ?? copyFromParentSet;
+      const copyIntoKV = Object.keys(copyParentSetIntoValues.values).map(key => {
         return {
           key: `${parentSetPath}.${setKey}<${key}>`,
-          value: copyIntoParentSet.values[key]
+          value: copyParentSetIntoValues.values[key]
         }
       });
       const copiedKV = copyKV(copyFromKV, copyIntoKV, referenceKeys, priority);
       const parentReplacement = copiedKV?.filter(v => !!v?.value?.instance).map(v => v.value.instance);
-      copyIntoParentSet.parent.splice(0, copyIntoParentSet?.parent?.length ?? 0);
-      copyIntoParentSet.parent.push(...parentReplacement);
+      copyParentSetIntoValues.parent.splice(0, copyParentSetIntoValues?.parent?.length ?? 0);
+      copyParentSetIntoValues.parent.push(...parentReplacement);
       copyIntoReferences = compileStateRefs(copyIntoStaticSetPaths, copyIntoStateMap);
       const subSchema = getSchemaAtPath(copyIntoRootSchemaMap[pluginName], referenceKeys[0]);
       const subRefs = copiedKV.filter(v => {
