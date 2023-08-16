@@ -23,8 +23,14 @@ export const vPluginsPath = path.join(homePath, "plugins");
 export const vTMPPath = path.join(homePath, "tmp");
 // ~/.floro/dev
 export const vDEVPath = path.join(homePath, "dev");
+// ~/.floro/keys
+export const vKeysPath = path.join(homePath, "keys");
 // ~/.floro/binaries
 export const vBinariesPath = path.join(homePath, "binaries");
+// ~/.floro/keys/api_keys.json
+export const apiKeysJSON = path.join(vKeysPath, "api_keys.json");
+// ~/.floro/keys/webhook_keys.json
+export const webhookKeysJSON = path.join(vKeysPath, "webhook_keys.json");
 
 // FILES
 // CONFIG
@@ -76,6 +82,14 @@ const writeDefaultFiles = (isReset = false) => {
   // ~/.floro/config/plugins.json
   if (isReset || !fs.existsSync(vDevManifestCachePath)) {
     fs.writeFileSync(vDevManifestCachePath, JSON.stringify({}, null, 2));
+  }
+
+  if (isReset || !fs.existsSync(apiKeysJSON)) {
+    fs.writeFileSync(apiKeysJSON, JSON.stringify([], null, 2));
+  }
+
+  if (isReset || !fs.existsSync(webhookKeysJSON)) {
+    fs.writeFileSync(webhookKeysJSON, JSON.stringify([], null, 2));
   }
 }
 
@@ -140,6 +154,13 @@ export const buildFloroFilestructure = (): void => {
     fs.mkdirSync(vDEVPath);
     if (NODE_ENV != "test") {
       fs.chmodSync(vDEVPath, 0o755);
+    }
+  }
+
+  if (!fs.existsSync(vKeysPath)) {
+    fs.mkdirSync(vKeysPath);
+    if (NODE_ENV != "test") {
+      fs.chmodSync(vKeysPath, 0o755);
     }
   }
 

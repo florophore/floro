@@ -1,6 +1,7 @@
 import path from "path";
 import fs, { createWriteStream } from "fs";
 import {
+  apiKeysJSON,
   existsAsync,
   getDevManifestCache,
   getPluginsJsonAsync,
@@ -11,6 +12,7 @@ import {
   vPluginsPath,
   vReposPath,
   vTMPPath,
+  webhookKeysJSON,
   writeToDevManifestCache,
 } from "./filestructure";
 import { Manifest } from "./plugins";
@@ -36,6 +38,7 @@ import tar from "tar";
 import { SourceCommitNode } from "./sourcegraph";
 import { Stream } from "stream";
 import { dir } from "console";
+import { ApiKey, WebhookKey } from "./apikeys";
 
 axios.defaults.validateStatus = function () {
   return true;
@@ -155,6 +158,12 @@ export interface DataSource {
   readPluginClientStorage?: (repoId: string, pluginName: string) => Promise<object|null>
   savePluginClientStorage?: (repoId: string, pluginName: string, storage: object) => Promise<object|null>
   clearPluginClientStorage?: (repoId: string, pluginName: string) => Promise<boolean>
+
+  readApiKeys?: () => Promise<Array<ApiKey>>;
+  writeApiKeys?: (keys: Array<ApiKey>) => Promise<Array<ApiKey>>;
+
+  readWebhookKeys?: () => Promise<Array<WebhookKey>>;
+  writeWebhookKeys?: (keys: Array<WebhookKey>) => Promise<Array<WebhookKey>>;
 
 }
 
@@ -1156,6 +1165,51 @@ const savePluginClientStorage = async (
   }
 }
 
+const readApiKeys = async (): Promise<Array<ApiKey>> => {
+  try {
+    const keys = await fs.promises.readFile(apiKeysJSON);
+    return JSON.parse(keys.toString()) as Array<ApiKey>;
+  } catch(e) {
+    return null;
+  }
+}
+
+const writeApiKeys = async (apiKeys: Array<ApiKey>): Promise<Array<ApiKey>> => {
+  try {
+    await fs.promises.writeFile(
+      apiKeysJSON,
+      JSON.stringify(apiKeys),
+      "utf8"
+    );
+    return apiKeys;
+  } catch(e) {
+    return null;
+  }
+}
+
+
+const readWebhookKeys = async (): Promise<Array<WebhookKey>> => {
+  try {
+    const keys = await fs.promises.readFile(webhookKeysJSON);
+    return JSON.parse(keys.toString()) as Array<WebhookKey>;
+  } catch(e) {
+    return null;
+  }
+}
+
+const writeWebhookKeys = async (webhookKeys: Array<WebhookKey>): Promise<Array<WebhookKey>> => {
+  try {
+    await fs.promises.writeFile(
+      webhookKeysJSON,
+      JSON.stringify(webhookKeys),
+      "utf8"
+    );
+    return webhookKeys;
+  } catch(e) {
+    return null;
+  }
+}
+
 export const makeDataSource = (datasource: DataSource = {}) => {
   const defaultDataSource: DataSource = {
     readRepos,
@@ -1198,7 +1252,12 @@ export const makeDataSource = (datasource: DataSource = {}) => {
     saveInfo,
     readPluginClientStorage,
     clearPluginClientStorage,
-    savePluginClientStorage
+    savePluginClientStorage,
+
+    readApiKeys,
+    writeApiKeys,
+    readWebhookKeys,
+    writeWebhookKeys
   };
   return {
     ...defaultDataSource,

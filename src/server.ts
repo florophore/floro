@@ -108,6 +108,17 @@ import {
 import binarySession from "./binary_session";
 import { Session } from "inspector";
 import axios from "axios";
+import {
+  addApiKey,
+  addWebhookKey,
+  updateWebhookKey,
+  getApiKeys,
+  getWebhookKeys,
+  removeApiKey,
+  removeWebhookKey,
+  updateApiKeySecret,
+  updateWebhookKeySecret,
+} from "./apikeys";
 
 const remoteHost = getRemoteHostSync();
 
@@ -228,6 +239,154 @@ app.post(
     }
     res.sendStatus(400);
     return;
+  }
+);
+
+app.get("/api_keys",
+  cors(corsNoNullOriginDelegate),
+  async (_req, res): Promise<void> => {
+    const apiKeys = await getApiKeys(datasource);
+    res.send({
+      apiKeys,
+    });
+  }
+);
+
+app.post("/api_keys",
+  cors(corsNoNullOriginDelegate),
+  async (req, res): Promise<void> => {
+    const name =  req.body["name"] as string;
+    const apiKey = await addApiKey(datasource, { name });
+    if (!apiKey) {
+      res.sendStatus(400);
+      return;
+    }
+    const apiKeys = await getApiKeys(datasource);
+    res.send({
+      apiKeys,
+    });
+  }
+);
+
+app.post("/api_keys/:id/regenerate",
+  cors(corsNoNullOriginDelegate),
+  async (req, res): Promise<void> => {
+    const id = req.params["id"];
+    const apiKey = await updateApiKeySecret(datasource, id);
+    if (!apiKey) {
+      res.sendStatus(400);
+      return;
+    }
+    const apiKeys = await getApiKeys(datasource);
+    res.send({
+      apiKeys,
+    });
+  }
+);
+
+app.post("/api_keys/:id/delete",
+  cors(corsNoNullOriginDelegate),
+  async (req, res): Promise<void> => {
+    const id = req.params["id"];
+    const result = await removeApiKey(datasource, id);
+    if (!result) {
+      res.sendStatus(400);
+      return;
+    }
+    const apiKeys = await getApiKeys(datasource);
+    res.send({
+      apiKeys,
+    });
+  }
+);
+
+app.get("/webhook_keys",
+  cors(corsNoNullOriginDelegate),
+  async (_req, res): Promise<void> => {
+    const webhookKeys = await getWebhookKeys(datasource);
+    res.send({
+      webhookKeys,
+    });
+  }
+);
+
+app.post("/webhook_keys",
+  cors(corsNoNullOriginDelegate),
+  async (req, res): Promise<void> => {
+    const domain =  req.body["domain"] as string;
+    const defaultPort =  req.body["defaultPort"] as number;
+    const defaultSubdomain =  req.body["defaultSubdomain"] as string;
+    const defaultProtocol =  req.body["defaultProtocol"] as "http"|"https";
+    const webhookKey = await addWebhookKey(datasource, {
+      domain,
+      defaultPort,
+      defaultProtocol,
+      defaultSubdomain,
+    });
+    if (!webhookKey) {
+      res.sendStatus(400);
+      return;
+    }
+    const webhookKeys = await getWebhookKeys(datasource);
+    res.send({
+      webhookKeys,
+    });
+  }
+);
+
+app.post("/webhook_keys/:id/regenerate",
+  cors(corsNoNullOriginDelegate),
+  async (req, res): Promise<void> => {
+    const id = req.params["id"];
+    const webhookKey = await updateWebhookKeySecret(datasource, id);
+    if (!webhookKey) {
+      res.sendStatus(400);
+      return;
+    }
+    const webhookKeys = await getWebhookKeys(datasource);
+    res.send({
+      webhookKeys,
+    });
+  }
+);
+
+
+app.post("/webhook_keys/:id/update",
+  cors(corsNoNullOriginDelegate),
+  async (req, res): Promise<void> => {
+    const id = req.params["id"];
+    const defaultPort =  req.body["defaultPort"] as number;
+    const defaultSubdomain =  req.body["defaultSubdomain"] as string;
+    const defaultProtocol =  req.body["defaultProtocol"] as "http"|"https";
+    const webhookKey = await updateWebhookKey(datasource, id, {
+      defaultPort,
+      defaultProtocol,
+      defaultSubdomain,
+    });
+    if (!webhookKey) {
+      res.sendStatus(400);
+      return;
+    }
+    const webhookKeys = await getWebhookKeys(datasource);
+    res.send({
+      webhookKeys,
+    });
+  }
+);
+
+app.post("/webhook_keys/:id/delete",
+  cors(corsNoNullOriginDelegate),
+  async (req, res): Promise<void> => {
+    const id = req.params["id"];
+    const result = await removeWebhookKey(datasource, id);
+    if (!result) {
+      res.sendStatus(400);
+      return;
+    }
+    const webhookKeys = await getWebhookKeys(datasource);
+    res.send({
+      webhookKeys,
+    });
   }
 );
 
