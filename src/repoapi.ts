@@ -4218,63 +4218,63 @@ export const getDefaultComparison = async (
       same: true,
     };
   }
-  if (isWIP) {
-    return {
-      against: "wip",
-      comparisonDirection: "forward",
-      branch: null,
-      commit: null,
-      same: true,
-    };
-  }
-  if (repoState?.branch) {
-    const currentBranch = await datasource?.readBranch(
-      repoId,
-      repoState?.branch
-    );
-    if (currentBranch && currentBranch?.baseBranchId) {
-      const baseBranch = currentBranch?.baseBranchId
-        ? await datasource?.readBranch(repoId, currentBranch?.baseBranchId)
-        : null;
-      const comparisonDirection = await getComparisonDirection(
-        datasource,
-        repoId,
-        "branch",
-        baseBranch?.id
-      );
-      const currentSha = await getCurrentCommitSha(datasource, repoId);
-      if (baseBranch?.id) {
-        return {
-          against: "branch",
-          comparisonDirection,
-          branch: baseBranch?.id,
-          commit: null,
-          same: currentSha == baseBranch?.lastCommit,
-        };
-      }
-    }
-  }
-  if (repoState?.commit) {
-    const currentCommit = await datasource?.readCommit(
-      repoId,
-      repoState?.commit
-    );
-    if (currentCommit && currentCommit?.parent) {
-      const previousCommit = currentCommit?.parent
-        ? await datasource?.readCommit(repoId, currentCommit?.parent)
-        : null;
-      const currentSha = await getCurrentCommitSha(datasource, repoId);
-      if (previousCommit?.sha) {
-        return {
-          against: "sha",
-          comparisonDirection: "forward",
-          branch: null,
-          commit: previousCommit.sha,
-          same: currentSha == previousCommit?.sha,
-        };
-      }
-    }
-  }
+  //if (isWIP) {
+  //  return {
+  //    against: "wip",
+  //    comparisonDirection: "forward",
+  //    branch: null,
+  //    commit: null,
+  //    same: true,
+  //  };
+  //}
+  //if (repoState?.branch) {
+  //  const currentBranch = await datasource?.readBranch(
+  //    repoId,
+  //    repoState?.branch
+  //  );
+  //  if (currentBranch && currentBranch?.baseBranchId) {
+  //    const baseBranch = currentBranch?.baseBranchId
+  //      ? await datasource?.readBranch(repoId, currentBranch?.baseBranchId)
+  //      : null;
+  //    const comparisonDirection = await getComparisonDirection(
+  //      datasource,
+  //      repoId,
+  //      "branch",
+  //      baseBranch?.id
+  //    );
+  //    const currentSha = await getCurrentCommitSha(datasource, repoId);
+  //    if (baseBranch?.id) {
+  //      return {
+  //        against: "branch",
+  //        comparisonDirection,
+  //        branch: baseBranch?.id,
+  //        commit: null,
+  //        same: currentSha == baseBranch?.lastCommit,
+  //      };
+  //    }
+  //  }
+  //}
+  //if (repoState?.commit) {
+  //  const currentCommit = await datasource?.readCommit(
+  //    repoId,
+  //    repoState?.commit
+  //  );
+  //  if (currentCommit && currentCommit?.parent) {
+  //    const previousCommit = currentCommit?.parent
+  //      ? await datasource?.readCommit(repoId, currentCommit?.parent)
+  //      : null;
+  //    const currentSha = await getCurrentCommitSha(datasource, repoId);
+  //    if (previousCommit?.sha) {
+  //      return {
+  //        against: "sha",
+  //        comparisonDirection: "forward",
+  //        branch: null,
+  //        commit: previousCommit.sha,
+  //        same: currentSha == previousCommit?.sha,
+  //      };
+  //    }
+  //  }
+  //}
 
   return {
     against: "wip",
