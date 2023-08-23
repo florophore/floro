@@ -652,8 +652,15 @@ app.get(
   cors(corsNoNullOriginDelegate),
   async (_req, res): Promise<void> => {
     const repos = await datasource.readRepos();
+    const out = [];
+    for (const repo of repos) {
+      const cloneFile = await datasource.readCloneFile(repo);
+      if (!cloneFile) {
+        out.push(repo);
+      }
+    }
     res.send({
-      repos,
+      repos: out,
     });
   }
 );
@@ -679,6 +686,21 @@ app.get(
   }
 );
 
+app.post(
+  "/repo/:repoId/delete",
+  cors(corsNoNullOriginDelegate),
+  async (req, res): Promise<void> => {
+    const repoId = req.params["repoId"];
+    const didDelete = await datasource.deleteRepo(repoId);
+    if (!didDelete) {
+      res.sendStatus(400);
+      return;
+    }
+    datasource.cleanMemos(repoId);
+    res.send({ status: "ok" });
+  }
+);
+
 app.get(
   "/licenses",
   cors(corsNoNullOriginDelegate),
@@ -693,7 +715,8 @@ app.get(
   async (req, res): Promise<void> => {
     const repoId = req.params["repoId"];
     const exists = await datasource.repoExists(repoId);
-    res.send({ exists });
+    const cloneFile = await datasource.readCloneFile(repoId);
+    res.send({ exists: exists && !cloneFile });
   }
 );
 
@@ -718,6 +741,7 @@ app.get(
           canPull: false,
           canPushBranch: false,
           userHasPermissionToPush: false,
+          userCanPush: false,
           branchPushDisabled: false,
           hasConflict: false,
           nothingToPush: true,
@@ -2830,12 +2854,43 @@ app.get(
     if (!repoId) {
       res.send({ status: "failed" });
     }
-    const didSucceed = await cloneRepo(datasource, repoId);
-    if (didSucceed) {
-      res.send({ status: "success" });
-    } else {
+    cloneRepo(datasource, repoId);
+
+    const cloneFile = await getRepoCloneState(datasource, repoId)
+    broadcastAllDevices("clone-progress:" + repoId, cloneFile);
+    res.send({ status: "ok" });
+  }
+);
+
+app.post(
+  "/repo/:repoId/clone/pause",
+  cors(corsNoNullOriginDelegate),
+  async (req, res): Promise<void> => {
+    const repoId = req.params["repoId"];
+    if (!repoId) {
       res.send({ status: "failed" });
     }
+    const cloneFile = await datasource.readCloneFile(repoId);
+    cloneFile.state = "paused";
+    broadcastAllDevices("clone-progress:" + repoId, cloneFile);
+    res.send({ status: "ok" });
+  }
+);
+
+app.post(
+  "/repo/:repoId/clone/resume",
+  cors(corsNoNullOriginDelegate),
+  async (req, res): Promise<void> => {
+    const repoId = req.params["repoId"];
+    if (!repoId) {
+      res.send({ status: "failed" });
+    }
+    const cloneFile = await datasource.readCloneFile(repoId);
+    cloneFile.state = "in_progress";
+    await datasource.saveCloneFile(repoId, cloneFile);
+    broadcastAllDevices("clone-progress:" + repoId, cloneFile);
+    cloneRepo(datasource, repoId);
+    res.send({ status: "ok" });
   }
 );
 

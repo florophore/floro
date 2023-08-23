@@ -58,6 +58,7 @@ export interface DataSource {
   /* REPOS */
   readRepos?(): Promise<Array<string>>;
   repoExists?(repoId?: string): Promise<boolean>;
+  deleteRepo?(repoId: string): Promise<boolean>;
   readRepoSettings?: (repoId: string) => Promise<RepoSetting>;
   readCurrentRepoState?: (repoId: string) => Promise<RepoState>;
   saveCurrentRepoState?: (
@@ -170,6 +171,8 @@ export interface DataSource {
 
   readRepoEnabledWebhookKeys?: (repoId: string) => Promise<Array<RepoEnabledWebhookKey>>;
   writeRepoEnabledWebhookKeys?: (repoId: string, keys: Array<RepoEnabledWebhookKey>) => Promise<Array<RepoEnabledWebhookKey>>;
+
+  cleanMemos?: (repoId: string) => void
 
 }
 
@@ -460,6 +463,21 @@ const repoExists = async (repoId?: string): Promise<boolean> => {
     return false;
   }
   return await existsAsync(path.join(vReposPath, repoId));
+};
+
+const deleteRepo = async (repoId?: string): Promise<boolean> => {
+  try {
+    if (!repoId) {
+      return false;
+    }
+    const exists = existsAsync(path.join(vReposPath, repoId));
+    if (exists) {
+      await fs.promises.rm(path.join(vReposPath, repoId), { recursive: true, force: true});
+    }
+    return true;
+  } catch(e) {
+    return false;
+  }
 };
 
 const readRepoSettings = async (repoId: string): Promise<RepoSetting> => {
@@ -1372,6 +1390,7 @@ export const makeDataSource = (datasource: DataSource = {}) => {
     writeRepoEnabledApiKeys,
     readRepoEnabledWebhookKeys,
     writeRepoEnabledWebhookKeys,
+    deleteRepo
   };
   return {
     ...defaultDataSource,
@@ -1677,6 +1696,39 @@ export const makeMemoizedDataSource = (dataSourceOverride: DataSource = {}) => {
     return exists;
   };
 
+  const repoMemoMap = {
+    memoizedRepoExistence,
+    memoizedSettings,
+    branchMemo,
+    branchesMemo,
+    commitMemo,
+    checkpointMemo,
+    hotCheckpointMemo,
+    stateMemo,
+    branchesMetaStateMemo,
+  };
+
+  const cleanMemos = (repoId: string) => {
+    for (const memoName in repoMemoMap) {
+      const memo = repoMemoMap[memoName];
+      if (memo instanceof Set) {
+        for (const key of memo) {
+          if (key?.startsWith(repoId)) {
+            memo.delete(key);
+          }
+        }
+      } else {
+        for (const memoKey in memo) {
+          if (memoKey?.startsWith(repoId)) {
+            delete memo[memoKey];
+          }
+        }
+      }
+
+    }
+
+  }
+
   const defaultDataSource: DataSource = {
     repoExists: _repoExists,
     pluginManifestExists: _pluginManifestExists,
@@ -1700,6 +1752,7 @@ export const makeMemoizedDataSource = (dataSourceOverride: DataSource = {}) => {
     readBranchesMetaState: _readBranchesMetaState,
     saveBranchesMetaState: _saveBranchesMetaState,
     checkBinary: _checkBinary,
+    cleanMemos
   };
   return {
     ...dataSource,

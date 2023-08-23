@@ -4549,6 +4549,7 @@ export const getFetchInfo = async (
         canPull: false,
         canPushBranch: false,
         userHasPermissionToPush: false,
+        userCanPush: false,
         branchPushDisabled: false,
         hasConflict: false,
         nothingToPush: true,
@@ -4575,6 +4576,7 @@ export const getFetchInfo = async (
         canPull: false,
         canPushBranch: false,
         userHasPermissionToPush: false,
+        userCanPush: false,
         branchPushDisabled: false,
         hasConflict: false,
         nothingToPush: true,
@@ -4631,7 +4633,9 @@ export const getFetchInfo = async (
     const branchRule = fetchInfo?.settings?.branchRules?.find(
       (b) => b?.branchId == repoState?.branch
     );
-    const userHasPermissionToPush =
+    const userHasPermissionToPush = fetchInfo?.settings?.canPushBranches;
+
+    const userCanPush =
       fetchInfo?.settings?.canPushBranches &&
       !branchRule?.directPushingDisabled;
     const remoteBranch = fetchInfo?.branches?.find(
@@ -4726,7 +4730,7 @@ export const getFetchInfo = async (
             !hasLocalBranchCycle,
           canPushBranch:
             !branchRule?.directPushingDisabled &&
-            userHasPermissionToPush &&
+            userCanPush &&
             !containsDevPlugins &&
             !nothingToPush &&
             !baseBranchRequiresPush &&
@@ -4735,6 +4739,7 @@ export const getFetchInfo = async (
             !hasOpenMergeRequestConflict &&
             !hasInvalidPlugins,
           userHasPermissionToPush,
+          userCanPush,
           branchPushDisabled: branchRule?.directPushingDisabled ?? false,
           hasConflict,
           accountInGoodStanding: fetchInfo?.settings?.accountInGoodStanding,
@@ -4828,7 +4833,7 @@ export const getFetchInfo = async (
           !hasLocalBranchCycle,
         canPushBranch:
           !branchRule?.directPushingDisabled &&
-          userHasPermissionToPush &&
+          userCanPush &&
           !containsDevPlugins &&
           !nothingToPush &&
           !baseBranchRequiresPush &&
@@ -4837,6 +4842,7 @@ export const getFetchInfo = async (
           !hasOpenMergeRequestConflict &&
           !hasInvalidPlugins,
         userHasPermissionToPush,
+        userCanPush,
         branchPushDisabled: branchRule?.directPushingDisabled ?? false,
         hasConflict,
         accountInGoodStanding: fetchInfo?.settings?.accountInGoodStanding,
@@ -4861,7 +4867,7 @@ export const getFetchInfo = async (
       canPull: !nothingToPull && !hasLocalBranchCycle,
       canPushBranch:
         !branchRule?.directPushingDisabled &&
-        userHasPermissionToPush &&
+        userCanPush &&
         !containsDevPlugins &&
         !nothingToPush &&
         !baseBranchRequiresPush &&
@@ -4870,6 +4876,7 @@ export const getFetchInfo = async (
         !hasOpenMergeRequestConflict &&
         !hasInvalidPlugins,
       userHasPermissionToPush,
+      userCanPush,
       branchPushDisabled: branchRule?.directPushingDisabled ?? false,
       hasConflict,
       accountInGoodStanding: fetchInfo?.settings?.accountInGoodStanding,

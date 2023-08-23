@@ -50,6 +50,7 @@ export interface FetchInfo {
   canPushBranch: boolean;
   canPull: boolean;
   userHasPermissionToPush: boolean;
+  userCanPush: boolean;
   branchPushDisabled: boolean;
   hasConflict: boolean;
   accountInGoodStanding: boolean;
@@ -423,11 +424,23 @@ export const saveRemoteSha = async (
             return c;
           });
           clonefile.commits = commits;
-          const result = await datasource.saveCloneFile(repoId, clonefile);
-          return !!result;
+          const currentCloneFile = await datasource.readCloneFile(repoId);
+          if (currentCloneFile) {
+            clonefile.state = currentCloneFile.state;
+            const result = await datasource.saveCloneFile(repoId, clonefile);
+            return !!result;
+          } else {
+            return false
+          }
         }
       }
       return true;
+    }
+    let clonefile = isCloning ? await datasource.readCloneFile(repoId) : null;
+    if (isCloning) {
+      if (!clonefile || clonefile.state == "paused") {
+        return false;
+      }
     }
     const commitLinkRequest = await axios({
       method: "get",
@@ -439,6 +452,12 @@ export const saveRemoteSha = async (
     if (!commitLinkRequest?.data) {
       return false;
     }
+    if (isCloning) {
+      clonefile = await datasource.readCloneFile(repoId);
+      if (!clonefile || clonefile.state == "paused") {
+        return false;
+      }
+    }
     const commitLink: string = commitLinkRequest.data?.link;
     const commitRequest = await axios({
       method: "get",
@@ -447,6 +466,13 @@ export const saveRemoteSha = async (
     const commit: CommitData = commitRequest?.data;
     if (!commit) {
       return false;
+    }
+
+    if (isCloning) {
+      clonefile = await datasource.readCloneFile(repoId);
+      if (!clonefile || clonefile.state == "paused") {
+        return false;
+      }
     }
     const addedPlugins: Array<DiffElement> = Object.keys(
       commit?.diff.plugins.add
@@ -473,6 +499,13 @@ export const saveRemoteSha = async (
         return false;
       }
     }
+
+    if (isCloning) {
+      clonefile = await datasource.readCloneFile(repoId);
+      if (!clonefile || clonefile.state == "paused") {
+        return false;
+      }
+    }
     const binaryLinksRequest = await axios({
       method: "post",
       url: `${remote}/api/repo/${repoId}/binary/links`,
@@ -485,6 +518,12 @@ export const saveRemoteSha = async (
     });
     if (!binaryLinksRequest.data) {
       return false;
+    }
+    if (isCloning) {
+      clonefile = await datasource.readCloneFile(repoId);
+      if (!clonefile || clonefile.state == "paused") {
+        return false;
+      }
     }
     const binDownwloads: Promise<boolean>[] = [];
     const binaryLinks: Array<{ fileName: string; link: string }> =
@@ -520,11 +559,17 @@ export const saveRemoteSha = async (
         return false;
       }
     }
-    await datasource.saveCommit(repoId, sha, commit);
+    const repoExists = await datasource.repoExists(repoId);
+    if (repoExists) {
+      await datasource.saveCommit(repoId, sha, commit);
+    }
 
     if (isCloning) {
       const clonefile = await datasource.readCloneFile(repoId);
       if (!clonefile) {
+        return false;
+      }
+      if (clonefile.state == "paused") {
         return false;
       }
       const isSaved =
@@ -540,8 +585,14 @@ export const saveRemoteSha = async (
           return c;
         });
         clonefile.commits = commits;
-        const result = await datasource.saveCloneFile(repoId, clonefile);
-        return !!result;
+        const currentCloneFile = await datasource.readCloneFile(repoId);
+        if (currentCloneFile) {
+          clonefile.state = currentCloneFile.state;
+          const result = await datasource.saveCloneFile(repoId, clonefile);
+          return !!result;
+        } else {
+          return false;
+        }
       }
     }
     return true;
@@ -621,6 +672,7 @@ export const cloneRepo = async (
           settings: cloneInfo.settings,
         };
         await datasource.saveCloneFile(repoId, initCloneFile);
+        broadcastAllDevices("clone-progress:" + repoId, initCloneFile);
       } catch (e) {
         return false;
       }
@@ -633,6 +685,13 @@ export const cloneRepo = async (
       index < cloneFile.commits.length;
       ++index
     ) {
+      cloneFile = await datasource.readCloneFile(repoId);
+      if (!cloneFile) {
+        return false;
+      }
+      if (cloneFile.state == "paused") {
+        return false;
+      }
       const commitExchangeInfo = cloneFile.commits[index];
       if (!commitExchangeInfo.saved) {
         const didSucceed = await saveRemoteSha(
@@ -659,6 +718,12 @@ export const cloneRepo = async (
           }
           if (!didEventuallySucceed) {
             cloneFile.state = "paused";
+            broadcastAllDevices("clone-progress:" + repoId, cloneFile);
+
+            const currentCloneFile = await datasource.readCloneFile(repoId);
+            if (!currentCloneFile) {
+              return false;
+            }
             await datasource.saveCloneFile(repoId, cloneFile);
             return false;
           }
@@ -676,13 +741,25 @@ export const cloneRepo = async (
       });
       cloneFile.commits = commits;
       cloneFile.lastCommitIndex = index;
-      broadcastAllDevices("clone-progress:" + repoId, cloneFile);
+      cloneFile.downloadedCommits++;
+
+      const currentCloneFile = await datasource.readCloneFile(repoId);
+      if (!currentCloneFile) {
+        return false;
+      }
+      if (currentCloneFile.state == "paused") {
+        return false;
+      }
+      cloneFile.state = currentCloneFile.state;
+
       const savedCloneFile = await datasource.saveCloneFile(repoId, cloneFile);
+      broadcastAllDevices("clone-progress:" + repoId, cloneFile);
       if (!savedCloneFile) {
         return false;
       }
     }
 
+    const branches: Array<Branch> = [];
     for (
       let index = 0;
       index < cloneFile.branches.length;
@@ -697,7 +774,12 @@ export const cloneRepo = async (
       if (!writtenBranch) {
         return false;
       }
+      branches.push(branch);
     }
+
+    const userBranchIds = new Set(branches
+      .filter((b) => b.createdBy == session?.user?.id)
+      ?.map((b) => b.id));
 
     const branchMetaState: BranchesMetaState = {
       allBranches: [],
@@ -717,7 +799,7 @@ export const cloneRepo = async (
       ...cloneFile.settings.branchRules?.map((b) => b.branchId),
     ]);
     branchMetaState.userBranches = branchMetaState.allBranches.filter((b) => {
-      return requiredBranchIds.has(b.branchId);
+      return requiredBranchIds.has(b.branchId) || userBranchIds.has(b.branchId);
     });
     const savedBranchMetaState = await datasource.saveBranchesMetaState(
       repoId,
@@ -785,9 +867,10 @@ export const cloneRepo = async (
     if (!cloneFileDeleted) {
       return false;
     }
+
+    broadcastAllDevices("clone-done:" + repoId, cloneFile);
     return true;
   } catch (e) {
-    console.log("E", e);
     return false;
   }
 };
