@@ -38,7 +38,7 @@ import tar from "tar";
 import { SourceCommitNode } from "./sourcegraph";
 import { Stream } from "stream";
 import { dir } from "console";
-import { ApiKey, WebhookKey } from "./apikeys";
+import { ApiKey, RepoEnabledApiKey, RepoEnabledWebhookKey, WebhookKey } from "./apikeys";
 
 axios.defaults.validateStatus = function () {
   return true;
@@ -164,6 +164,12 @@ export interface DataSource {
 
   readWebhookKeys?: () => Promise<Array<WebhookKey>>;
   writeWebhookKeys?: (keys: Array<WebhookKey>) => Promise<Array<WebhookKey>>;
+
+  readRepoEnabledApiKeys?: (repoId: string) => Promise<Array<RepoEnabledApiKey>>;
+  writeRepoEnabledApiKeys?: (repoId: string, keys: Array<RepoEnabledApiKey>) => Promise<Array<RepoEnabledApiKey>>;
+
+  readRepoEnabledWebhookKeys?: (repoId: string) => Promise<Array<RepoEnabledWebhookKey>>;
+  writeRepoEnabledWebhookKeys?: (repoId: string, keys: Array<RepoEnabledWebhookKey>) => Promise<Array<RepoEnabledWebhookKey>>;
 
 }
 
@@ -1210,6 +1216,109 @@ const writeWebhookKeys = async (webhookKeys: Array<WebhookKey>): Promise<Array<W
   }
 }
 
+const readRepoEnabledApiKeys = async (repoId: string): Promise<Array<RepoEnabledApiKey>> =>  {
+  try {
+    const repoPath = path.join(vReposPath, repoId);
+    const keysPath = path.join(repoPath, "keys");
+    const dirExists = fs.existsSync(keysPath);
+    if (!dirExists) {
+      await fs.promises.mkdir(keysPath, { recursive: true });
+      if (process.env.NODE_ENV != "test") {
+        await fs.promises.chmod(keysPath, 0o755);
+      }
+    }
+    const enabledApiKeysPath = path.join(keysPath, "enabled_api_keys.json");
+    const enabledApiKeysExists = fs.existsSync(enabledApiKeysPath);
+    if (!enabledApiKeysExists) {
+      await fs.promises.writeFile(
+        enabledApiKeysPath,
+        JSON.stringify([]),
+        "utf8"
+      );
+      return [];
+    }
+
+    const enabledApiKeys = await fs.promises.readFile(enabledApiKeysPath);
+    return JSON.parse(enabledApiKeys.toString()) as Array<RepoEnabledApiKey>;
+  } catch(e) {
+    return null;
+  }
+}
+
+const writeRepoEnabledApiKeys = async (repoId: string, keys: Array<RepoEnabledApiKey>): Promise<Array<RepoEnabledApiKey>> =>  {
+  try {
+    const repoPath = path.join(vReposPath, repoId);
+    const keysPath = path.join(repoPath, "keys");
+    const dirExists = fs.existsSync(keysPath);
+    if (!dirExists) {
+      await fs.promises.mkdir(keysPath, { recursive: true });
+      if (process.env.NODE_ENV != "test") {
+        await fs.promises.chmod(keysPath, 0o755);
+      }
+    }
+    const enabledApiKeysPath = path.join(keysPath, "enabled_api_keys.json");
+    await fs.promises.writeFile(
+      enabledApiKeysPath,
+      JSON.stringify(keys),
+      "utf8"
+    );
+    return keys;
+  } catch(e) {
+    return null;
+  }
+}
+
+const readRepoEnabledWebhookKeys = async (repoId: string): Promise<Array<RepoEnabledWebhookKey>> =>  {
+  try {
+    const repoPath = path.join(vReposPath, repoId);
+    const keysPath = path.join(repoPath, "keys");
+    const dirExists = fs.existsSync(keysPath);
+    if (!dirExists) {
+      await fs.promises.mkdir(keysPath, { recursive: true });
+      if (process.env.NODE_ENV != "test") {
+        await fs.promises.chmod(keysPath, 0o755);
+      }
+    }
+    const enabledWebhookKeysPath = path.join(keysPath, "enabled_webhook_keys.json");
+    const enabledWebhookKeysExists = fs.existsSync(enabledWebhookKeysPath);
+    if (!enabledWebhookKeysExists) {
+      await fs.promises.writeFile(
+        enabledWebhookKeysPath,
+        JSON.stringify([]),
+        "utf8"
+      );
+      return [];
+    }
+
+    const enabledWebhookKeys = await fs.promises.readFile(enabledWebhookKeysPath);
+    return JSON.parse(enabledWebhookKeys.toString()) as Array<RepoEnabledWebhookKey>;
+  } catch(e) {
+    return null;
+  }
+}
+const writeRepoEnabledWebhookKeys = async (repoId: string, keys: Array<RepoEnabledWebhookKey>): Promise<Array<RepoEnabledWebhookKey>> =>  {
+  try {
+    const repoPath = path.join(vReposPath, repoId);
+    const keysPath = path.join(repoPath, "keys");
+    const dirExists = fs.existsSync(keysPath);
+    if (!dirExists) {
+      await fs.promises.mkdir(keysPath, { recursive: true });
+      if (process.env.NODE_ENV != "test") {
+        await fs.promises.chmod(keysPath, 0o755);
+      }
+    }
+    const enabledWebhookKeysPath = path.join(keysPath, "enabled_webhook_keys.json");
+    await fs.promises.writeFile(
+      enabledWebhookKeysPath,
+      JSON.stringify(keys),
+      "utf8"
+    );
+    return keys;
+  } catch(e) {
+    return null;
+  }
+}
+
 export const makeDataSource = (datasource: DataSource = {}) => {
   const defaultDataSource: DataSource = {
     readRepos,
@@ -1257,7 +1366,12 @@ export const makeDataSource = (datasource: DataSource = {}) => {
     readApiKeys,
     writeApiKeys,
     readWebhookKeys,
-    writeWebhookKeys
+    writeWebhookKeys,
+
+    readRepoEnabledApiKeys,
+    writeRepoEnabledApiKeys,
+    readRepoEnabledWebhookKeys,
+    writeRepoEnabledWebhookKeys,
   };
   return {
     ...defaultDataSource,

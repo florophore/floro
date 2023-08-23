@@ -31,6 +31,7 @@ import { startSessionJob } from "./cron";
 import macaddres from "macaddress";
 import sha256 from "crypto-js/sha256";
 import HexEncode from "crypto-js/enc-hex";
+import { createHmac } from "crypto";
 import { cloneRepo, getCommitState, uniqueKVList, getUnstagedCommitState, getLastCommitFromRepoState, readComparisonState, FetchInfo, getRepoInfo, uniqueStrings } from "./repo";
 import {
   convertRenderedCommitStateToKv,
@@ -118,6 +119,14 @@ import {
   removeWebhookKey,
   updateApiKeySecret,
   updateWebhookKeySecret,
+  addRepoEnabledApiKey,
+  removeRepoEnabledApiKey,
+  addRepoEnabledWebhookKey,
+  updateRepoEnabledWebhookKey,
+  removeRepoEnabledWebhookKey,
+  getWebhookUrl,
+  getWebhookKey,
+  getWebhookSecret,
 } from "./apikeys";
 
 const remoteHost = getRemoteHostSync();
@@ -387,6 +396,254 @@ app.post("/webhook_keys/:id/delete",
     res.send({
       webhookKeys,
     });
+  }
+);
+
+app.get(
+  "/repo/:repoId/enabled_api_keys",
+  cors(corsNoNullOriginDelegate),
+  async (req, res): Promise<void> => {
+    const repoId = req.params["repoId"];
+    if (!repoId) {
+      res.sendStatus(404);
+      return;
+    }
+    const exists = await datasource.repoExists(repoId);
+    if (!exists) {
+      res.sendStatus(404);
+      return;
+    }
+    const enabledApiKeys = await datasource.readRepoEnabledApiKeys(repoId);
+    res.send({
+      enabledApiKeys
+    })
+  }
+);
+
+app.post(
+  "/repo/:repoId/enabled_api_keys/create",
+  cors(corsNoNullOriginDelegate),
+  async (req, res): Promise<void> => {
+    const repoId = req.params["repoId"];
+    const apiKeyId = (req.body["apiKeyId"] as string) ?? null;
+    if (!repoId) {
+      res.sendStatus(404);
+      return;
+    }
+    const exists = await datasource.repoExists(repoId);
+    if (!exists) {
+      res.sendStatus(404);
+      return;
+    }
+    if (!apiKeyId) {
+      res.sendStatus(400);
+      return;
+    }
+    const enabledApiKeys = await addRepoEnabledApiKey(datasource, repoId, apiKeyId);
+    res.send({
+      enabledApiKeys
+    })
+  }
+);
+
+
+app.post(
+  "/repo/:repoId/enabled_api_keys/delete",
+  cors(corsNoNullOriginDelegate),
+  async (req, res): Promise<void> => {
+    const repoId = req.params["repoId"];
+    const apiKeyId = (req.body["apiKeyId"] as string) ?? null;
+    if (!repoId) {
+      res.sendStatus(404);
+      return;
+    }
+    const exists = await datasource.repoExists(repoId);
+    if (!exists) {
+      res.sendStatus(404);
+      return;
+    }
+    if (!apiKeyId) {
+      res.sendStatus(400);
+      return;
+    }
+    const enabledApiKeys = await removeRepoEnabledApiKey(datasource, repoId, apiKeyId);
+    res.send({
+      enabledApiKeys
+    })
+  }
+);
+
+
+app.get(
+  "/repo/:repoId/enabled_webhook_keys",
+  cors(corsNoNullOriginDelegate),
+  async (req, res): Promise<void> => {
+    const repoId = req.params["repoId"];
+    if (!repoId) {
+      res.sendStatus(404);
+      return;
+    }
+    const exists = await datasource.repoExists(repoId);
+    if (!exists) {
+      res.sendStatus(404);
+      return;
+    }
+    const enabledWebhookKeys = await datasource.readRepoEnabledWebhookKeys(repoId);
+    res.send({
+      enabledWebhookKeys
+    })
+  }
+);
+
+app.post(
+  "/repo/:repoId/enabled_webhook_keys/create",
+  cors(corsNoNullOriginDelegate),
+  async (req, res): Promise<void> => {
+    const repoId = req.params["repoId"];
+    const webhookKeyId = (req.body["webhookKeyId"] as string) ?? null;
+    const port = (req.body["port"] as number) ?? null;
+    const protocol = (req.body["protocol"] as "http"|"https") ?? null;
+    const subdomain = (req.body["subdomain"] as string) ?? null;
+    const uri = (req.body["uri"] as string) ?? null;
+    if (!repoId) {
+      res.sendStatus(404);
+      return;
+    }
+    const exists = await datasource.repoExists(repoId);
+    if (!exists) {
+      res.sendStatus(404);
+      return;
+    }
+    if (!webhookKeyId) {
+      res.sendStatus(400);
+      return;
+    }
+    const enabledWebhookKeys = await addRepoEnabledWebhookKey(datasource, repoId, {
+      webhookKeyId,
+      port,
+      protocol,
+      subdomain,
+      uri
+    });
+    res.send({
+      enabledWebhookKeys
+    })
+  }
+);
+
+app.post(
+  "/repo/:repoId/enabled_webhook_keys/:id/update",
+  cors(corsNoNullOriginDelegate),
+  async (req, res): Promise<void> => {
+    const repoId = req.params["repoId"];
+    const id = req.params["id"] as string;
+    const webhookKeyId = (req.body["webhookKeyId"] as string) ?? null;
+    const port = (req.body["port"] as number) ?? null;
+    const protocol = (req.body["protocol"] as "http"|"https") ?? null;
+    const subdomain = (req.body["subdomain"] as string) ?? null;
+    const uri = (req.body["uri"] as string) ?? null;
+    if (!repoId) {
+      res.sendStatus(404);
+      return;
+    }
+    const exists = await datasource.repoExists(repoId);
+    if (!exists) {
+      res.sendStatus(404);
+      return;
+    }
+    if (!webhookKeyId) {
+      res.sendStatus(400);
+      return;
+    }
+    const enabledWebhookKeys = await updateRepoEnabledWebhookKey(datasource, repoId, id, {
+      webhookKeyId,
+      port,
+      protocol,
+      subdomain,
+      uri
+    });
+    res.send({
+      enabledWebhookKeys
+    })
+  }
+);
+
+app.post(
+  "/repo/:repoId/enabled_webhook_keys/:id/delete",
+  cors(corsNoNullOriginDelegate),
+  async (req, res): Promise<void> => {
+    const repoId = req.params["repoId"];
+    const id = req.params["id"] as string;
+    if (!repoId) {
+      res.sendStatus(404);
+      return;
+    }
+    const exists = await datasource.repoExists(repoId);
+    if (!exists) {
+      res.sendStatus(404);
+      return;
+    }
+    if (!id) {
+      res.sendStatus(400);
+      return;
+    }
+    const enabledWebhookKeys = await removeRepoEnabledWebhookKey(datasource, repoId, id);
+    res.send({
+      enabledWebhookKeys
+    })
+  }
+);
+
+
+app.post(
+  "/repo/:repoId/enabled_webhook_keys/:id/test",
+  cors(corsNoNullOriginDelegate),
+  async (req, res): Promise<void> => {
+    const repoId = req.params["repoId"];
+    const id = req.params["id"] as string;
+    if (!repoId) {
+      res.sendStatus(404);
+      return;
+    }
+    const exists = await datasource.repoExists(repoId);
+    if (!exists) {
+      res.sendStatus(404);
+      return;
+    }
+    const url = await getWebhookUrl(datasource, repoId, id);
+    if (!url) {
+      res.sendStatus(404);
+      return;
+    }
+    const secret = await getWebhookSecret(datasource, repoId, id);
+    let responseOkay = false;
+    try {
+      const jsonPayload = JSON.stringify(
+        {
+          event: "test",
+          repositoryId: repoId,
+          payload: {},
+        },
+      );
+      const hmac = createHmac('sha256', secret);
+      const signature = 'sha256=' + hmac.update(jsonPayload).digest('hex');
+      const result = await axios({
+        method: "post",
+        url,
+        headers: {
+          'Content-Type': "application/json",
+          'Floro-Signature-256': signature
+        },
+        data: jsonPayload,
+        timeout: 5000
+      })
+      responseOkay = result.status >= 200 && result.status < 300;
+    } catch(e) {
+      responseOkay = false;
+    }
+    res.send({
+      responseOkay
+    })
   }
 );
 
