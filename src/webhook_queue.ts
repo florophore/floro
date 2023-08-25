@@ -93,7 +93,7 @@ class WebhookQueue {
               }
               // back off 1s
               await new Promise((resolve) => {
-                setTimeout(() => resolve(true), 1000);
+                setTimeout(() => resolve(true), 1000 * Math.pow(i, 2));
               });
             }
             console.error("Failed to send webhook event to " + url);
