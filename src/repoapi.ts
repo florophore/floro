@@ -1,4 +1,5 @@
 import path from "path";
+import webhookQueue from "./webhook_queue";
 import { existsAsync, vReposPath, getUserAsync, User } from "./filestructure";
 import binarySession from "./binary_session";
 import {
@@ -1097,10 +1098,11 @@ export const writeRepoCommit = async (
         repoId,
         currentState.branch
       );
-      await datasource.saveBranch(repoId, currentState.branch, {
+      const nextBranch = await datasource.saveBranch(repoId, currentState.branch, {
         ...branchState,
         lastCommit: sha,
       });
+      webhookQueue.addBranchUpdate(datasource, repoId, nextBranch);
       const branchMetaState = await datasource.readBranchesMetaState(repoId);
       branchMetaState.allBranches = branchMetaState.allBranches.map(
         (branch) => {
@@ -1674,6 +1676,11 @@ export const mergeCommit = async (
             fromSha,
             branchState.baseBranchId
           );
+          const nextBranch = await datasource.readBranch(
+            repoId,
+            currentRepoState.branch
+          );
+          webhookQueue.addBranchUpdate(datasource, repoId, nextBranch);
         } else {
           // BRANCHLESS CASE
           await updateCurrentCommitSHA(datasource, repoId, fromSha, false);
@@ -1736,10 +1743,12 @@ export const mergeCommit = async (
           repoId,
           currentRepoState.branch
         );
-        await datasource.saveBranch(repoId, currentRepoState.branch, {
+        const nextBranch = await datasource.saveBranch(repoId, currentRepoState.branch, {
           ...branchState,
           lastCommit: finalCommit.sha,
         });
+
+        webhookQueue.addBranchUpdate(datasource, repoId, nextBranch);
 
         const branchMetaState = await datasource.readBranchesMetaState(repoId);
         branchMetaState.allBranches = branchMetaState.allBranches.map(
@@ -2087,10 +2096,11 @@ export const resolveMerge = async (datasource: DataSource, repoId: string) => {
         repoId,
         currentRepoState.branch
       );
-      await datasource.saveBranch(repoId, currentRepoState.branch, {
+      const nextBranch = await datasource.saveBranch(repoId, currentRepoState.branch, {
         ...branchState,
         lastCommit: mergeCommit.sha,
       });
+      webhookQueue.addBranchUpdate(datasource, repoId, nextBranch);
 
       const branchMetaState = await datasource.readBranchesMetaState(repoId);
       branchMetaState.allBranches = branchMetaState.allBranches.map(
@@ -4218,63 +4228,6 @@ export const getDefaultComparison = async (
       same: true,
     };
   }
-  //if (isWIP) {
-  //  return {
-  //    against: "wip",
-  //    comparisonDirection: "forward",
-  //    branch: null,
-  //    commit: null,
-  //    same: true,
-  //  };
-  //}
-  //if (repoState?.branch) {
-  //  const currentBranch = await datasource?.readBranch(
-  //    repoId,
-  //    repoState?.branch
-  //  );
-  //  if (currentBranch && currentBranch?.baseBranchId) {
-  //    const baseBranch = currentBranch?.baseBranchId
-  //      ? await datasource?.readBranch(repoId, currentBranch?.baseBranchId)
-  //      : null;
-  //    const comparisonDirection = await getComparisonDirection(
-  //      datasource,
-  //      repoId,
-  //      "branch",
-  //      baseBranch?.id
-  //    );
-  //    const currentSha = await getCurrentCommitSha(datasource, repoId);
-  //    if (baseBranch?.id) {
-  //      return {
-  //        against: "branch",
-  //        comparisonDirection,
-  //        branch: baseBranch?.id,
-  //        commit: null,
-  //        same: currentSha == baseBranch?.lastCommit,
-  //      };
-  //    }
-  //  }
-  //}
-  //if (repoState?.commit) {
-  //  const currentCommit = await datasource?.readCommit(
-  //    repoId,
-  //    repoState?.commit
-  //  );
-  //  if (currentCommit && currentCommit?.parent) {
-  //    const previousCommit = currentCommit?.parent
-  //      ? await datasource?.readCommit(repoId, currentCommit?.parent)
-  //      : null;
-  //    const currentSha = await getCurrentCommitSha(datasource, repoId);
-  //    if (previousCommit?.sha) {
-  //      return {
-  //        against: "sha",
-  //        comparisonDirection: "forward",
-  //        branch: null,
-  //        commit: previousCommit.sha,
-  //        same: currentSha == previousCommit?.sha,
-  //      };
-  //    }
-  //  }
-  //}
 
   return {
     against: "wip",
@@ -4309,9 +4262,7 @@ export const getComparisonDirection = async (
     if (!commit?.sha) {
       return "forward";
     }
-    //const currentRepoState = await datasource.readCurrentRepoState(repoId);
     const currentSha = await getCurrentCommitSha(datasource, repoId);
-    // not really possible
     if (!currentSha) {
       return "backward";
     }
@@ -5110,7 +5061,8 @@ export const pull = async (
     if (isCyclic) {
       continue;
     }
-    await datasource.saveBranch(repoId, branch.id, branch);
+    const nextBranch = await datasource.saveBranch(repoId, branch.id, branch);
+    webhookQueue.addBranchUpdate(datasource, repoId, nextBranch);
   }
 
   for (const branch of branchesToUpdate) {
@@ -5118,7 +5070,8 @@ export const pull = async (
     if (isCyclic) {
       continue;
     }
-    await datasource.saveBranch(repoId, branch.id, branch);
+    const nextBranch = await datasource.saveBranch(repoId, branch.id, branch);
+    webhookQueue.addBranchUpdate(datasource, repoId, nextBranch);
   }
 
   await datasource.saveBranchesMetaState(repoId, branchesMetaState);

@@ -40,7 +40,6 @@ import {
   getCurrentRepoBranch,
   getRepoBranches,
   switchRepoBranch,
-  readSettings,
   writeRepoCommit,
   writeRepoDescription,
   writeRepoLicenses,
@@ -87,7 +86,7 @@ import {
   readDevPluginVersions,
 } from "./datasource";
 import busboy from "connect-busboy";
-import { DiffElement, hashBinary } from "./sequenceoperations";
+import { hashBinary } from "./sequenceoperations";
 import { LicenseCodesList } from "./licensecodes";
 import {
   getDependenciesForManifest,
@@ -107,7 +106,6 @@ import {
 } from "./plugins";
 
 import binarySession from "./binary_session";
-import { Session } from "inspector";
 import axios from "axios";
 import {
   addApiKey,
@@ -125,11 +123,10 @@ import {
   updateRepoEnabledWebhookKey,
   removeRepoEnabledWebhookKey,
   getWebhookUrl,
-  getWebhookKey,
   getWebhookSecret,
 } from "./apikeys";
-
-const remoteHost = getRemoteHostSync();
+import { usePublicApi } from "./api";
+import webhookQueue from "./webhook_queue";
 
 const app = express();
 const server = http.createServer(app);
@@ -196,6 +193,7 @@ app.use(busboy());
 
 app.use(express.json({ limit: "20mb" }));
 
+
 app.use(function (_req, res, next) {
   res.header("Access-Control-Allow-Origin", "*");
   res.header(
@@ -204,6 +202,8 @@ app.use(function (_req, res, next) {
   );
   next();
 });
+
+usePublicApi(app, datasource);
 
 app.get(
   "/ping",
@@ -636,7 +636,7 @@ app.post(
         },
         data: jsonPayload,
         timeout: 5000
-      })
+      });
       responseOkay = result.status >= 200 && result.status < 300;
     } catch(e) {
       responseOkay = false;
@@ -1458,6 +1458,10 @@ app.post(
         null,
         currentRepoState.commit
       );
+      if (repoState.branch) {
+        const nextBranch = await datasource.readBranch(repoId, repoState.branch);
+        webhookQueue.addBranchUpdate(datasource, repoId, nextBranch);
+      }
       const applicationState = await convertRenderedCommitStateToKv(
         datasource,
         renderedState
@@ -1507,7 +1511,12 @@ app.post(
         res.sendStatus(400);
         return;
       }
+
       const repoState = await datasource.readCurrentRepoState(repoId);
+      if (repoState.branch) {
+        const nextBranch = await datasource.readBranch(repoId, repoState.branch);
+        webhookQueue.addBranchUpdate(datasource, repoId, nextBranch);
+      }
       const applicationState = await convertRenderedCommitStateToKv(
         datasource,
         renderedState
@@ -1560,6 +1569,10 @@ app.post(
         null,
         currentRepoState.commit
       );
+      if (repoState.branch) {
+        const nextBranch = await datasource.readBranch(repoId, repoState.branch);
+        webhookQueue.addBranchUpdate(datasource, repoId, nextBranch);
+      }
       const applicationState = await convertRenderedCommitStateToKv(
         datasource,
         renderedState
@@ -1695,6 +1708,8 @@ app.post(
         baseBranchId,
         switchBranchOnCreate
       );
+      const nextBranch = await datasource.readBranch(repoId, repoState.branch);
+      webhookQueue.addBranchUpdate(datasource, repoId, nextBranch);
 
       if (repoState == null) {
         res.sendStatus(400);
@@ -1749,6 +1764,9 @@ app.post(
         branchHead,
         baseBranchId
       );
+
+      const nextBranch = await datasource.readBranch(repoId, repoState.branch);
+      webhookQueue.addBranchUpdate(datasource, repoId, nextBranch);
 
       if (repoState == null) {
         res.sendStatus(400);
