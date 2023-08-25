@@ -1906,7 +1906,7 @@ describe("plugincreator", () => {
   });
 
   describe("codegen", () => {
-    test.skip("generates react snapshot", async () => {
+    test("generates react snapshot", async () => {
       const PLUGIN_A_MANIFEST: Manifest = {
         name: "A",
         version: "0.0.0",
@@ -2013,8 +2013,7 @@ describe("plugincreator", () => {
         PLUGIN_B_MANIFEST,
         true
       );
-      console.log(code);
-      //expect(code).toEqual(SNAPSHOT_1_WITH_REACT);
+      expect(code).toEqual(SNAPSHOT_1_WITH_REACT);
     });
   });
 });

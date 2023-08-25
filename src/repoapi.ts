@@ -2059,7 +2059,7 @@ export const resolveMerge = async (datasource: DataSource, repoId: string) => {
     const intoCommitState = await getCommitState(
       datasource,
       repoId,
-      finalCommit?.sha
+      finalCommit?.originalSha ?? finalCommit?.sha
     );
 
     const mergeDiff = getStateDiffFromCommitStates(

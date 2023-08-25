@@ -1,73 +1,74 @@
 import React, { useEffect, createContext, useMemo, useCallback, useState, useContext, useRef } from 'react';
+import mdiff from "mdiff";
 
 export type FileRef = `${string}.${string}`;
 
-export type PartialDiffableQuery = `$(A).aObjects`|`$(A).aObjects.aKey<${FileRef}>`|`$(A).aObjects.aKey<${FileRef}>.nestedValue`|`$(A).aObjects.aKey<${FileRef}>.nestedValue.list`|`$(A).aObjects.aKey<${FileRef}>.nestedValue.list.[${number}]`|`$(A).aObjects.aKey<${FileRef}>.nestedValue.list.[${number}].subList`|`$(A).aObjects.aKey<${FileRef}>.nestedValue.list.[${number}].subList.[${number}]`|`$(A).aObjects.aKey<${FileRef}>.nestedValue.list.[${number}].subList.[${number}].someNestedThing`|`$(A).aObjects.aKey<${FileRef}>.nestedValue.nestedSet`|`$(A).aObjects.aKey<${FileRef}>.nestedValue.nestedSet.nestedSetKey<${QueryTypes['$(A).aObjects.aKey<?>']}>`|`$(A).aObjects.aKey<${FileRef}>.something`|`$(B).bObjects`|`$(B).bObjects.mainKey<${string}>`;
+export type PartialDiffableQuery = `$(A).aObjects.aKey<${FileRef}>.nestedValue.list.[${number}].subList.[${number}].someNestedThing`|`$(A).aObjects.aKey<${FileRef}>.nestedValue.list.[${number}].subList.[${number}]`|`$(A).aObjects.aKey<${FileRef}>.nestedValue.list.[${number}].subList`|`$(A).aObjects.aKey<${FileRef}>.nestedValue.list.[${number}]`|`$(A).aObjects.aKey<${FileRef}>.nestedValue.nestedSet.nestedSetKey<${QueryTypes['$(A).aObjects.aKey<?>']}>`|`$(A).aObjects.aKey<${FileRef}>.nestedValue.list`|`$(A).aObjects.aKey<${FileRef}>.nestedValue.nestedSet`|`$(A).aObjects.aKey<${FileRef}>.nestedValue`|`$(A).aObjects.aKey<${FileRef}>.something`|`$(A).aObjects.aKey<${FileRef}>`|`$(B).bObjects.mainKey<${string}>`|`$(A).aObjects`|`$(B).bObjects`;
 
-export type DiffableQuery = `$(A).aObjects.aKey<${FileRef}>`|`$(A).aObjects.aKey<${FileRef}>.nestedValue`|`$(A).aObjects.aKey<${FileRef}>.nestedValue.list.[${number}]`|`$(A).aObjects.aKey<${FileRef}>.nestedValue.list.[${number}].subList.[${number}]`|`$(A).aObjects.aKey<${FileRef}>.nestedValue.list.[${number}].subList.[${number}].someNestedThing`|`$(A).aObjects.aKey<${FileRef}>.nestedValue.nestedSet.nestedSetKey<${QueryTypes['$(A).aObjects.aKey<?>']}>`|`$(A).aObjects.aKey<${FileRef}>.something`|`$(B).bObjects.mainKey<${string}>`;
-
-export type QueryTypes = {
-  ['$(A).aObjects.aKey<?>']: `$(A).aObjects.aKey<${FileRef}>`;
-  ['$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>']: `$(A).aObjects.aKey<${FileRef}>.nestedValue.nestedSet.nestedSetKey<${QueryTypes['$(A).aObjects.aKey<?>']}>`;
-  ['$(B).bObjects.mainKey<?>']: `$(B).bObjects.mainKey<${string}>`;
-};
-
-export function makeQueryRef(query: '$(A).aObjects.aKey<?>', arg0: FileRef): QueryTypes['$(A).aObjects.aKey<?>'];
-export function makeQueryRef(query: '$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>', arg0: FileRef, arg1: QueryTypes['$(A).aObjects.aKey<?>']): QueryTypes['$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>'];
-export function makeQueryRef(query: '$(B).bObjects.mainKey<?>', arg0: string): QueryTypes['$(B).bObjects.mainKey<?>'];
-export function makeQueryRef(query: '$(A).aObjects.aKey<?>'|'$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>'|'$(B).bObjects.mainKey<?>', arg0: FileRef|string, arg1?: QueryTypes['$(A).aObjects.aKey<?>']): QueryTypes['$(A).aObjects.aKey<?>']|QueryTypes['$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>']|QueryTypes['$(B).bObjects.mainKey<?>']|null {
-  if (query == '$(A).aObjects.aKey<?>') {
-    return `$(A).aObjects.aKey<${arg0 as FileRef}>`;
-  }
-  if (query == '$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>') {
-    return `$(A).aObjects.aKey<${arg0 as FileRef}>.nestedValue.nestedSet.nestedSetKey<${arg1 as QueryTypes['$(A).aObjects.aKey<?>']}>`;
-  }
-  if (query == '$(B).bObjects.mainKey<?>') {
-    return `$(B).bObjects.mainKey<${arg0 as string}>`;
-  }
-  return null;
-};
-
-export function useQueryRef(query: '$(A).aObjects.aKey<?>', arg0: FileRef): QueryTypes['$(A).aObjects.aKey<?>'];
-export function useQueryRef(query: '$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>', arg0: FileRef, arg1: QueryTypes['$(A).aObjects.aKey<?>']): QueryTypes['$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>'];
-export function useQueryRef(query: '$(B).bObjects.mainKey<?>', arg0: string): QueryTypes['$(B).bObjects.mainKey<?>'];
-export function useQueryRef(query: '$(A).aObjects.aKey<?>'|'$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>'|'$(B).bObjects.mainKey<?>', arg0: FileRef|string, arg1?: QueryTypes['$(A).aObjects.aKey<?>']): QueryTypes['$(A).aObjects.aKey<?>']|QueryTypes['$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>']|QueryTypes['$(B).bObjects.mainKey<?>']|null {
-  return useMemo(() => {
-    if (query == '$(A).aObjects.aKey<?>') {
-      return makeQueryRef(query, arg0 as FileRef);
-    }
-    if (query == '$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>') {
-      return makeQueryRef(query, arg0 as FileRef, arg1 as QueryTypes['$(A).aObjects.aKey<?>']);
-    }
-    if (query == '$(B).bObjects.mainKey<?>') {
-      return makeQueryRef(query, arg0 as string);
-    }
-    return null;
-  }, [query, arg0, arg1]);
-};
+export type DiffableQuery = `$(A).aObjects.aKey<${FileRef}>.nestedValue.list.[${number}].subList.[${number}].someNestedThing`|`$(A).aObjects.aKey<${FileRef}>.nestedValue.list.[${number}].subList.[${number}]`|`$(A).aObjects.aKey<${FileRef}>.nestedValue.list.[${number}]`|`$(A).aObjects.aKey<${FileRef}>.nestedValue.nestedSet.nestedSetKey<${QueryTypes['$(A).aObjects.aKey<?>']}>`|`$(A).aObjects.aKey<${FileRef}>.nestedValue`|`$(A).aObjects.aKey<${FileRef}>.something`|`$(A).aObjects.aKey<${FileRef}>`|`$(B).bObjects.mainKey<${string}>`;
 
 export type SchemaTypes = {
-  ['$(A).aObjects']: Array<{
-    ['aKey']: FileRef;
-    ['nestedValue']: {
-      ['list']: Array<{
-        ['someProp']: string;
-        ['subList']: Array<{
-          ['primitiveSet']: Array<string>;
-          ['someNestedThing']: {
-            ['innerMostString']: string;
-          };
-          ['subProp']: number;
-        }>;
-      }>;
-      ['nestedSet']: Array<{
-        ['nestedSetKey']: QueryTypes['$(A).aObjects.aKey<?>'];
-      }>;
+  ['$(A).aObjects.aKey<?>.nestedValue.list.[?].subList.[?].someNestedThing']: {
+    ['innerMostString']: string;
+  };
+  ['$(A).aObjects.aKey<?>.nestedValue.list.[?].subList.[?]']: {
+    ['primitiveSet']: Array<string>;
+    ['someNestedThing']: {
+      ['innerMostString']: string;
     };
-    ['something']: {
-      ['someRef']: QueryTypes['$(A).aObjects.aKey<?>'];
+    ['subProp']: number;
+  };
+  ['$(A).aObjects.aKey<?>.nestedValue.list.[?].subList']: Array<{
+    ['primitiveSet']: Array<string>;
+    ['someNestedThing']: {
+      ['innerMostString']: string;
     };
+    ['subProp']: number;
   }>;
+  ['$(A).aObjects.aKey<?>.nestedValue.list.[?]']: {
+    ['someProp']: string;
+    ['subList']: Array<{
+      ['primitiveSet']: Array<string>;
+      ['someNestedThing']: {
+        ['innerMostString']: string;
+      };
+      ['subProp']: number;
+    }>;
+  };
+  ['$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>']: {
+    ['nestedSetKey']: QueryTypes['$(A).aObjects.aKey<?>'];
+  };
+  ['$(A).aObjects.aKey<?>.nestedValue.list']: Array<{
+    ['someProp']: string;
+    ['subList']: Array<{
+      ['primitiveSet']: Array<string>;
+      ['someNestedThing']: {
+        ['innerMostString']: string;
+      };
+      ['subProp']: number;
+    }>;
+  }>;
+  ['$(A).aObjects.aKey<?>.nestedValue.nestedSet']: Array<{
+    ['nestedSetKey']: QueryTypes['$(A).aObjects.aKey<?>'];
+  }>;
+  ['$(A).aObjects.aKey<?>.nestedValue']: {
+    ['list']: Array<{
+      ['someProp']: string;
+      ['subList']: Array<{
+        ['primitiveSet']: Array<string>;
+        ['someNestedThing']: {
+          ['innerMostString']: string;
+        };
+        ['subProp']: number;
+      }>;
+    }>;
+    ['nestedSet']: Array<{
+      ['nestedSetKey']: QueryTypes['$(A).aObjects.aKey<?>'];
+    }>;
+  };
+  ['$(A).aObjects.aKey<?>.something']: {
+    ['someRef']: QueryTypes['$(A).aObjects.aKey<?>'];
+  };
   ['$(A).aObjects.aKey<?>']: {
     ['aKey']: FileRef;
     ['nestedValue']: {
@@ -89,98 +90,56 @@ export type SchemaTypes = {
       ['someRef']: QueryTypes['$(A).aObjects.aKey<?>'];
     };
   };
-  ['$(A).aObjects.aKey<?>.nestedValue']: {
-    ['list']: Array<{
-      ['someProp']: string;
-      ['subList']: Array<{
-        ['primitiveSet']: Array<string>;
-        ['someNestedThing']: {
-          ['innerMostString']: string;
-        };
-        ['subProp']: number;
-      }>;
-    }>;
-    ['nestedSet']: Array<{
-      ['nestedSetKey']: QueryTypes['$(A).aObjects.aKey<?>'];
-    }>;
-  };
-  ['$(A).aObjects.aKey<?>.nestedValue.list']: Array<{
-    ['someProp']: string;
-    ['subList']: Array<{
-      ['primitiveSet']: Array<string>;
-      ['someNestedThing']: {
-        ['innerMostString']: string;
-      };
-      ['subProp']: number;
-    }>;
-  }>;
-  ['$(A).aObjects.aKey<?>.nestedValue.list.[?]']: {
-    ['someProp']: string;
-    ['subList']: Array<{
-      ['primitiveSet']: Array<string>;
-      ['someNestedThing']: {
-        ['innerMostString']: string;
-      };
-      ['subProp']: number;
-    }>;
-  };
-  ['$(A).aObjects.aKey<?>.nestedValue.list.[?].subList']: Array<{
-    ['primitiveSet']: Array<string>;
-    ['someNestedThing']: {
-      ['innerMostString']: string;
-    };
-    ['subProp']: number;
-  }>;
-  ['$(A).aObjects.aKey<?>.nestedValue.list.[?].subList.[?]']: {
-    ['primitiveSet']: Array<string>;
-    ['someNestedThing']: {
-      ['innerMostString']: string;
-    };
-    ['subProp']: number;
-  };
-  ['$(A).aObjects.aKey<?>.nestedValue.list.[?].subList.[?].someNestedThing']: {
-    ['innerMostString']: string;
-  };
-  ['$(A).aObjects.aKey<?>.nestedValue.nestedSet']: Array<{
-    ['nestedSetKey']: QueryTypes['$(A).aObjects.aKey<?>'];
-  }>;
-  ['$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>']: {
-    ['nestedSetKey']: QueryTypes['$(A).aObjects.aKey<?>'];
-  };
-  ['$(A).aObjects.aKey<?>.something']: {
-    ['someRef']: QueryTypes['$(A).aObjects.aKey<?>'];
-  };
-  ['$(B).bObjects']: Array<{
-    ['aConstrainedRef']: QueryTypes['$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>'];
-    ['aRef']: QueryTypes['$(A).aObjects.aKey<?>'];
-    ['attachedFile']: FileRef;
-    ['mainKey']: string;
-  }>;
   ['$(B).bObjects.mainKey<?>']: {
     ['aConstrainedRef']: QueryTypes['$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>'];
     ['aRef']: QueryTypes['$(A).aObjects.aKey<?>'];
     ['attachedFile']: FileRef;
     ['mainKey']: string;
   };
+  ['$(A).aObjects']: Array<{
+    ['aKey']: FileRef;
+    ['nestedValue']: {
+      ['list']: Array<{
+        ['someProp']: string;
+        ['subList']: Array<{
+          ['primitiveSet']: Array<string>;
+          ['someNestedThing']: {
+            ['innerMostString']: string;
+          };
+          ['subProp']: number;
+        }>;
+      }>;
+      ['nestedSet']: Array<{
+        ['nestedSetKey']: QueryTypes['$(A).aObjects.aKey<?>'];
+      }>;
+    };
+    ['something']: {
+      ['someRef']: QueryTypes['$(A).aObjects.aKey<?>'];
+    };
+  }>;
+  ['$(B).bObjects']: Array<{
+    ['aConstrainedRef']: QueryTypes['$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>'];
+    ['aRef']: QueryTypes['$(A).aObjects.aKey<?>'];
+    ['attachedFile']: FileRef;
+    ['mainKey']: string;
+  }>;
 };
 
 
-export type DiffableReturnTypes = SchemaTypes['$(A).aObjects']|SchemaTypes['$(A).aObjects.aKey<?>']|SchemaTypes['$(A).aObjects.aKey<?>.nestedValue']|SchemaTypes['$(A).aObjects.aKey<?>.nestedValue.list']|SchemaTypes['$(A).aObjects.aKey<?>.nestedValue.list.[?]']|SchemaTypes['$(A).aObjects.aKey<?>.nestedValue.list.[?].subList']|SchemaTypes['$(A).aObjects.aKey<?>.nestedValue.list.[?].subList.[?]']|SchemaTypes['$(A).aObjects.aKey<?>.nestedValue.list.[?].subList.[?].someNestedThing']|SchemaTypes['$(A).aObjects.aKey<?>.nestedValue.nestedSet']|SchemaTypes['$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>']|SchemaTypes['$(A).aObjects.aKey<?>.something']|SchemaTypes['$(B).bObjects']|SchemaTypes['$(B).bObjects.mainKey<?>'];
-
 export type PointerTypes = {
-  ['$(A).aObjects']: `$(A).aObjects`;
-  ['$(A).aObjects.aKey<?>']: `$(A).aObjects.aKey<${FileRef}>`;
-  ['$(A).aObjects.aKey<?>.nestedValue']: `$(A).aObjects.aKey<${FileRef}>.nestedValue`;
-  ['$(A).aObjects.aKey<?>.nestedValue.list']: `$(A).aObjects.aKey<${FileRef}>.nestedValue.list`;
-  ['$(A).aObjects.aKey<?>.nestedValue.list.[?]']: `$(A).aObjects.aKey<${FileRef}>.nestedValue.list.[${number}]`;
-  ['$(A).aObjects.aKey<?>.nestedValue.list.[?].subList']: `$(A).aObjects.aKey<${FileRef}>.nestedValue.list.[${number}].subList`;
-  ['$(A).aObjects.aKey<?>.nestedValue.list.[?].subList.[?]']: `$(A).aObjects.aKey<${FileRef}>.nestedValue.list.[${number}].subList.[${number}]`;
   ['$(A).aObjects.aKey<?>.nestedValue.list.[?].subList.[?].someNestedThing']: `$(A).aObjects.aKey<${FileRef}>.nestedValue.list.[${number}].subList.[${number}].someNestedThing`;
-  ['$(A).aObjects.aKey<?>.nestedValue.nestedSet']: `$(A).aObjects.aKey<${FileRef}>.nestedValue.nestedSet`;
+  ['$(A).aObjects.aKey<?>.nestedValue.list.[?].subList.[?]']: `$(A).aObjects.aKey<${FileRef}>.nestedValue.list.[${number}].subList.[${number}]`;
+  ['$(A).aObjects.aKey<?>.nestedValue.list.[?].subList']: `$(A).aObjects.aKey<${FileRef}>.nestedValue.list.[${number}].subList`;
+  ['$(A).aObjects.aKey<?>.nestedValue.list.[?]']: `$(A).aObjects.aKey<${FileRef}>.nestedValue.list.[${number}]`;
   ['$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>']: `$(A).aObjects.aKey<${FileRef}>.nestedValue.nestedSet.nestedSetKey<${QueryTypes['$(A).aObjects.aKey<?>']}>`;
+  ['$(A).aObjects.aKey<?>.nestedValue.list']: `$(A).aObjects.aKey<${FileRef}>.nestedValue.list`;
+  ['$(A).aObjects.aKey<?>.nestedValue.nestedSet']: `$(A).aObjects.aKey<${FileRef}>.nestedValue.nestedSet`;
+  ['$(A).aObjects.aKey<?>.nestedValue']: `$(A).aObjects.aKey<${FileRef}>.nestedValue`;
   ['$(A).aObjects.aKey<?>.something']: `$(A).aObjects.aKey<${FileRef}>.something`;
-  ['$(B).bObjects']: `$(B).bObjects`;
+  ['$(A).aObjects.aKey<?>']: `$(A).aObjects.aKey<${FileRef}>`;
   ['$(B).bObjects.mainKey<?>']: `$(B).bObjects.mainKey<${string}>`;
+  ['$(A).aObjects']: `$(A).aObjects`;
+  ['$(B).bObjects']: `$(B).bObjects`;
 };
 
 
@@ -219,41 +178,11 @@ export type SchemaRoot = {
 };
 
 
-export type RefReturnTypes = {
-  ['$(A).aObjects.aKey<?>']: {
-    ['aKey']: FileRef;
-    ['nestedValue']: {
-      ['list']: Array<{
-        ['someProp']: string;
-        ['subList']: Array<{
-          ['primitiveSet']: Array<string>;
-          ['someNestedThing']: {
-            ['innerMostString']: string;
-          };
-          ['subProp']: number;
-        }>;
-      }>;
-      ['nestedSet']: Array<{
-        ['nestedSetKey']: QueryTypes['$(A).aObjects.aKey<?>'];
-      }>;
-    };
-    ['something']: {
-      ['someRef']: QueryTypes['$(A).aObjects.aKey<?>'];
-    };
-  };
-  ['$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>']: {
-    ['nestedSetKey']: QueryTypes['$(A).aObjects.aKey<?>'];
-  };
-  ['$(B).bObjects.mainKey<?>']: {
-    ['aConstrainedRef']: QueryTypes['$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>'];
-    ['aRef']: QueryTypes['$(A).aObjects.aKey<?>'];
-    ['attachedFile']: FileRef;
-    ['mainKey']: string;
-  };
-};
+
+type ValueOf<T> = T[keyof T];
 
 interface Packet {
-  id: string;
+  id: number;
   chunk: string;
   index: number;
   totalPackets: number;
@@ -261,24 +190,86 @@ interface Packet {
 }
 
 interface PluginState {
-  commandMode: "view" | "edit";
+  commandMode: "view" | "edit" | "compare";
+  compareFrom: "none" | "before" | "after";
   applicationState: SchemaRoot | null;
+  apiStoreInvalidity: {[key: string]: Array<string>};
+  conflictList: Array<string>;
+  changeset: Array<string>;
+  binaryUrls: {
+    upload: null|string,
+    download: null|string,
+    binaryToken: null|string,
+  };
+  binaryMap: {[key: string]: string};
+  isCopyMode: boolean;
+  copyList: Array<ValueOf<QueryTypes>>;
+  rootSchemaMap: TypeStruct;
+  clientStorage: object;
 }
 
 interface IFloroContext {
-  commandMode: "view" | "edit";
+  commandMode: "view" | "edit" | "compare";
+  compareFrom: "none" | "before" | "after";
   applicationState: SchemaRoot | null;
+  currentPluginAppState: React.MutableRefObject<SchemaRoot|null>,
+  changeset: Set<string>;
+  apiStoreInvalidity: {[key: string]: Array<string>};
+  apiStoreInvaliditySets: {[key: string]: Set<string>};
+  conflictSet: Set<string>;
   hasLoaded: boolean;
-  saveState: <T extends keyof SchemaRoot>(pluginName: T, state: SchemaRoot|null) => string | null;
-  loadingIds: Set<string>;
+  saveState: <T extends keyof SchemaRoot>(pluginName: T, state: SchemaRoot|null) => number | null;
+  setPluginState: (state: PluginState) => void;
+  saveCopyList: (copyList: Array<ValueOf<QueryTypes>>) => void;
+  saveClientStorage: (_: object) => void;
+  clearClientStorage: () => void;
+  isCopyMode: boolean;
+  copyList: Array<ValueOf<QueryTypes>>;
+  pluginState: PluginState;
+  clientStorage: object;
+  lastEditKey: React.MutableRefObject<string|null>
 }
 
 const FloroContext = createContext({
   commandMode: "view",
+  compareFrom: "none",
   applicationState: null,
+  changeset: new Set([]),
+  apiStoreInvalidity: {},
+  apiStoreInvaliditySets: {},
+  conflictSet: new Set([]),
   hasLoaded: false,
   saveState: (_state: null) => null,
-  loadingIds: new Set([]),
+  setPluginState: (_state: PluginState) => {},
+  saveCopyList: (_copyList: Array<ValueOf<QueryTypes>>) => {},
+  saveClientStorage: (_storage: object) => {},
+  clearClientStorage: () => {},
+  isCopyMode: false,
+  copyList: [],
+  pathKeys: [],
+  rootSchemaMap: {},
+  clientStorage: {},
+  lastEditKey: { current: null},
+  currentPluginAppState: { current: null},
+  pluginState: {
+    commandMode: "view",
+    compareFrom: "none",
+    isCopyMode: false,
+    copyList: [],
+    pathKeys: [],
+    applicationState: null,
+    apiStoreInvalidity: {},
+    conflictList: [],
+    changeset: [],
+    binaryUrls: {
+      upload: null,
+      download: null,
+      binaryToken: null,
+    },
+    binaryMap: {},
+    rootSchemaMap: {},
+    clientStorage: {},
+  },
 } as IFloroContext);
 
 export interface Props {
@@ -286,7 +277,7 @@ export interface Props {
 }
 
 const MAX_DATA_SIZE = 10_000;
-const sendMessagetoParent = (id: string, pluginName: string, command: string, data: object) => {
+const sendMessagetoParent = (id: number, pluginName: string|null, command: string, data: object) => {
   const dataString = JSON.stringify({ command, data });
   const totalPackets = Math.floor(dataString.length / MAX_DATA_SIZE);
   for (let i = 0; i < dataString.length; i += MAX_DATA_SIZE) {
@@ -312,56 +303,164 @@ const sendMessagetoParent = (id: string, pluginName: string, command: string, da
 export const FloroProvider = (props: Props) => {
   const [pluginState, setPluginState] = useState<PluginState>({
     commandMode: "view",
+    compareFrom: "none",
     applicationState: null,
+    apiStoreInvalidity: {},
+    conflictList: [],
+    changeset: [],
+    binaryUrls: {
+      upload: null,
+      download: null,
+      binaryToken: null,
+    },
+    binaryMap: {},
+    isCopyMode: false,
+    copyList: [],
+    rootSchemaMap: {},
+    clientStorage: {}
   });
+  const currentPluginAppState = useRef<PluginState["applicationState"]>({...pluginState.applicationState} as PluginState["applicationState"]);
+  const currentClientStorage = useRef<object>({...pluginState.clientStorage});
+  const rootSchemaMap = useRef(pluginState.rootSchemaMap);
   const [hasLoaded, setHasLoaded] = useState(false);
-  const [loadingIds, setLoadingIds] = useState<Set<string>>(new Set());
-  const ids = useRef<Set<string>>(new Set());
+  const ids = useRef<Set<number>>(new Set());
+  const [copyList, setCopyList] = useState<Array<ValueOf<QueryTypes>>>([]);
+  const updateTimeout = useRef<NodeJS.Timeout>();
+  const lastEditKey = useRef<string|null>(null);
+  const currentPluginState = useRef<PluginState>(pluginState);
 
-  const incoming = useRef({});
+  useEffect(() => {
+    currentPluginState.current = pluginState;
+  }, [pluginState])
+
+  useEffect(() => {
+    setCopyList(pluginState?.copyList);
+  }, [pluginState?.isCopyMode])
+
+  const incoming = useRef<{[id: number]: {
+    data: Array<string>,
+    counter: number
+  }}>({});
+  const updateCounter = useRef(1);
 
   const commandMode = useMemo(() => {
     return pluginState.commandMode;
   }, [pluginState.commandMode]);
 
+  const commandModeRef = useRef(commandMode);
+
+  const compareFrom = useMemo(() => {
+    return pluginState.compareFrom;
+  }, [pluginState.compareFrom]);
+
+  const changeset = useMemo(() => {
+    return new Set(pluginState.changeset);
+  }, [pluginState.changeset]);
+
+  const conflictSet = useMemo(() => {
+    return new Set(pluginState.conflictList ?? []);
+  }, [pluginState.conflictList]);
+
+  useEffect(() => {
+    const commandToggleListeners = (event: KeyboardEvent) => {
+      if (event.metaKey && event.shiftKey && event.key == "p") {
+        window.parent?.postMessage("toggle-vcs", "*");
+      }
+      if (event.metaKey && event.shiftKey && event.key == "e") {
+        window.parent?.postMessage("toggle-command-mode", "*");
+      }
+
+      if (event.metaKey && event.shiftKey && event.key == "[") {
+        window.parent?.postMessage("toggle-before", "*");
+      }
+
+      if (event.metaKey && event.shiftKey && event.key == "]") {
+        window.parent?.postMessage("toggle-after", "*");
+      }
+
+      if (event.metaKey && event.shiftKey && event.key == "c") {
+        window.parent?.postMessage("toggle-compare-mode", "*");
+      }
+
+      if (event.metaKey && event.shiftKey && event.key == "b") {
+        window.parent?.postMessage("toggle-branches", "*");
+      }
+    };
+    window.addEventListener("keydown", commandToggleListeners);
+    return () => {
+      window.removeEventListener("keydown", commandToggleListeners);
+    };
+  }, []);
+
   const saveState = useCallback(
-    <T extends keyof SchemaRoot>(pluginName: T, state: SchemaRoot|null): string | null => {
+    <T extends keyof SchemaRoot>(pluginName: T, state: SchemaRoot|null): number | null => {
       if (commandMode != "edit") {
         return null;
       }
       if (state == null || state[pluginName] == null) {
         return null;
       }
+      clearTimeout(updateTimeout.current);
       if (ids.current) {
-        const id = Math.random().toString(16).substring(2);
+        updateCounter.current += 2;
+        const id = updateCounter.current;
         ids.current = new Set([...Array.from(ids.current), id]);
-        setLoadingIds(ids.current);
-        new Promise((resolve) => {
-          const onReturnId = ({ data }) => {
-            if (data.id == id) {
-              if (
-                incoming.current[data.id] &&
-                incoming.current[data.id].counter == data.totalPackets + 1
-              ) {
-                ids.current = new Set([
-                  ...Array.from(ids.current).filter((i) => i != id),
-                ]);
-                setLoadingIds(ids.current);
-                delete incoming.current[data.id];
-                window.removeEventListener("message", onReturnId);
-                resolve(id);
-              }
-            }
-          };
-          window.addEventListener("message", onReturnId);
+        setTimeout(() => {
           sendMessagetoParent(id, pluginName, "save", state[pluginName]);
-        });
+        }, 0);
         return id;
       }
       return null;
     },
-    [commandMode, loadingIds]
+    [commandMode]
   );
+
+  const saveCopyList = useCallback((copyList: Array<ValueOf<QueryTypes>>) => {
+    if (!pluginState.isCopyMode) {
+      return;
+    }
+    clearTimeout(updateTimeout.current);
+    setCopyList(copyList);
+    if (ids.current) {
+      updateCounter.current += 2;
+      const id = updateCounter.current;
+      ids.current = new Set([...Array.from(ids.current), id]);
+      setTimeout(() => {
+        sendMessagetoParent(id, null, "update-copy", copyList);
+      }, 0);
+      return id;
+    }
+      return null;
+  }, [pluginState.isCopyMode])
+
+
+  const saveClientStorage = useCallback((clientStorage: object) => {
+    clearTimeout(updateTimeout.current);
+    if (ids.current) {
+      updateCounter.current += 2;
+      const id = updateCounter.current;
+      ids.current = new Set([...Array.from(ids.current), id]);
+      currentClientStorage.current = {...clientStorage};
+      setTimeout(() => {
+        sendMessagetoParent(id, null, "update-client-storage", clientStorage);
+      }, 0);
+      return id;
+    }
+    return null;
+  }, [commandMode, pluginState]);
+
+
+  const clearClientStorage = useCallback(() => {
+    if (ids.current) {
+      currentClientStorage.current = {};
+      window.parent?.postMessage("clear-client-storage", "*");
+      setPluginState({
+        ...pluginState,
+        clientStorage: {}
+      })
+    }
+    return null;
+  }, [pluginState]);
 
   const applicationState = useMemo(() => {
     if (!hasLoaded) {
@@ -369,6 +468,25 @@ export const FloroProvider = (props: Props) => {
     }
     return pluginState.applicationState;
   }, [pluginState.applicationState, hasLoaded]);
+
+  const apiStoreInvalidity = useMemo(() => {
+    if (!hasLoaded) {
+      return {} as {[key: string]: Array<string>};
+    }
+    return pluginState.apiStoreInvalidity ?? {};
+  }, [pluginState.apiStoreInvalidity, hasLoaded]);
+
+  const apiStoreInvalidityStr = useMemo(() => {
+    return JSON.stringify(apiStoreInvalidity);
+  }, [apiStoreInvalidity]);
+
+  const apiStoreInvaliditySets = useMemo(() => {
+    const out: {[key: string]: Set<string>} = {};
+     for (let plugin in apiStoreInvalidity) {
+      out[plugin] = new Set(apiStoreInvalidity?.[plugin] ?? []);
+     }
+     return out;
+  }, [apiStoreInvalidityStr]);
 
   useEffect(() => {
     const onMessage = ({ data }: { data: Packet }) => {
@@ -386,21 +504,63 @@ export const FloroProvider = (props: Props) => {
         );
         if (response.event == "load") {
             const state: PluginState = response.data as PluginState;
+            rootSchemaMap.current = state.rootSchemaMap;
             setPluginState(state);
+            currentPluginAppState.current = state.applicationState;
+            commandModeRef.current = state.commandMode;
             setHasLoaded(true);
         }
         if (response.event == "ack" || response.event == "update") {
-            const state: PluginState = response.data as PluginState;
-            setPluginState(state);
+            clearTimeout(updateTimeout.current);
+              const isStale = updateCounter?.current > data.id;
+              const state: PluginState = response.data as PluginState;
+              if (currentPluginAppState.current && state.applicationState) {
+                const nextApplicationState = getNextApplicationState(
+                  currentPluginAppState.current,
+                  state.applicationState,
+                  state.rootSchemaMap,
+                  lastEditKey,
+                  isStale
+                );
+                const didChangeStorage = JSON.stringify(state.clientStorage) !=
+                    JSON.stringify(currentClientStorage.current);
+                const nextClientStorage =
+                  didChangeStorage
+                    ? state.clientStorage
+                    : { ...currentClientStorage.current };
+                const nextState = {
+                  ...state,
+                  applicationState: nextApplicationState ? nextApplicationState : currentClientStorage.current as SchemaRoot,
+                  clientStorage: nextClientStorage
+                }
+                rootSchemaMap.current = state.rootSchemaMap;
+                currentPluginAppState.current = nextState.applicationState;
+                currentClientStorage.current = {...nextClientStorage};
+                commandModeRef.current = state.commandMode;
+                if (nextState.applicationState) {
+                  setPluginState(nextState);
+                }
+                updateTimeout.current = setTimeout(() => {
+                  lastEditKey.current = null;
+                }, 200);
+              }
         }
-        if (!ids.current.has(data.id)) {
-          delete incoming.current[data.id];
+        for (const id in incoming.current) {
+          const idInt = parseInt(id);
+          if (idInt < (updateCounter?.current ?? 0)) {
+              delete incoming.current[data.id];
+              ids.current.delete(idInt);
+          }
         }
       }
+      if (data.id > updateCounter.current) {
+        updateCounter.current = data.id + 1;
+      }
     };
-    window.addEventListener("message", onMessage);
+    window.addEventListener("message", onMessage, true);
+    window.parent?.postMessage("ready", "*");
     return () => {
-      window.removeEventListener("message", onMessage);
+      window.removeEventListener("message", onMessage, true);
     };
   }, []);
 
@@ -408,10 +568,24 @@ export const FloroProvider = (props: Props) => {
     <FloroContext.Provider
       value={{
         applicationState,
+        currentPluginAppState,
+        apiStoreInvalidity,
+        apiStoreInvaliditySets,
+        changeset,
+        conflictSet,
         commandMode,
+        compareFrom,
         hasLoaded,
         saveState,
-        loadingIds,
+        setPluginState,
+        pluginState,
+        clientStorage: pluginState.clientStorage,
+        saveCopyList,
+        saveClientStorage,
+        clearClientStorage,
+        isCopyMode: pluginState.isCopyMode,
+        copyList,
+        lastEditKey
       }}
     >
       {props.children}
@@ -428,11 +602,79 @@ function getPluginNameFromQuery(query: string|null): keyof SchemaRoot|null {
     return null;
   }
   const [pluginWrapper] = query.split(".");
-  const pluginName = /^$((.+))$/.exec(pluginWrapper as string)?.[1] ?? null;
+  const pluginName = /^\$\((.+)\)$/.exec(pluginWrapper as string)?.[1] ?? null;
   if (!pluginName) {
     return null;
   }
   return pluginName as keyof SchemaRoot;
+}
+
+export const useCopyApi = (pointer: ValueOf<QueryTypes>|null) => {
+  const { copyList, saveCopyList, isCopyMode } = useFloroContext();
+  const isCopied = useMemo(() => {
+    if (!pointer) {
+      return false;
+    }
+    return copyList.includes(pointer);
+  }, [copyList, pointer]);
+
+  const toggleCopy = useCallback(() => {
+    if (!isCopyMode || !pointer) {
+      return;
+    }
+    if (!isCopied) {
+      const nextList = [...copyList, pointer];
+      saveCopyList(nextList);
+    } else {
+      const nextList = copyList.filter(copiedPointer => copiedPointer != pointer);
+      saveCopyList(nextList);
+    }
+  }, [isCopied, isCopyMode, copyList, pointer])
+  return {
+    isCopied,
+    toggleCopy
+  }
+}
+
+export const useClientStorageApi = <T,> (clientStorageKey: string): [T|null, (value: T|null) => void, () => void] => {
+  const { clientStorage, saveClientStorage, pluginState, setPluginState, commandMode } = useFloroContext();
+
+  const value = useMemo((): T|null => {
+    return clientStorage?.[clientStorageKey] ?? null
+  }, [clientStorageKey, clientStorage?.[clientStorageKey], commandMode]);
+  const [getter, setter] = useState<T|null>(value);
+  const timeout = useRef<NodeJS.Timeout>();
+  useEffect(() => {
+    clearTimeout(timeout?.current);
+    timeout.current = setTimeout(() => {
+      if (value != getter) {
+        setter(value);
+      }
+    }, 300);
+    return () => {
+      clearTimeout(timeout.current);
+    }
+  }, [value])
+
+  const set = useCallback((value: T|null) => {
+    const next = {
+      ...clientStorage,
+      [clientStorageKey]: value
+    };
+    setter(value);
+    saveClientStorage(next)
+  }, [clientStorage, clientStorageKey, pluginState, commandMode, setPluginState, saveClientStorage]);
+
+  const remove = useCallback(() => {
+    const next = {
+      ...clientStorage,
+    };
+    delete next[clientStorageKey];
+    setter(null);
+    saveClientStorage(next)
+  }, [clientStorage, clientStorageKey, pluginState, commandMode, setPluginState, saveClientStorage]);
+
+  return [getter, set, remove];
 }
 
 const getCounterArrowBalanance = (str: string): number => {
@@ -518,7 +760,7 @@ const getObjectInStateMap = (
 ): object | null => {
   let current: null | object = null;
   const [pluginWrapper, ...decodedPath] = decodeSchemaPathWithArrays(path);
-  const pluginName = /^$((.+))$/.exec(pluginWrapper as string)?.[1] ?? null;
+  const pluginName = /^\$\((.+)\)$/.exec(pluginWrapper as string)?.[1] ?? null;
   if (pluginName == null) {
     return null;
   }
@@ -557,8 +799,8 @@ export const replaceRefVarsWithWildcards = (pathString: string): string => {
     .join(".");
 };
 
-export function containsDiffable(changeset: Set<string>, query: PartialDiffableQuery, fuzzy: true): boolean;
-export function containsDiffable(changeset: Set<string>, query: DiffableQuery, fuzzy: false): boolean;
+export function containsDiffable(changeset: Set<string>, query: PartialDiffableQuery, fuzzy: boolean): boolean;
+export function containsDiffable(changeset: Set<string>, query: DiffableQuery, fuzzy: boolean): boolean;
 export function containsDiffable(changeset: Set<string>, query: PartialDiffableQuery|DiffableQuery, fuzzy: boolean) {
   if (!fuzzy) {
     return changeset.has(query);
@@ -577,7 +819,7 @@ const getIndexPathInStateMap = (
 ): Array<string | number> | null => {
   let current: null | object = null;
   const [pluginWrapper, ...decodedPath] = decodeSchemaPathWithArrays(path);
-  const pluginName = /^$((.+))$/.exec(pluginWrapper as string)?.[1] ?? null;
+  const pluginName = /^\$\((.+)\)$/.exec(pluginWrapper as string)?.[1] ?? null;
   const indexPath: Array<string | number> = [];
   if (pluginName == null) {
     return null;
@@ -636,39 +878,471 @@ const updateObjectInStateMap = (
 };
 
 
+export type StringDiff = {
+  add: {
+    [key: number]: string;
+  };
+  remove: {
+    [key: number]: string;
+  };
+};
 
-export function getReferencedObject(root: SchemaRoot, query: QueryTypes['$(A).aObjects.aKey<?>']): RefReturnTypes['$(A).aObjects.aKey<?>'];
-export function getReferencedObject(root: SchemaRoot, query: QueryTypes['$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>']): RefReturnTypes['$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>'];
-export function getReferencedObject(root: SchemaRoot, query: QueryTypes['$(B).bObjects.mainKey<?>']): RefReturnTypes['$(B).bObjects.mainKey<?>'];
-export function getReferencedObject(root: SchemaRoot, query: QueryTypes['$(A).aObjects.aKey<?>']|QueryTypes['$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>']|QueryTypes['$(B).bObjects.mainKey<?>']): RefReturnTypes['$(A).aObjects.aKey<?>']|RefReturnTypes['$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>']|RefReturnTypes['$(B).bObjects.mainKey<?>']|null {
-  if (replaceRefVarsWithWildcards(query) == '$(A).aObjects.aKey<?>') {
-    return getObjectInStateMap(root, query) as RefReturnTypes['$(A).aObjects.aKey<?>'];
+export type Diff = {
+  add: {
+    [key: string]: DiffElement;
+  };
+  remove: {
+    [key: string]: DiffElement;
+  };
+};
+
+export interface DiffElement {
+  key: string;
+  value: any;
+}
+
+const fastHash = (str: string) => {
+  let hash = 0;
+  let hash2 = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = (hash * hash2) ^ ((hash << 5) - hash + str.charCodeAt(i));
+    hash2 = (hash2 << 5) - hash + str.charCodeAt(i);
+    hash |= 0;
+    hash2 |= 0;
   }
-  if (replaceRefVarsWithWildcards(query) == '$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>') {
-    return getObjectInStateMap(root, query) as RefReturnTypes['$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>'];
+  return hash.toString(36).padEnd(6) + hash2.toString(36).padEnd(6);
+};
+
+export const getLCS = (
+  left: Array<string>,
+  right: Array<string>
+): Array<string> => {
+  const diff = mdiff(left, right);
+  const lcs = diff.getLcs();
+  return lcs ?? [];
+};
+
+export const getArrayStringDiff = (
+  past: Array<string>,
+  present: Array<string>
+): StringDiff => {
+  const longestSequence = getLCS(past, present);
+
+  let diff = {
+    add: {},
+    remove: {},
+  };
+
+  for (let i = 0, removeIndex = 0; i < past.length; ++i) {
+    if (longestSequence[removeIndex] == past[i]) {
+      removeIndex++;
+    } else {
+      diff.remove[i] = past[i];
+    }
   }
-  if (replaceRefVarsWithWildcards(query) == '$(B).bObjects.mainKey<?>') {
-    return getObjectInStateMap(root, query) as RefReturnTypes['$(B).bObjects.mainKey<?>'];
+
+  for (let i = 0, addIndex = 0; i < present.length; ++i) {
+    if (longestSequence[addIndex] == present[i]) {
+      addIndex++;
+    } else {
+      diff.add[i] = present[i];
+    }
+  }
+  return diff;
+};
+
+export const getRowHash = (obj: {
+  key: string;
+  value: {
+    [key: string]: number | string | boolean | Array<number | string | boolean>;
+  };
+}): string => {
+  return fastHash(obj.key + JSON.stringify(obj.value));
+};
+
+export const getDiff = (
+  before: Array<DiffElement>,
+  after: Array<DiffElement>
+): Diff => {
+  const past = before.map(getRowHash);
+  const present = after.map(getRowHash);
+  const longestSequence = getLCS(past, present);
+  let removeIndex = 0;
+  let diff = {
+    add: {},
+    remove: {},
+  };
+  for (let i = 0; i < past.length; ++i) {
+    if (longestSequence[removeIndex] == past[i]) {
+      removeIndex++;
+    } else {
+      diff.remove[i] = before[i];
+    }
+  }
+
+  let addIndex = 0;
+  for (let i = 0; i < present.length; ++i) {
+    if (longestSequence[addIndex] == present[i]) {
+      addIndex++;
+    } else {
+      diff.add[i] = after[i];
+    }
+  }
+  return diff;
+};
+
+export interface ManifestNode {
+  type: string;
+  isKey?: boolean;
+  values?: string | TypeStruct;
+  ref?: string;
+  refKeyType?: string;
+  refType?: string;
+  nullable?: boolean;
+  emptyable?: boolean;
+  bounded?: boolean;
+  manualOrdering?: boolean;
+  onDelete?: "delete" | "nullify";
+  default?: unknown|Array<unknown>;
+}
+
+export interface TypeStruct {
+  [key: string]: ManifestNode | TypeStruct;
+}
+
+export interface Manifest {
+  version: string;
+  name: string;
+  displayName: string;
+  description?: string;
+  codeDocsUrl?: string;
+  codeRepoUrl?: string;
+  managedCopy?: boolean;
+  icon:
+    | string
+    | {
+        light: string;
+        dark: string;
+        selected?:
+          | string
+          | {
+              dark?: string;
+              light?: string;
+            };
+      };
+  imports: {
+    [name: string]: string;
+  };
+  types: TypeStruct;
+  store: TypeStruct;
+  seed?: unknown;
+}
+
+const primitives = new Set(["int", "float", "boolean", "string", "file"]);
+
+const writePathString = (
+  pathParts: Array<DiffElement | string>
+): string => {
+  return pathParts
+    .map((part) => {
+      if (typeof part == "string") {
+        return part;
+      }
+      return `${part.key}<${part.value}>`;
+    })
+    .join(".");
+};
+
+const generateKVFromStateWithRootSchema = (
+  rootSchema: TypeStruct,
+  pluginName: string,
+  state: object
+): Array<DiffElement> => {
+  const flattenedState = flattenStateToSchemaPathKV(
+    rootSchema as unknown as Manifest,
+    state,
+    [`$(${pluginName})`]
+  );
+  return (
+    flattenedState?.map?.(({ key, value }) => {
+      return {
+        key: writePathString(key as unknown as Array<string | DiffElement>),
+        value,
+      };
+    }) ?? []
+  );
+};
+
+const generateKVState = (
+  rootSchema: TypeStruct,
+  state: object
+) => {
+  const out:Array<DiffElement> = [];
+  for (const pluginName in rootSchema) {
+    out.push(
+      ...generateKVFromStateWithRootSchema(
+        rootSchema[pluginName] as TypeStruct,
+        pluginName,
+        state[pluginName]
+      )
+    );
+  }
+  return out;
+}
+
+const getStateId = (schema: TypeStruct, state: object): string => {
+  const hashPairs: Array<DiffElement> = [];
+  const sortedProps = Object.keys(schema).sort();
+  for (const prop of sortedProps) {
+    if (!schema[prop].type) {
+      hashPairs.push({
+        key: prop,
+        value: getStateId(schema[prop] as TypeStruct, state[prop]),
+      });
+    }
+    if (primitives.has(schema[prop].type as string)) {
+      hashPairs.push({
+        key: prop,
+        value: fastHash(`${state[prop]}`),
+      });
+    }
+    if (schema[prop].type == "set" || schema[prop].type == "array") {
+      hashPairs.push({
+        key: prop,
+        value: state[prop]?.reduce((s: string, element: object) => {
+          if (
+            typeof schema[prop].values == "string" &&
+            primitives.has(schema[prop].values as string)
+          ) {
+            return fastHash(s + `${element}`);
+          }
+          return fastHash(
+            s + getStateId(schema[prop].values as TypeStruct, element)
+          );
+        }, ""),
+      });
+    }
+  }
+  return fastHash(
+    hashPairs.reduce((s, { key, value }) => {
+      if (key == "(id)") {
+        return s;
+      }
+      if (s == "") {
+        return `${key}:${value}`;
+      }
+      return s + "/" + `${key}:${value}`;
+    }, "")
+  );
+};
+
+const flattenStateToSchemaPathKV = (
+  schemaRoot: Manifest,
+  state: object,
+  traversalPath: Array<string | DiffElement>
+): Array<{
+  key: string | Array<string | DiffElement>;
+  value: unknown;
+}> => {
+  const kv: Array<{
+    key: string | Array<string | DiffElement>;
+    value: unknown;
+  }> = [];
+  const sets: Array<string> = [];
+  const arrays: Array<string> = [];
+  const nestedStructures: Array<string> = [];
+  const value = {};
+  let primaryKey: null | DiffElement = null;
+  const sortedProps = Object.keys(schemaRoot).sort();
+  for (const prop of sortedProps) {
+    if (schemaRoot[prop].isKey) {
+      primaryKey = {
+        key: prop,
+        value: state[prop],
+      };
+    }
+
+    if (
+      schemaRoot[prop]?.type == "set" &&
+      !primitives.has(schemaRoot[prop].values)
+    ) {
+      sets.push(prop);
+      continue;
+    }
+    if (
+      schemaRoot[prop]?.type == "array" &&
+      !primitives.has(schemaRoot[prop].values)
+    ) {
+      arrays.push(prop);
+      continue;
+    }
+    if (
+      !primitives.has(schemaRoot[prop]?.type) &&
+      !(
+        (schemaRoot[prop]?.type == "array" ||
+          schemaRoot[prop]?.type == "set") &&
+        primitives.has(schemaRoot[prop]?.values)
+      ) &&
+      schemaRoot[prop]?.type != "ref"
+    ) {
+      nestedStructures.push(prop);
+      continue;
+    }
+    value[prop] = state[prop];
+  }
+
+  kv.push({
+    key: [...traversalPath, ...(primaryKey ? [primaryKey] : [])],
+    value,
+  });
+
+  for (const prop of nestedStructures) {
+    kv.push(
+      ...flattenStateToSchemaPathKV(schemaRoot[prop], state[prop], [
+        ...traversalPath,
+        ...(primaryKey ? [primaryKey] : []),
+        prop,
+      ])
+    );
+  }
+  for (const prop of arrays) {
+    (state?.[prop] ?? []).forEach((element) => {
+      const id = getStateId(schemaRoot[prop].values, element);
+      kv.push(
+        ...flattenStateToSchemaPathKV(
+          schemaRoot[prop].values,
+          { ...element, ["(id)"]: id },
+          [
+            ...traversalPath,
+            ...(primaryKey ? [primaryKey] : []),
+            prop
+          ],
+        )
+      );
+    });
+  }
+  for (const prop of sets) {
+    (state?.[prop] ?? []).forEach((element) => {
+      kv.push(
+        ...flattenStateToSchemaPathKV(
+          schemaRoot[prop].values,
+          element,
+          [
+          ...traversalPath,
+          ...(primaryKey ? [primaryKey] : []),
+          prop,
+        ])
+      );
+    });
+  }
+  return kv;
+};
+
+const getNextApplicationState = (currentApplicationState: {[key: string]: object}, nextApplicationState: {[key: string]: object}, rootSchemaMap: TypeStruct, lastEditKey: React.MutableRefObject<null|string>, isStale: boolean): SchemaRoot | null => {
+  try {
+    if (!currentApplicationState && !nextApplicationState) {
+      return null;
+    }
+    if (!currentApplicationState) {
+      return nextApplicationState as SchemaRoot;
+    }
+    if (!nextApplicationState) {
+      return currentApplicationState as SchemaRoot;
+    }
+    const key = lastEditKey.current;
+    if (key) {
+      const object = getObjectInStateMap(currentApplicationState, key);
+      const nextObject = getObjectInStateMap(nextApplicationState, key);
+      if (object && nextObject && JSON.stringify(object) != JSON.stringify(nextObject)) {
+        if (isStale) {
+          return currentApplicationState as SchemaRoot;
+        }
+        return updateObjectInStateMap(nextApplicationState, key, object) as SchemaRoot;
+      }
+    }
+    const currentKV = generateKVState(rootSchemaMap, currentApplicationState);
+    const nextKV = generateKVState(rootSchemaMap, nextApplicationState);
+    const diff = getDiff(currentKV, nextKV);
+    if (Object.keys(diff.add).length == 0 && Object.keys(diff.remove).length == 0) {
+      return currentApplicationState as SchemaRoot;
+    }
+    return nextApplicationState as SchemaRoot;
+  } catch(e) {
+    return nextApplicationState as SchemaRoot;
+  }
+}
+
+
+export type QueryTypes = {
+  ['$(A).aObjects.aKey<?>']: `$(A).aObjects.aKey<${FileRef}>`;
+  ['$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>']: `$(A).aObjects.aKey<${FileRef}>.nestedValue.nestedSet.nestedSetKey<${QueryTypes['$(A).aObjects.aKey<?>']}>`;
+  ['$(B).bObjects.mainKey<?>']: `$(B).bObjects.mainKey<${string}>`;
+};
+
+export function makeQueryRef(query: '$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>', arg0: FileRef, arg1: QueryTypes['$(A).aObjects.aKey<?>']): QueryTypes['$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>'];
+export function makeQueryRef(query: '$(B).bObjects.mainKey<?>', arg0: string): QueryTypes['$(B).bObjects.mainKey<?>'];
+export function makeQueryRef(query: '$(A).aObjects.aKey<?>', arg0: FileRef): QueryTypes['$(A).aObjects.aKey<?>'];
+export function makeQueryRef(query: '$(A).aObjects.aKey<?>'|'$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>'|'$(B).bObjects.mainKey<?>', arg0: FileRef|string, arg1?: QueryTypes['$(A).aObjects.aKey<?>']): QueryTypes['$(A).aObjects.aKey<?>']|QueryTypes['$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>']|QueryTypes['$(B).bObjects.mainKey<?>']|null {
+  if ((arg0 != null && arg0 != undefined) && query == '$(A).aObjects.aKey<?>') {
+    return `$(A).aObjects.aKey<${arg0 as FileRef}>`;
+  }
+  if ((arg0 != null && arg0 != undefined) && (arg1 != null && arg1 != undefined) && query == '$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>') {
+    return `$(A).aObjects.aKey<${arg0 as FileRef}>.nestedValue.nestedSet.nestedSetKey<${arg1 as QueryTypes['$(A).aObjects.aKey<?>']}>`;
+  }
+  if ((arg0 != null && arg0 != undefined) && query == '$(B).bObjects.mainKey<?>') {
+    return `$(B).bObjects.mainKey<${arg0 as string}>`;
   }
   return null;
-}
-export function useReferencedObject(root: SchemaRoot, query: QueryTypes['$(A).aObjects.aKey<?>']): RefReturnTypes['$(A).aObjects.aKey<?>'];
-export function useReferencedObject(root: SchemaRoot, query: QueryTypes['$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>']): RefReturnTypes['$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>'];
-export function useReferencedObject(root: SchemaRoot, query: QueryTypes['$(B).bObjects.mainKey<?>']): RefReturnTypes['$(B).bObjects.mainKey<?>'];
-export function useReferencedObject(root: SchemaRoot, query: QueryTypes['$(A).aObjects.aKey<?>']|QueryTypes['$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>']|QueryTypes['$(B).bObjects.mainKey<?>']): RefReturnTypes['$(A).aObjects.aKey<?>']|RefReturnTypes['$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>']|RefReturnTypes['$(B).bObjects.mainKey<?>']|null {
+};
+
+export function useQueryRef(query: '$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>', arg0: FileRef, arg1: QueryTypes['$(A).aObjects.aKey<?>']): QueryTypes['$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>'];
+export function useQueryRef(query: '$(B).bObjects.mainKey<?>', arg0: string): QueryTypes['$(B).bObjects.mainKey<?>'];
+export function useQueryRef(query: '$(A).aObjects.aKey<?>', arg0: FileRef): QueryTypes['$(A).aObjects.aKey<?>'];
+export function useQueryRef(query: '$(A).aObjects.aKey<?>'|'$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>'|'$(B).bObjects.mainKey<?>', arg0: FileRef|string, arg1?: QueryTypes['$(A).aObjects.aKey<?>']): QueryTypes['$(A).aObjects.aKey<?>']|QueryTypes['$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>']|QueryTypes['$(B).bObjects.mainKey<?>']|null {
   return useMemo(() => {
-    if (replaceRefVarsWithWildcards(query) == '$(A).aObjects.aKey<?>') {
-      return getObjectInStateMap(root, query) as RefReturnTypes['$(A).aObjects.aKey<?>'];
+    if (query == '$(A).aObjects.aKey<?>') {
+      return makeQueryRef(query, arg0 as FileRef);
     }
-    if (replaceRefVarsWithWildcards(query) == '$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>') {
-      return getObjectInStateMap(root, query) as RefReturnTypes['$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>'];
+    if (query == '$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>') {
+      return makeQueryRef(query, arg0 as FileRef, arg1 as QueryTypes['$(A).aObjects.aKey<?>']);
     }
-    if (replaceRefVarsWithWildcards(query) == '$(B).bObjects.mainKey<?>') {
-      return getObjectInStateMap(root, query) as RefReturnTypes['$(B).bObjects.mainKey<?>'];
+    if (query == '$(B).bObjects.mainKey<?>') {
+      return makeQueryRef(query, arg0 as string);
     }
     return null;
-  }, [root, query]);
-}
+  }, [query, arg0, arg1]);
+};
+
+export function extractQueryArgs(query?: QueryTypes['$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>']): [FileRef, QueryTypes['$(A).aObjects.aKey<?>']];
+export function extractQueryArgs(query?: QueryTypes['$(B).bObjects.mainKey<?>']): [string];
+export function extractQueryArgs(query?: QueryTypes['$(A).aObjects.aKey<?>']): [FileRef];
+export function extractQueryArgs(query?: string): Array<string> {
+  if (!query) {
+    return [];
+  }
+  return (
+    decodeSchemaPathWithArrays(query)
+      ?.filter((v) => typeof v != "string")
+      ?.map((v) => (v as { key: string; value: string }).value as string) ?? []
+  );
+};
+
+export function useExtractQueryArgs(query?: QueryTypes['$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>']): [FileRef, QueryTypes['$(A).aObjects.aKey<?>']];
+export function useExtractQueryArgs(query?: QueryTypes['$(B).bObjects.mainKey<?>']): [string];
+export function useExtractQueryArgs(query?: QueryTypes['$(A).aObjects.aKey<?>']): [FileRef];
+export function useExtractQueryArgs(query?: string): Array<string> {
+  return useMemo(() => {
+    if (!query) {
+      return [];
+    }
+    return (
+      decodeSchemaPathWithArrays(query)
+        ?.filter((v) => typeof v != "string")
+        ?.map((v) => (v as { key: string; value: string }).value as string) ?? []
+    );
+  }, [query]);
+};
+
 export function getPluginStore(plugin: 'A'): SchemaRoot['A'];
 export function getPluginStore(plugin: 'B'): SchemaRoot['B'];
 export function getPluginStore(plugin: 'A'|'B'): SchemaRoot['A']|SchemaRoot['B'] {
@@ -692,38 +1366,88 @@ export function usePluginStore(plugin: 'A'|'B'): SchemaRoot['A']|SchemaRoot['B']
     return root[plugin];
   }, [root, plugin]);
 }
-export function useFloroState(query: PointerTypes['$(A).aObjects'], defaultData?: SchemaTypes['$(A).aObjects'], mutateStoreWithDefault?: boolean): [SchemaTypes['$(A).aObjects']|null, (t: SchemaTypes['$(A).aObjects']) => void, () => void, boolean];
-export function useFloroState(query: PointerTypes['$(A).aObjects.aKey<?>'], defaultData?: SchemaTypes['$(A).aObjects.aKey<?>'], mutateStoreWithDefault?: boolean): [SchemaTypes['$(A).aObjects.aKey<?>']|null, (t: SchemaTypes['$(A).aObjects.aKey<?>']) => void, () => void, boolean];
-export function useFloroState(query: PointerTypes['$(A).aObjects.aKey<?>.nestedValue'], defaultData?: SchemaTypes['$(A).aObjects.aKey<?>.nestedValue'], mutateStoreWithDefault?: boolean): [SchemaTypes['$(A).aObjects.aKey<?>.nestedValue']|null, (t: SchemaTypes['$(A).aObjects.aKey<?>.nestedValue']) => void, () => void, boolean];
-export function useFloroState(query: PointerTypes['$(A).aObjects.aKey<?>.nestedValue.list'], defaultData?: SchemaTypes['$(A).aObjects.aKey<?>.nestedValue.list'], mutateStoreWithDefault?: boolean): [SchemaTypes['$(A).aObjects.aKey<?>.nestedValue.list']|null, (t: SchemaTypes['$(A).aObjects.aKey<?>.nestedValue.list']) => void, () => void, boolean];
-export function useFloroState(query: PointerTypes['$(A).aObjects.aKey<?>.nestedValue.list.[?]'], defaultData?: SchemaTypes['$(A).aObjects.aKey<?>.nestedValue.list.[?]'], mutateStoreWithDefault?: boolean): [SchemaTypes['$(A).aObjects.aKey<?>.nestedValue.list.[?]']|null, (t: SchemaTypes['$(A).aObjects.aKey<?>.nestedValue.list.[?]']) => void, () => void, boolean];
-export function useFloroState(query: PointerTypes['$(A).aObjects.aKey<?>.nestedValue.list.[?].subList'], defaultData?: SchemaTypes['$(A).aObjects.aKey<?>.nestedValue.list.[?].subList'], mutateStoreWithDefault?: boolean): [SchemaTypes['$(A).aObjects.aKey<?>.nestedValue.list.[?].subList']|null, (t: SchemaTypes['$(A).aObjects.aKey<?>.nestedValue.list.[?].subList']) => void, () => void, boolean];
-export function useFloroState(query: PointerTypes['$(A).aObjects.aKey<?>.nestedValue.list.[?].subList.[?]'], defaultData?: SchemaTypes['$(A).aObjects.aKey<?>.nestedValue.list.[?].subList.[?]'], mutateStoreWithDefault?: boolean): [SchemaTypes['$(A).aObjects.aKey<?>.nestedValue.list.[?].subList.[?]']|null, (t: SchemaTypes['$(A).aObjects.aKey<?>.nestedValue.list.[?].subList.[?]']) => void, () => void, boolean];
-export function useFloroState(query: PointerTypes['$(A).aObjects.aKey<?>.nestedValue.list.[?].subList.[?].someNestedThing'], defaultData?: SchemaTypes['$(A).aObjects.aKey<?>.nestedValue.list.[?].subList.[?].someNestedThing'], mutateStoreWithDefault?: boolean): [SchemaTypes['$(A).aObjects.aKey<?>.nestedValue.list.[?].subList.[?].someNestedThing']|null, (t: SchemaTypes['$(A).aObjects.aKey<?>.nestedValue.list.[?].subList.[?].someNestedThing']) => void, () => void, boolean];
-export function useFloroState(query: PointerTypes['$(A).aObjects.aKey<?>.nestedValue.nestedSet'], defaultData?: SchemaTypes['$(A).aObjects.aKey<?>.nestedValue.nestedSet'], mutateStoreWithDefault?: boolean): [SchemaTypes['$(A).aObjects.aKey<?>.nestedValue.nestedSet']|null, (t: SchemaTypes['$(A).aObjects.aKey<?>.nestedValue.nestedSet']) => void, () => void, boolean];
-export function useFloroState(query: PointerTypes['$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>'], defaultData?: SchemaTypes['$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>'], mutateStoreWithDefault?: boolean): [SchemaTypes['$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>']|null, (t: SchemaTypes['$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>']) => void, () => void, boolean];
-export function useFloroState(query: PointerTypes['$(A).aObjects.aKey<?>.something'], defaultData?: SchemaTypes['$(A).aObjects.aKey<?>.something'], mutateStoreWithDefault?: boolean): [SchemaTypes['$(A).aObjects.aKey<?>.something']|null, (t: SchemaTypes['$(A).aObjects.aKey<?>.something']) => void, () => void, boolean];
-export function useFloroState(query: PointerTypes['$(B).bObjects'], defaultData?: SchemaTypes['$(B).bObjects'], mutateStoreWithDefault?: boolean): [SchemaTypes['$(B).bObjects']|null, (t: SchemaTypes['$(B).bObjects']) => void, () => void, boolean];
-export function useFloroState(query: PointerTypes['$(B).bObjects.mainKey<?>'], defaultData?: SchemaTypes['$(B).bObjects.mainKey<?>'], mutateStoreWithDefault?: boolean): [SchemaTypes['$(B).bObjects.mainKey<?>']|null, (t: SchemaTypes['$(B).bObjects.mainKey<?>']) => void, () => void, boolean];
 
-export function useFloroState<T>(query: string, defaultData?: T, mutateStoreWithDefault = true): [T|null, (t: T) => void, () => void, boolean] {
+export function getReferencedObject(root: SchemaRoot, query?: PointerTypes['$(A).aObjects.aKey<?>.nestedValue.list.[?].subList.[?].someNestedThing']): SchemaTypes['$(A).aObjects.aKey<?>.nestedValue.list.[?].subList.[?].someNestedThing'];
+export function getReferencedObject(root: SchemaRoot, query?: PointerTypes['$(A).aObjects.aKey<?>.nestedValue.list.[?].subList.[?]']): SchemaTypes['$(A).aObjects.aKey<?>.nestedValue.list.[?].subList.[?]'];
+export function getReferencedObject(root: SchemaRoot, query?: PointerTypes['$(A).aObjects.aKey<?>.nestedValue.list.[?].subList']): SchemaTypes['$(A).aObjects.aKey<?>.nestedValue.list.[?].subList'];
+export function getReferencedObject(root: SchemaRoot, query?: PointerTypes['$(A).aObjects.aKey<?>.nestedValue.list.[?]']): SchemaTypes['$(A).aObjects.aKey<?>.nestedValue.list.[?]'];
+export function getReferencedObject(root: SchemaRoot, query?: PointerTypes['$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>']): SchemaTypes['$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>'];
+export function getReferencedObject(root: SchemaRoot, query?: PointerTypes['$(A).aObjects.aKey<?>.nestedValue.list']): SchemaTypes['$(A).aObjects.aKey<?>.nestedValue.list'];
+export function getReferencedObject(root: SchemaRoot, query?: PointerTypes['$(A).aObjects.aKey<?>.nestedValue.nestedSet']): SchemaTypes['$(A).aObjects.aKey<?>.nestedValue.nestedSet'];
+export function getReferencedObject(root: SchemaRoot, query?: PointerTypes['$(A).aObjects.aKey<?>.nestedValue']): SchemaTypes['$(A).aObjects.aKey<?>.nestedValue'];
+export function getReferencedObject(root: SchemaRoot, query?: PointerTypes['$(A).aObjects.aKey<?>.something']): SchemaTypes['$(A).aObjects.aKey<?>.something'];
+export function getReferencedObject(root: SchemaRoot, query?: PointerTypes['$(A).aObjects.aKey<?>']): SchemaTypes['$(A).aObjects.aKey<?>'];
+export function getReferencedObject(root: SchemaRoot, query?: PointerTypes['$(B).bObjects.mainKey<?>']): SchemaTypes['$(B).bObjects.mainKey<?>'];
+export function getReferencedObject(root: SchemaRoot, query?: PointerTypes['$(A).aObjects']): SchemaTypes['$(A).aObjects'];
+export function getReferencedObject(root: SchemaRoot, query?: PointerTypes['$(B).bObjects']): SchemaTypes['$(B).bObjects'];
+
+export function getReferencedObject<T>(root: SchemaRoot, query?: string): T|null {
+  if (!query) {
+    return null;
+  }
+  const existingObj = getObjectInStateMap(
+    root,
+    query
+  );
+  if (existingObj) {
+    return existingObj as T;
+  }
+  return null;
+};
+
+export function useReferencedObject(query?: PointerTypes['$(A).aObjects.aKey<?>.nestedValue.list.[?].subList.[?].someNestedThing']): SchemaTypes['$(A).aObjects.aKey<?>.nestedValue.list.[?].subList.[?].someNestedThing'];
+export function useReferencedObject(query?: PointerTypes['$(A).aObjects.aKey<?>.nestedValue.list.[?].subList.[?]']): SchemaTypes['$(A).aObjects.aKey<?>.nestedValue.list.[?].subList.[?]'];
+export function useReferencedObject(query?: PointerTypes['$(A).aObjects.aKey<?>.nestedValue.list.[?].subList']): SchemaTypes['$(A).aObjects.aKey<?>.nestedValue.list.[?].subList'];
+export function useReferencedObject(query?: PointerTypes['$(A).aObjects.aKey<?>.nestedValue.list.[?]']): SchemaTypes['$(A).aObjects.aKey<?>.nestedValue.list.[?]'];
+export function useReferencedObject(query?: PointerTypes['$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>']): SchemaTypes['$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>'];
+export function useReferencedObject(query?: PointerTypes['$(A).aObjects.aKey<?>.nestedValue.list']): SchemaTypes['$(A).aObjects.aKey<?>.nestedValue.list'];
+export function useReferencedObject(query?: PointerTypes['$(A).aObjects.aKey<?>.nestedValue.nestedSet']): SchemaTypes['$(A).aObjects.aKey<?>.nestedValue.nestedSet'];
+export function useReferencedObject(query?: PointerTypes['$(A).aObjects.aKey<?>.nestedValue']): SchemaTypes['$(A).aObjects.aKey<?>.nestedValue'];
+export function useReferencedObject(query?: PointerTypes['$(A).aObjects.aKey<?>.something']): SchemaTypes['$(A).aObjects.aKey<?>.something'];
+export function useReferencedObject(query?: PointerTypes['$(A).aObjects.aKey<?>']): SchemaTypes['$(A).aObjects.aKey<?>'];
+export function useReferencedObject(query?: PointerTypes['$(B).bObjects.mainKey<?>']): SchemaTypes['$(B).bObjects.mainKey<?>'];
+export function useReferencedObject(query?: PointerTypes['$(A).aObjects']): SchemaTypes['$(A).aObjects'];
+export function useReferencedObject(query?: PointerTypes['$(B).bObjects']): SchemaTypes['$(B).bObjects'];
+
+export function useReferencedObject<T>(query?: string): T|null {
   const ctx = useFloroContext();
-  const pluginName = useMemo(() => getPluginNameFromQuery(query), [query]);
-  const objString = useMemo(() => {
-    if (!ctx.applicationState) {
-        return null;
+  return useMemo(() => {
+    if (!query) {
+      return null;
     }
     const existingObj = getObjectInStateMap(
       ctx.applicationState as SchemaRoot,
       query
     );
-    if (!existingObj) {
-      return null;
+    if (existingObj) {
+      return existingObj as T;
     }
-    return JSON.stringify(existingObj);
-  }, [ctx.applicationState, query])
+    return null;
+  }, [query, ctx.applicationState]);
+};
+
+export function useFloroState(query: PointerTypes['$(A).aObjects.aKey<?>.nestedValue.list.[?].subList.[?].someNestedThing'], defaultData?: SchemaTypes['$(A).aObjects.aKey<?>.nestedValue.list.[?].subList.[?].someNestedThing']): [SchemaTypes['$(A).aObjects.aKey<?>.nestedValue.list.[?].subList.[?].someNestedThing']|null, (t: SchemaTypes['$(A).aObjects.aKey<?>.nestedValue.list.[?].subList.[?].someNestedThing'], doSave?: boolean) => void, () => void];
+export function useFloroState(query: PointerTypes['$(A).aObjects.aKey<?>.nestedValue.list.[?].subList.[?]'], defaultData?: SchemaTypes['$(A).aObjects.aKey<?>.nestedValue.list.[?].subList.[?]']): [SchemaTypes['$(A).aObjects.aKey<?>.nestedValue.list.[?].subList.[?]']|null, (t: SchemaTypes['$(A).aObjects.aKey<?>.nestedValue.list.[?].subList.[?]'], doSave?: boolean) => void, () => void];
+export function useFloroState(query: PointerTypes['$(A).aObjects.aKey<?>.nestedValue.list.[?].subList'], defaultData?: SchemaTypes['$(A).aObjects.aKey<?>.nestedValue.list.[?].subList']): [SchemaTypes['$(A).aObjects.aKey<?>.nestedValue.list.[?].subList']|null, (t: SchemaTypes['$(A).aObjects.aKey<?>.nestedValue.list.[?].subList'], doSave?: boolean) => void, () => void];
+export function useFloroState(query: PointerTypes['$(A).aObjects.aKey<?>.nestedValue.list.[?]'], defaultData?: SchemaTypes['$(A).aObjects.aKey<?>.nestedValue.list.[?]']): [SchemaTypes['$(A).aObjects.aKey<?>.nestedValue.list.[?]']|null, (t: SchemaTypes['$(A).aObjects.aKey<?>.nestedValue.list.[?]'], doSave?: boolean) => void, () => void];
+export function useFloroState(query: PointerTypes['$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>'], defaultData?: SchemaTypes['$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>']): [SchemaTypes['$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>']|null, (t: SchemaTypes['$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>'], doSave?: boolean) => void, () => void];
+export function useFloroState(query: PointerTypes['$(A).aObjects.aKey<?>.nestedValue.list'], defaultData?: SchemaTypes['$(A).aObjects.aKey<?>.nestedValue.list']): [SchemaTypes['$(A).aObjects.aKey<?>.nestedValue.list']|null, (t: SchemaTypes['$(A).aObjects.aKey<?>.nestedValue.list'], doSave?: boolean) => void, () => void];
+export function useFloroState(query: PointerTypes['$(A).aObjects.aKey<?>.nestedValue.nestedSet'], defaultData?: SchemaTypes['$(A).aObjects.aKey<?>.nestedValue.nestedSet']): [SchemaTypes['$(A).aObjects.aKey<?>.nestedValue.nestedSet']|null, (t: SchemaTypes['$(A).aObjects.aKey<?>.nestedValue.nestedSet'], doSave?: boolean) => void, () => void];
+export function useFloroState(query: PointerTypes['$(A).aObjects.aKey<?>.nestedValue'], defaultData?: SchemaTypes['$(A).aObjects.aKey<?>.nestedValue']): [SchemaTypes['$(A).aObjects.aKey<?>.nestedValue']|null, (t: SchemaTypes['$(A).aObjects.aKey<?>.nestedValue'], doSave?: boolean) => void, () => void];
+export function useFloroState(query: PointerTypes['$(A).aObjects.aKey<?>.something'], defaultData?: SchemaTypes['$(A).aObjects.aKey<?>.something']): [SchemaTypes['$(A).aObjects.aKey<?>.something']|null, (t: SchemaTypes['$(A).aObjects.aKey<?>.something'], doSave?: boolean) => void, () => void];
+export function useFloroState(query: PointerTypes['$(A).aObjects.aKey<?>'], defaultData?: SchemaTypes['$(A).aObjects.aKey<?>']): [SchemaTypes['$(A).aObjects.aKey<?>']|null, (t: SchemaTypes['$(A).aObjects.aKey<?>'], doSave?: boolean) => void, () => void];
+export function useFloroState(query: PointerTypes['$(B).bObjects.mainKey<?>'], defaultData?: SchemaTypes['$(B).bObjects.mainKey<?>']): [SchemaTypes['$(B).bObjects.mainKey<?>']|null, (t: SchemaTypes['$(B).bObjects.mainKey<?>'], doSave?: boolean) => void, () => void];
+export function useFloroState(query: PointerTypes['$(A).aObjects'], defaultData?: SchemaTypes['$(A).aObjects']): [SchemaTypes['$(A).aObjects']|null, (t: SchemaTypes['$(A).aObjects'], doSave?: boolean) => void, () => void];
+export function useFloroState(query: PointerTypes['$(B).bObjects'], defaultData?: SchemaTypes['$(B).bObjects']): [SchemaTypes['$(B).bObjects']|null, (t: SchemaTypes['$(B).bObjects'], doSave?: boolean) => void, () => void];
+
+export function useFloroState<T>(query: string, defaultData?: T): [T|null, (t: T, doSave?: boolean) => void, () => void] {
+  const ctx = useFloroContext();
+  const pluginName = useMemo(() => getPluginNameFromQuery(query), [query]);
 
   const obj = useMemo((): T|null => {
+    if (!ctx.hasLoaded) {
+      return defaultData ?? null;
+    }
     const existingObj = getObjectInStateMap(
       ctx.applicationState as SchemaRoot,
       query
@@ -732,35 +1456,671 @@ export function useFloroState<T>(query: string, defaultData?: T, mutateStoreWith
       return existingObj as T;
     }
     if (ctx.applicationState && defaultData) {
-      if (mutateStoreWithDefault) {
-          updateObjectInStateMap(ctx.applicationState, query, defaultData);
-      }
       return defaultData;
     }
     return null;
-  }, [objString, query, defaultData, mutateStoreWithDefault]);
+  }, [ctx.applicationState, query, defaultData, ctx.hasLoaded]);
 
   const [getter, setter] = useState<T|null>(obj ?? defaultData ?? null);
 
-  const [id, setId] = useState<string | null>(null);
-
   useEffect(() => {
     setter(obj);
-  }, [obj]);
-
-  const isLoading = useMemo(
-    () => !!id && ctx.loadingIds.has(id),
-    [id, ctx.loadingIds]
-  );
+  }, [obj])
 
   const save = useCallback(() => {
-    if (ctx.applicationState && pluginName && getter && ctx.commandMode == "edit" && !isLoading) {
-      updateObjectInStateMap(ctx.applicationState, query, getter);
-      const id = ctx.saveState(pluginName, ctx.applicationState);
-      if (id) {
-        setId(id);
+    if (ctx.currentPluginAppState.current && pluginName && getter && ctx.commandMode == "edit") {
+      ctx.lastEditKey.current = query;
+      const next = updateObjectInStateMap({...ctx.currentPluginAppState.current}, query, getter) as SchemaRoot
+      ctx.setPluginState({
+        ...ctx.pluginState,
+        applicationState: next
+      });
+      ctx.currentPluginAppState.current = next;
+      ctx.saveState(pluginName, ctx.applicationState);
+    }
+  }, [query, pluginName, obj, ctx.pluginState, ctx.commandMode, getter]);
+
+  const set = useCallback((obj: T, doSave = true) => {
+    if (ctx.currentPluginAppState.current && pluginName && obj && ctx.commandMode == "edit") {
+      setter(obj);
+      ctx.lastEditKey.current = query;
+      if (doSave) {
+        const next = updateObjectInStateMap({...ctx.currentPluginAppState.current}, query, obj) as SchemaRoot
+        ctx.setPluginState({
+          ...ctx.pluginState,
+          applicationState: next
+        });
+        ctx.currentPluginAppState.current = next;
+        ctx.saveState(pluginName, next);
       }
     }
-  }, [query, pluginName, ctx.applicationState, ctx.commandMode, getter]);
-  return [getter, setter, save, isLoading];
+  }, [query, ctx.saveState, ctx.setPluginState, obj, pluginName, ctx.pluginState, ctx.commandMode]);
+  return [getter, set, save];
+};
+
+export function useIsFloroInvalid(query: PointerTypes['$(A).aObjects.aKey<?>.nestedValue.list.[?].subList.[?].someNestedThing'], fuzzy?: boolean): boolean;
+export function useIsFloroInvalid(query: PointerTypes['$(A).aObjects.aKey<?>.nestedValue.list.[?].subList.[?]'], fuzzy?: boolean): boolean;
+export function useIsFloroInvalid(query: PointerTypes['$(A).aObjects.aKey<?>.nestedValue.list.[?].subList'], fuzzy?: boolean): boolean;
+export function useIsFloroInvalid(query: PointerTypes['$(A).aObjects.aKey<?>.nestedValue.list.[?]'], fuzzy?: boolean): boolean;
+export function useIsFloroInvalid(query: PointerTypes['$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>'], fuzzy?: boolean): boolean;
+export function useIsFloroInvalid(query: PointerTypes['$(A).aObjects.aKey<?>.nestedValue.list'], fuzzy?: boolean): boolean;
+export function useIsFloroInvalid(query: PointerTypes['$(A).aObjects.aKey<?>.nestedValue.nestedSet'], fuzzy?: boolean): boolean;
+export function useIsFloroInvalid(query: PointerTypes['$(A).aObjects.aKey<?>.nestedValue'], fuzzy?: boolean): boolean;
+export function useIsFloroInvalid(query: PointerTypes['$(A).aObjects.aKey<?>.something'], fuzzy?: boolean): boolean;
+export function useIsFloroInvalid(query: PointerTypes['$(A).aObjects.aKey<?>'], fuzzy?: boolean): boolean;
+export function useIsFloroInvalid(query: PointerTypes['$(B).bObjects.mainKey<?>'], fuzzy?: boolean): boolean;
+export function useIsFloroInvalid(query: PointerTypes['$(A).aObjects'], fuzzy?: boolean): boolean;
+export function useIsFloroInvalid(query: PointerTypes['$(B).bObjects'], fuzzy?: boolean): boolean;
+
+export function useIsFloroInvalid(query: PartialDiffableQuery|DiffableQuery, fuzzy = true): boolean {
+  const ctx = useFloroContext();
+  const pluginName = useMemo(() => getPluginNameFromQuery(query), [query]);
+  const invalidQueriesSet = useMemo(() => {
+    if (!pluginName) {
+      return new Set() as Set<PartialDiffableQuery | DiffableQuery>;
+    }
+    return (
+      ctx.apiStoreInvaliditySets?.[pluginName] ??
+      (new Set() as Set<PartialDiffableQuery | DiffableQuery>)
+    );
+  }, [ctx.apiStoreInvaliditySets, pluginName]);
+  return useMemo(() => {
+    if (fuzzy) {
+      return containsDiffable(invalidQueriesSet, query, true);
+    }
+    return containsDiffable(invalidQueriesSet, query, false);
+  }, [invalidQueriesSet, query, fuzzy])
+};
+export function useWasAdded(query: PointerTypes['$(A).aObjects.aKey<?>.nestedValue.list.[?].subList.[?].someNestedThing'], fuzzy?: boolean): boolean;
+export function useWasAdded(query: PointerTypes['$(A).aObjects.aKey<?>.nestedValue.list.[?].subList.[?]'], fuzzy?: boolean): boolean;
+export function useWasAdded(query: PointerTypes['$(A).aObjects.aKey<?>.nestedValue.list.[?].subList'], fuzzy?: boolean): boolean;
+export function useWasAdded(query: PointerTypes['$(A).aObjects.aKey<?>.nestedValue.list.[?]'], fuzzy?: boolean): boolean;
+export function useWasAdded(query: PointerTypes['$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>'], fuzzy?: boolean): boolean;
+export function useWasAdded(query: PointerTypes['$(A).aObjects.aKey<?>.nestedValue.list'], fuzzy?: boolean): boolean;
+export function useWasAdded(query: PointerTypes['$(A).aObjects.aKey<?>.nestedValue.nestedSet'], fuzzy?: boolean): boolean;
+export function useWasAdded(query: PointerTypes['$(A).aObjects.aKey<?>.nestedValue'], fuzzy?: boolean): boolean;
+export function useWasAdded(query: PointerTypes['$(A).aObjects.aKey<?>.something'], fuzzy?: boolean): boolean;
+export function useWasAdded(query: PointerTypes['$(A).aObjects.aKey<?>'], fuzzy?: boolean): boolean;
+export function useWasAdded(query: PointerTypes['$(B).bObjects.mainKey<?>'], fuzzy?: boolean): boolean;
+export function useWasAdded(query: PointerTypes['$(A).aObjects'], fuzzy?: boolean): boolean;
+export function useWasAdded(query: PointerTypes['$(B).bObjects'], fuzzy?: boolean): boolean;
+
+export function useWasAdded(query: PartialDiffableQuery|DiffableQuery, fuzzy = true): boolean {
+  const ctx = useFloroContext();
+  return useMemo(() => {
+    if (ctx.commandMode != "compare" || ctx.compareFrom != "after") {
+      return false;
+    }
+    if (fuzzy) {
+      return containsDiffable(ctx.changeset, query, true);
+    }
+    return containsDiffable(ctx.changeset, query, false);
+  }, [ctx.changeset, query, fuzzy, ctx.compareFrom, ctx.commandMode])
+};
+export function useWasRemoved(query: PointerTypes['$(A).aObjects.aKey<?>.nestedValue.list.[?].subList.[?].someNestedThing'], fuzzy?: boolean): boolean;
+export function useWasRemoved(query: PointerTypes['$(A).aObjects.aKey<?>.nestedValue.list.[?].subList.[?]'], fuzzy?: boolean): boolean;
+export function useWasRemoved(query: PointerTypes['$(A).aObjects.aKey<?>.nestedValue.list.[?].subList'], fuzzy?: boolean): boolean;
+export function useWasRemoved(query: PointerTypes['$(A).aObjects.aKey<?>.nestedValue.list.[?]'], fuzzy?: boolean): boolean;
+export function useWasRemoved(query: PointerTypes['$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>'], fuzzy?: boolean): boolean;
+export function useWasRemoved(query: PointerTypes['$(A).aObjects.aKey<?>.nestedValue.list'], fuzzy?: boolean): boolean;
+export function useWasRemoved(query: PointerTypes['$(A).aObjects.aKey<?>.nestedValue.nestedSet'], fuzzy?: boolean): boolean;
+export function useWasRemoved(query: PointerTypes['$(A).aObjects.aKey<?>.nestedValue'], fuzzy?: boolean): boolean;
+export function useWasRemoved(query: PointerTypes['$(A).aObjects.aKey<?>.something'], fuzzy?: boolean): boolean;
+export function useWasRemoved(query: PointerTypes['$(A).aObjects.aKey<?>'], fuzzy?: boolean): boolean;
+export function useWasRemoved(query: PointerTypes['$(B).bObjects.mainKey<?>'], fuzzy?: boolean): boolean;
+export function useWasRemoved(query: PointerTypes['$(A).aObjects'], fuzzy?: boolean): boolean;
+export function useWasRemoved(query: PointerTypes['$(B).bObjects'], fuzzy?: boolean): boolean;
+
+export function useWasRemoved(query: PartialDiffableQuery|DiffableQuery, fuzzy = true): boolean {
+  const ctx = useFloroContext();
+  return useMemo(() => {
+    if (ctx.commandMode != "compare" || ctx.compareFrom != "before") {
+      return false;
+    }
+    if (fuzzy) {
+      return containsDiffable(ctx.changeset, query, true);
+    }
+    return containsDiffable(ctx.changeset, query, false);
+  }, [ctx.changeset, query, fuzzy, ctx.compareFrom, ctx.commandMode])
+};
+export function useHasConflict(query: PointerTypes['$(A).aObjects.aKey<?>.nestedValue.list.[?].subList.[?].someNestedThing'], fuzzy?: boolean): boolean;
+export function useHasConflict(query: PointerTypes['$(A).aObjects.aKey<?>.nestedValue.list.[?].subList.[?]'], fuzzy?: boolean): boolean;
+export function useHasConflict(query: PointerTypes['$(A).aObjects.aKey<?>.nestedValue.list.[?].subList'], fuzzy?: boolean): boolean;
+export function useHasConflict(query: PointerTypes['$(A).aObjects.aKey<?>.nestedValue.list.[?]'], fuzzy?: boolean): boolean;
+export function useHasConflict(query: PointerTypes['$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>'], fuzzy?: boolean): boolean;
+export function useHasConflict(query: PointerTypes['$(A).aObjects.aKey<?>.nestedValue.list'], fuzzy?: boolean): boolean;
+export function useHasConflict(query: PointerTypes['$(A).aObjects.aKey<?>.nestedValue.nestedSet'], fuzzy?: boolean): boolean;
+export function useHasConflict(query: PointerTypes['$(A).aObjects.aKey<?>.nestedValue'], fuzzy?: boolean): boolean;
+export function useHasConflict(query: PointerTypes['$(A).aObjects.aKey<?>.something'], fuzzy?: boolean): boolean;
+export function useHasConflict(query: PointerTypes['$(A).aObjects.aKey<?>'], fuzzy?: boolean): boolean;
+export function useHasConflict(query: PointerTypes['$(B).bObjects.mainKey<?>'], fuzzy?: boolean): boolean;
+export function useHasConflict(query: PointerTypes['$(A).aObjects'], fuzzy?: boolean): boolean;
+export function useHasConflict(query: PointerTypes['$(B).bObjects'], fuzzy?: boolean): boolean;
+
+export function useHasConflict(query: PartialDiffableQuery|DiffableQuery, fuzzy = true): boolean {
+  const ctx = useFloroContext();
+  return useMemo(() => {
+    if (ctx.commandMode != "compare") {
+      return false;
+    }
+    if (fuzzy) {
+      return containsDiffable(ctx.conflictSet, query, true);
+    }
+    return containsDiffable(ctx.conflictSet, query, false);
+  }, [ctx.conflictSet, query, fuzzy, ctx.commandMode])
+};
+export function useWasChanged(query: PointerTypes['$(A).aObjects.aKey<?>.nestedValue.list.[?].subList.[?].someNestedThing'], fuzzy?: boolean): boolean;
+export function useWasChanged(query: PointerTypes['$(A).aObjects.aKey<?>.nestedValue.list.[?].subList.[?]'], fuzzy?: boolean): boolean;
+export function useWasChanged(query: PointerTypes['$(A).aObjects.aKey<?>.nestedValue.list.[?].subList'], fuzzy?: boolean): boolean;
+export function useWasChanged(query: PointerTypes['$(A).aObjects.aKey<?>.nestedValue.list.[?]'], fuzzy?: boolean): boolean;
+export function useWasChanged(query: PointerTypes['$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>'], fuzzy?: boolean): boolean;
+export function useWasChanged(query: PointerTypes['$(A).aObjects.aKey<?>.nestedValue.list'], fuzzy?: boolean): boolean;
+export function useWasChanged(query: PointerTypes['$(A).aObjects.aKey<?>.nestedValue.nestedSet'], fuzzy?: boolean): boolean;
+export function useWasChanged(query: PointerTypes['$(A).aObjects.aKey<?>.nestedValue'], fuzzy?: boolean): boolean;
+export function useWasChanged(query: PointerTypes['$(A).aObjects.aKey<?>.something'], fuzzy?: boolean): boolean;
+export function useWasChanged(query: PointerTypes['$(A).aObjects.aKey<?>'], fuzzy?: boolean): boolean;
+export function useWasChanged(query: PointerTypes['$(B).bObjects.mainKey<?>'], fuzzy?: boolean): boolean;
+export function useWasChanged(query: PointerTypes['$(A).aObjects'], fuzzy?: boolean): boolean;
+export function useWasChanged(query: PointerTypes['$(B).bObjects'], fuzzy?: boolean): boolean;
+
+export function useWasChanged(query: PartialDiffableQuery|DiffableQuery, fuzzy = true): boolean {
+  const ctx = useFloroContext();
+  const wasAdded = useMemo(() => {
+    if (ctx.commandMode != "compare" || ctx.compareFrom != "after") {
+      return false;
+    }
+    if (fuzzy) {
+      return containsDiffable(ctx.changeset, query, true);
+    }
+    return containsDiffable(ctx.changeset, query, false);
+  }, [ctx.changeset, query, fuzzy, ctx.compareFrom, ctx.commandMode])
+
+  const wasRemoved = useMemo(() => {
+    if (ctx.commandMode != "compare" || ctx.compareFrom != "before") {
+      return false;
+    }
+    if (fuzzy) {
+      return containsDiffable(ctx.changeset, query, true);
+    }
+    return containsDiffable(ctx.changeset, query, false);
+  }, [ctx.changeset, query, fuzzy, ctx.compareFrom, ctx.commandMode])
+  return wasAdded || wasRemoved;
+};
+export function useHasIndication(query: PointerTypes['$(A).aObjects.aKey<?>.nestedValue.list.[?].subList.[?].someNestedThing'], fuzzy?: boolean): boolean;
+export function useHasIndication(query: PointerTypes['$(A).aObjects.aKey<?>.nestedValue.list.[?].subList.[?]'], fuzzy?: boolean): boolean;
+export function useHasIndication(query: PointerTypes['$(A).aObjects.aKey<?>.nestedValue.list.[?].subList'], fuzzy?: boolean): boolean;
+export function useHasIndication(query: PointerTypes['$(A).aObjects.aKey<?>.nestedValue.list.[?]'], fuzzy?: boolean): boolean;
+export function useHasIndication(query: PointerTypes['$(A).aObjects.aKey<?>.nestedValue.nestedSet.nestedSetKey<?>'], fuzzy?: boolean): boolean;
+export function useHasIndication(query: PointerTypes['$(A).aObjects.aKey<?>.nestedValue.list'], fuzzy?: boolean): boolean;
+export function useHasIndication(query: PointerTypes['$(A).aObjects.aKey<?>.nestedValue.nestedSet'], fuzzy?: boolean): boolean;
+export function useHasIndication(query: PointerTypes['$(A).aObjects.aKey<?>.nestedValue'], fuzzy?: boolean): boolean;
+export function useHasIndication(query: PointerTypes['$(A).aObjects.aKey<?>.something'], fuzzy?: boolean): boolean;
+export function useHasIndication(query: PointerTypes['$(A).aObjects.aKey<?>'], fuzzy?: boolean): boolean;
+export function useHasIndication(query: PointerTypes['$(B).bObjects.mainKey<?>'], fuzzy?: boolean): boolean;
+export function useHasIndication(query: PointerTypes['$(A).aObjects'], fuzzy?: boolean): boolean;
+export function useHasIndication(query: PointerTypes['$(B).bObjects'], fuzzy?: boolean): boolean;
+
+export function useHasIndication(query: PartialDiffableQuery|DiffableQuery, fuzzy = true): boolean {
+  const ctx = useFloroContext();
+
+  const pluginName = useMemo(() => getPluginNameFromQuery(query), [query]);
+  const invalidQueriesSet = useMemo(() => {
+    if (!pluginName) {
+      return new Set() as Set<PartialDiffableQuery | DiffableQuery>;
+    }
+    return (
+      ctx.apiStoreInvaliditySets?.[pluginName] ??
+      (new Set() as Set<PartialDiffableQuery | DiffableQuery>)
+    );
+  }, [ctx.apiStoreInvaliditySets, pluginName]);
+  const isInvalid = useMemo(() => {
+    if (fuzzy) {
+      return containsDiffable(invalidQueriesSet, query, true);
+    }
+    return containsDiffable(invalidQueriesSet, query, false);
+  }, [invalidQueriesSet, query, fuzzy])
+
+  const wasAdded = useMemo(() => {
+    if (ctx.commandMode != "compare" || ctx.compareFrom != "after") {
+      return false;
+    }
+    if (fuzzy) {
+      return containsDiffable(ctx.changeset, query, true);
+    }
+    return containsDiffable(ctx.changeset, query, false);
+  }, [ctx.changeset, query, fuzzy, ctx.compareFrom, ctx.commandMode])
+
+  const wasRemoved = useMemo(() => {
+    if (ctx.commandMode != "compare" || ctx.compareFrom != "before") {
+      return false;
+    }
+    if (fuzzy) {
+      return containsDiffable(ctx.changeset, query, true);
+    }
+    return containsDiffable(ctx.changeset, query, false);
+  }, [ctx.changeset, query, fuzzy, ctx.compareFrom, ctx.commandMode])
+
+  const hasConflict = useMemo(() => {
+    if (ctx.commandMode != "compare") {
+      return false;
+    }
+    if (fuzzy) {
+      return containsDiffable(ctx.conflictSet, query, true);
+    }
+    return containsDiffable(ctx.conflictSet, query, false);
+  }, [ctx.conflictSet, query, fuzzy, ctx.commandMode])
+  return isInvalid || wasAdded || wasRemoved || hasConflict;
+};
+
+type MimeTypes =
+  | "audio/aac"
+  | "application/x-abiword"
+  | "application/x-freearc"
+  | "video/x-msvideo"
+  | "application/vnd.amazon.ebook"
+  | "application/octet-stream"
+  | "image/bmp"
+  | "application/x-bzip"
+  | "application/x-bzip2"
+  | "application/x-csh"
+  | "text/css"
+  | "text/csv"
+  | "application/msword"
+  | "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+  | "application/vnd.ms-fontobject"
+  | "application/epub+zip"
+  | "application/gzip"
+  | "image/gif"
+  | "text/html"
+  | "image/vnd.microsoft.icon"
+  | "text/calendar"
+  | "application/java-archive"
+  | "text/javascript"
+  | "application/json"
+  | "application/ld+json"
+  | "text/javascript"
+  | "audio/mpeg"
+  | "video/mpeg"
+  | "application/vnd.apple.installer+xml"
+  | "application/vnd.oasis.opendocument.presentation"
+  | "application/vnd.oasis.opendocument.spreadsheet"
+  | "application/vnd.oasis.opendocument.text"
+  | "audio/ogg"
+  | "video/ogg"
+  | "application/ogg"
+  | "audio/opus"
+  | "font/otf"
+  | "image/png"
+  | "application/pdf"
+  | "application/php"
+  | "application/vnd.ms-powerpoint"
+  | "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+  | "application/vnd.rar"
+  | "application/rtf"
+  | "application/x-sh"
+  | "image/svg+xml"
+  | "application/x-shockwave-flash"
+  | "application/x-tar"
+  | "image/tiff"
+  | "image/tiff"
+  | "video/mp2t"
+  | "font/ttf"
+  | "text/plain"
+  | "application/vnd.visio"
+  | "audio/wav"
+  | "audio/webm"
+  | "video/webm"
+  | "image/webp"
+  | "font/woff"
+  | "font/woff2"
+  | "application/xhtml+xml"
+  | "application/vnd.ms-excel"
+  | "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+  | "application/vnd.mozilla.xul+xml"
+  | "application/zip"
+  | "video/3gpp"
+  | "video/3gpp2"
+  | "application/x-7z-compressed"
+  | ".jpg"
+  | ".midi"
+  | "XML";
+
+const mimeMap: { [Property in MimeTypes]: `.${string}` } = {
+  "audio/aac": ".aac",
+  "application/x-abiword": ".abw",
+  "application/x-freearc": ".arc",
+  "video/x-msvideo": ".avi",
+  "application/vnd.amazon.ebook": ".azw",
+  "application/octet-stream": ".bin",
+  "image/bmp": ".bmp",
+  "application/x-bzip": ".bz",
+  "application/x-bzip2": ".bz2",
+  "application/x-csh": ".csh",
+  "text/css": ".css",
+  "text/csv": ".csv",
+  "application/msword": ".doc",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
+  "application/vnd.ms-fontobject": ".eot",
+  "application/epub+zip": ".epub",
+  "application/gzip": ".gz",
+  "image/gif": ".gif",
+  "text/html": ".html",
+  "image/vnd.microsoft.icon": ".ico",
+  "text/calendar": ".ics",
+  "application/java-archive": ".jar",
+  ".jpg": ".jpeg",
+  "XML": ".xml",
+  "text/javascript": ".mjs",
+  "application/json": ".json",
+  "application/ld+json": ".jsonld",
+  ".midi": ".mid",
+  "audio/mpeg": ".mp3",
+  "video/mpeg": ".mpeg",
+  "application/vnd.apple.installer+xml": ".mpkg",
+  "application/vnd.oasis.opendocument.presentation": ".odp",
+  "application/vnd.oasis.opendocument.spreadsheet": ".ods",
+  "application/vnd.oasis.opendocument.text": ".odt",
+  "audio/ogg": ".oga",
+  "video/ogg": ".ogv",
+  "application/ogg": ".ogx",
+  "audio/opus": ".opus",
+  "font/otf": ".otf",
+  "image/png": ".png",
+  "application/pdf": ".pdf",
+  "application/php": ".php",
+  "application/vnd.ms-powerpoint": ".ppt",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation": ".pptx",
+  "application/vnd.rar": ".rar",
+  "application/rtf": ".rtf",
+  "application/x-sh": ".sh",
+  "image/svg+xml": ".svg",
+  "application/x-shockwave-flash": ".swf",
+  "application/x-tar": ".tar",
+  "image/tiff": ".tiff",
+  "video/mp2t": ".ts",
+  "font/ttf": ".ttf",
+  "text/plain": ".txt",
+  "application/vnd.visio": ".vsd",
+  "audio/wav": ".wav",
+  "audio/webm": ".weba",
+  "video/webm": ".webm",
+  "image/webp": ".webp",
+  "font/woff": ".woff",
+  "font/woff2": ".woff2",
+  "application/xhtml+xml": ".xhtml",
+  "application/vnd.ms-excel": ".xls",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": ".xlsx",
+  "application/vnd.mozilla.xul+xml": ".xul",
+  "application/zip": ".zip",
+  "video/3gpp": ".3gp",
+  "video/3gpp2": ".3g2",
+  "application/x-7z-compressed": ".7z",
+};
+
+const startUploadBlob = (
+  data: BlobPart[],
+  type: MimeTypes,
+  url: string,
+  progressCallback: (loaded: number, total: number) => void
+) => {
+  const blob = new Blob(data, { type });
+  const ext = mimeMap[type];
+  const fileName = `upload.${ext}`;
+
+  const formData = new FormData();
+  formData.append("file", blob, fileName);
+  return upload(formData, url, progressCallback);
+};
+
+const startUploadFile = (
+  file: File,
+  url: string,
+  progressCallback: (loaded: number, total: number) => void
+) => {
+  const formData = new FormData();
+  formData.append("file", file);
+  return upload(formData, url, progressCallback);
+};
+
+const upload = (
+  formData: FormData,
+  url: string,
+  progressCallback: (loaded: number, total: number) => void
+) => {
+  const xhr = new XMLHttpRequest();
+  let promise: Promise<FileRef> | null = new Promise<FileRef>(
+    (resolve, reject) => {
+      xhr.responseType = "json";
+      xhr.open("POST", url);
+      xhr.onprogress = function (e) {
+        progressCallback(e.loaded, e.total);
+      };
+      xhr.onerror = function (e) {
+        reject(e);
+      };
+      xhr.onreadystatechange = function (e) {
+        if (xhr.readyState === XMLHttpRequest.DONE) {
+          const status = xhr.status;
+          if (status === 0 || (status >= 200 && status < 400)) {
+            resolve(xhr.response["fileRef"]);
+          } else {
+            reject(e);
+          }
+        }
+      };
+      xhr.send(formData);
+    }
+  );
+
+  return {
+    promise,
+    abort: () => {
+      xhr.abort();
+      promise = null;
+    },
+  };
+};
+
+export const useUploadFile = () => {
+  const { pluginState } = useFloroContext();
+  const [status, setStatus] =
+    useState<"none" | "in_progress" | "success" | "error">("none");
+  const [progress, setProgress] = useState<number>(0);
+  const [fileRef, setFileRef] = useState<FileRef | null>(null);
+  const [uploadObject, setUploadObject] =
+    useState<null | { promise: Promise<FileRef> | null; abort: () => void }>(
+      null
+    );
+
+  const reset = useCallback(() => {
+    setStatus("none");
+    setProgress(0);
+    setFileRef(null);
+    setUploadObject(null)
+  }, []);
+
+  const isLoading = useMemo(() => status == "in_progress", [status]);
+
+  const onProgress = useCallback((loaded: number, total: number) => {
+    setProgress(loaded / total);
+  }, []);
+
+  const uploadFile = useCallback(
+    (file: File) => {
+      if (status == "in_progress") {
+        return;
+      }
+      if (!pluginState.binaryUrls.upload || !pluginState.binaryUrls.binaryToken) {
+        return;
+      }
+      setStatus("in_progress");
+      setProgress(0);
+      setUploadObject(
+        startUploadFile(file, pluginState.binaryUrls.upload + (!pluginState.binaryUrls?.binaryToken ? "" : "?token=" + pluginState.binaryUrls?.binaryToken), onProgress)
+      );
+    },
+    [status, pluginState.binaryUrls.upload, pluginState.binaryUrls?.binaryToken, onProgress]
+  );
+
+  const uploadBlob = useCallback(
+    (data: BlobPart[], type: MimeTypes) => {
+      if (status == "in_progress") {
+        return;
+      }
+      if (!pluginState.binaryUrls.upload || !pluginState.binaryUrls.binaryToken) {
+        return;
+      }
+      setUploadObject(
+        startUploadBlob(data, type, pluginState.binaryUrls.upload + (!pluginState.binaryUrls?.binaryToken ? "" : "?token=" + pluginState.binaryUrls?.binaryToken), onProgress)
+      );
+      setStatus("in_progress");
+      setProgress(0);
+    },
+    [status, pluginState.binaryUrls.upload, pluginState.binaryUrls.binaryToken, onProgress]
+  );
+
+  useEffect(() => {
+    if (!uploadObject) {
+      return;
+    }
+    let aborted = false;
+    uploadObject.promise
+      ?.then((fileRef) => {
+        if (!aborted) {
+          setStatus("success");
+          setProgress(1);
+          setFileRef(fileRef);
+        }
+      })
+      .catch((e) => {
+        if (!aborted) {
+          setStatus("error");
+          setProgress(0);
+        }
+      });
+    return () => {
+      uploadObject.abort();
+      aborted = true;
+    };
+  }, [uploadObject]);
+
+  return {
+    uploadBlob,
+    uploadFile,
+    reset,
+    status,
+    progress,
+    fileRef,
+    isLoading,
+  };
+};
+
+export const useBinaryRef = (fileRef?: FileRef|null) => {
+    const { pluginState } = useFloroContext();
+    return useMemo(() => {
+      if (!fileRef) {
+        return null;
+      }
+      if (pluginState.binaryMap[fileRef]) {
+        return (
+          pluginState.binaryMap[fileRef] +
+          (!pluginState.binaryUrls?.binaryToken ? "" : "?token=" + pluginState.binaryUrls?.binaryToken)
+        );
+      }
+      return `${pluginState.binaryUrls.download}/${fileRef}` + (!pluginState.binaryUrls?.binaryToken ? "" : "?token=" + pluginState.binaryUrls?.binaryToken);
+    }, [
+      fileRef,
+      pluginState.binaryMap?.[fileRef ?? ""],
+      pluginState.binaryUrls?.binaryToken,
+      pluginState.binaryUrls.download,
+    ]);
+}
+
+interface BinaryReturn {
+  "arraybuffer": ArrayBuffer,
+  "blob": Blob,
+  "document": Document|XMLDocument,
+  "json": object,
+  "text": string,
+};
+
+const download = (
+  url: string,
+  responseType: keyof BinaryReturn
+) => {
+  const xhr = new XMLHttpRequest();
+  let promise: Promise<FileRef> | null = new Promise<FileRef>(
+    (resolve, reject) => {
+      xhr.responseType = responseType;
+      xhr.open("GET", url);
+      xhr.onerror = function (e) {
+        reject(e);
+      };
+      xhr.onreadystatechange = function (e) {
+        if (xhr.readyState === XMLHttpRequest.DONE) {
+          const status = xhr.status;
+          if (status === 0 || (status >= 200 && status < 400)) {
+            resolve(xhr.response);
+          } else {
+            reject(e);
+          }
+        }
+      };
+      xhr.send();
+    }
+  );
+
+  return {
+    promise,
+    abort: () => {
+      xhr.abort();
+      promise = null;
+    },
+  };
+};
+
+export const useBinaryData = <K extends keyof BinaryReturn>(
+  fileRef: FileRef | null,
+  responseType: K
+) => {
+  const binRef = useBinaryRef(fileRef);
+  const [data, setData] = useState<BinaryReturn[K] | null>(null);
+  const [status, setStatus] =
+    useState<"none" | "in_progress" | "success" | "error">("none");
+  const isLoading = useMemo(() => status == "in_progress", [status]);
+
+  useEffect(() => {
+    if (binRef) {
+      setStatus("none");
+    }
+  }, [binRef]);
+
+  useEffect(() => {
+    if (status != "none") {
+      return;
+    }
+    if (!binRef) {
+      return;
+    }
+    let aborted = false;
+    const downloadObject = download(binRef, responseType);
+    downloadObject.promise
+      .then((result: unknown) => {
+        if (!aborted) {
+          setData(result as BinaryReturn[K]);
+          setStatus("success");
+        }
+      })
+      .catch(() => {
+        if (!aborted) {
+          setStatus("error");
+        }
+      });
+    return () => {
+      aborted = true;
+      downloadObject?.abort();
+    };
+  }, [status, binRef, responseType]);
+
+  return { isLoading, status, data };
 };
