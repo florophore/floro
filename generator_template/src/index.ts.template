@@ -1,0 +1,13 @@
+import {
+  SchemaRoot,
+} from "./floro-generator-schema-api";
+import path from "path";
+import fs from "fs";
+
+
+export async function generate(
+  state: SchemaRoot,
+  outDir: string,
+  args?: object
+) {
+}

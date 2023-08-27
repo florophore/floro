@@ -252,6 +252,7 @@ export const getLocalManifestReadFunction = async (cwd: string) => {
     return null;
   }
 };
+
 export const inspectLocalManifest = async (
   cwd: string,
   expand = false

@@ -1,0 +1,7 @@
+{
+    "name": "GENERATOR_NAME",
+    "entryFileFromRoot": "dist/src/index.js",
+    "outDirFromRoot": "exports",
+    "dependencies": {
+    }
+}

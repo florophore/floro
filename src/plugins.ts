@@ -2,6 +2,7 @@ import axios from "axios";
 import { DiffElement, copyKV } from "./sequenceoperations";
 import semver from "semver";
 import { DataSource } from "./datasource";
+import { GeneratorManifest } from "./generatorcreator";
 
 axios.defaults.validateStatus = function () {
   return true;
@@ -77,6 +78,41 @@ export const pluginManifestsAreCompatibleForUpdate = async (
 ): Promise<boolean | null> => {
   const oldSchemaMap = await getSchemaMapForManifest(datasource, oldManifest);
   const newSchemaMap = await getSchemaMapForManifest(datasource, newManifest);
+
+  if (!oldSchemaMap) {
+    return null;
+  }
+
+  if (!newSchemaMap) {
+    return null;
+  }
+
+  return await asyncReduce(
+    true,
+    Object.keys(newSchemaMap).map((k) => newSchemaMap[k]),
+    async (isCompatible, newManifest) => {
+      if (!isCompatible) {
+        return false;
+      }
+      if (!oldSchemaMap[newManifest.name]) {
+        return true;
+      }
+      return await pluginManifestIsSubsetOfManifest(
+        datasource,
+        oldSchemaMap,
+        newSchemaMap
+      );
+    }
+  );
+};
+
+export const pluginManifestsAreCompatibleForGeneratorUpdate = async (
+  datasource: DataSource,
+  oldGeneratorManifest: GeneratorManifest,
+  newGeneratorManifest: GeneratorManifest
+): Promise<boolean | null> => {
+  const oldSchemaMap = await getSchemaMapForGeneratorManifest(datasource, oldGeneratorManifest);
+  const newSchemaMap = await getSchemaMapForGeneratorManifest(datasource, newGeneratorManifest);
 
   if (!oldSchemaMap) {
     return null;
@@ -347,6 +383,40 @@ export const getUpstreamDependencyManifests = async (
   return deps;
 };
 
+export const getUpstreamDependencyManifestsForGeneratorManifest = async (
+  datasource: DataSource,
+  generatorManifest: GeneratorManifest,
+  disableDownloads = false,
+  memo: { [key: string]: Array<Manifest> } = {},
+): Promise<Array<Manifest> | null> => {
+  const deps: Array<Manifest> = [];
+  for (const dependentPluginName in generatorManifest.dependencies) {
+    const dependentManifest = await datasource.getPluginManifest(
+      dependentPluginName,
+      generatorManifest.dependencies[dependentPluginName],
+      disableDownloads
+    );
+    if (!dependentManifest) {
+      return null;
+    }
+    const subDeps = await getUpstreamDependencyManifests(
+      datasource,
+      dependentManifest,
+      disableDownloads,
+      memo
+    );
+    if (subDeps == null) {
+      return null;
+    }
+    for (const dep of subDeps) {
+      if (!hasPluginManifest(dep, deps)) {
+        deps.push(dep);
+      }
+    }
+  }
+  return deps;
+};
+
 const uniqueStrings = (
   strings: Array<string>
 ): Array<string> => {
@@ -538,6 +608,33 @@ export const getSchemaMapForManifest = async (
     out[depManifest.name] = depManifest;
   }
   out[manifest.name] = manifest;
+  return out;
+};
+
+export const getSchemaMapForGeneratorManifest = async (
+  datasource: DataSource,
+  generatorManifest: GeneratorManifest
+): Promise<{ [key: string]: Manifest } | null> => {
+  const deps = await getUpstreamDependencyManifestsForGeneratorManifest(datasource, generatorManifest);
+  if (!deps) {
+    return null;
+  }
+  const areValid = await verifyPluginDependencyCompatability(datasource, deps);
+  if (!areValid.isValid) {
+    return null;
+  }
+  const depsMap = coalesceDependencyVersions(deps);
+  const out: { [key: string]: Manifest } = {};
+  for (const pluginName in depsMap) {
+    const maxVersion = depsMap[pluginName][depsMap[pluginName].length - 1];
+    const depManifest = deps.find(
+      (v) => v.name == pluginName && v.version == maxVersion
+    );
+    if (!depManifest) {
+      return null;
+    }
+    out[depManifest.name] = depManifest;
+  }
   return out;
 };
 
@@ -2041,6 +2138,28 @@ export const getExpandedTypesForPlugin = (
   }, schemaWithTypes);
 };
 
+export const getExpandedTypesForSchemaMapWithDependencies = (
+  schemaMap: { [key: string]: Manifest },
+  dependencies: {[pluginName: string]: string}
+): TypeStruct => {
+  const upstreamDeps = getUpstreamDepsInSchemaMapWithoutRootPlugin(schemaMap, dependencies);
+  const schemaWithTypes = [...upstreamDeps].reduce(
+    (acc, pluginName) => {
+      return {
+        ...acc,
+        ...drawSchemaTypesFromImports(schemaMap, pluginName, acc),
+      };
+    },
+    {}
+  );
+  return Object.keys(schemaWithTypes).reduce((acc, type) => {
+    return {
+      ...acc,
+      [type]: iterateSchemaTypes(acc[type], type, schemaWithTypes),
+    };
+  }, schemaWithTypes);
+};
+
 export const getRootSchemaForPlugin = (
   schemaMap: { [key: string]: Manifest },
   pluginName: string
@@ -2178,6 +2297,21 @@ export const getUpstreamDepsInSchemaMap = (
     return [];
   }
   const deps = Object.keys(current.imports);
+  for (const dep of deps) {
+    const upstreamDeps = getUpstreamDepsInSchemaMap(schemaMap, dep);
+    deps.push(...upstreamDeps);
+  }
+  return deps;
+};
+
+export const getUpstreamDepsInSchemaMapWithoutRootPlugin = (
+  schemaMap: { [key: string]: Manifest },
+  dependencies: {[pluginName: string]: string}
+): Array<string> => {
+  if (Object.keys(dependencies ?? {}).length == 0) {
+    return [];
+  }
+  const deps = Object.keys(dependencies);
   for (const dep of deps) {
     const upstreamDeps = getUpstreamDepsInSchemaMap(schemaMap, dep);
     deps.push(...upstreamDeps);
@@ -4795,7 +4929,7 @@ export const getDiffablesListForTypestruct = (
   return out;
 }
 
-const drawQueryTypes = (argMap: { [key: string]: Array<Array<string>> }) => {
+export const drawQueryTypes = (argMap: { [key: string]: Array<Array<string>> }) => {
   let code = "export type QueryTypes = {\n";
   for (const path in argMap) {
     const wildcard = replaceRefVarsWithWildcards(path);
@@ -5299,6 +5433,117 @@ const drawTypestruct = (
   }`;
   return code;
 };
+
+export const GENERATOR_HELPER_FUNCTIONS = `
+const getCounterArrowBalanance = (str: string): number => {
+  let counter = 0;
+  for (let i = 0; i < str.length; ++i) {
+    if (str[i] == "<") counter++;
+    if (str[i] == ">") counter--;
+  }
+  return counter;
+};
+
+const extractKeyValueFromRefString = (
+  str: string
+): { key: string; value: string } => {
+  let key = "";
+  let i = 0;
+  while (str[i] != "<") {
+    key += str[i++];
+  }
+  let value = "";
+  let counter = 1;
+  i++;
+  while (i < str.length) {
+    if (str[i] == "<") counter++;
+    if (str[i] == ">") counter--;
+    if (counter >= 1) {
+      value += str[i];
+    }
+    i++;
+  }
+  return {
+    key,
+    value,
+  };
+};
+
+const splitPath = (str: string): Array<string> => {
+  let out: Array<string> = [];
+  let arrowBalance = 0;
+  let curr = "";
+  for (let i = 0; i <= str.length; ++i) {
+    if (i == str.length) {
+      out.push(curr);
+      continue;
+    }
+    if (arrowBalance == 0 && str[i] == ".") {
+      out.push(curr);
+      curr = "";
+      continue;
+    }
+    if (str[i] == "<") {
+      arrowBalance++;
+    }
+    if (str[i] == ">") {
+      arrowBalance--;
+    }
+    curr += str[i];
+  }
+  return out;
+};
+
+const decodeSchemaPathWithArrays = (
+  pathString: string
+): Array<{key: string, value: string} | string | number> => {
+  return splitPath(pathString).map((part) => {
+    if (/^[(d+)]$/.test(part)) {
+      return parseInt(((/^[(d+)]$/.exec(part) as Array<string>)[1]));
+    }
+    if (/^(.+)<(.+)>$/.test(part) && getCounterArrowBalanance(part) == 0) {
+      const { key, value } = extractKeyValueFromRefString(part);
+      return {
+        key,
+        value,
+      };
+    }
+    return part;
+  });
+};
+
+const getObjectInStateMap = (
+  stateMap: { [pluginName: string]: object },
+  path: string
+): object | null => {
+  let current: null | object = null;
+  const [pluginWrapper, ...decodedPath] = decodeSchemaPathWithArrays(path);
+  const pluginName = /^\\$\\((.+)\\)$/.exec(pluginWrapper as string)?.[1] ?? null;
+  if (pluginName == null) {
+    return null;
+  }
+  current = stateMap[pluginName];
+  for (const part of decodedPath) {
+    if (!current) {
+      return null;
+    }
+    if (typeof part == "number") {
+      current = current[part];
+    } else if (typeof part != "string") {
+      const { key, value } = part as {key: string, value: string};
+      if (Array.isArray(current)) {
+        const element = current?.find?.((v) => v?.[key] == value);
+        current = element;
+      } else {
+        return null;
+      }
+    } else {
+      current = current[part];
+    }
+  }
+  return current ?? null;
+};
+`;
 
 export const GENERATED_CODE_FUNCTIONS = `
 const getCounterArrowBalanance = (str: string): number => {
