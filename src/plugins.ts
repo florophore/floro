@@ -6119,18 +6119,36 @@ const getNextApplicationState = (currentApplicationState: {[key: string]: object
       return currentApplicationState as SchemaRoot;
     }
     const key = lastEditKey.current;
+    const nextKV = generateKVState(rootSchemaMap, nextApplicationState);
+    const currentKV = generateKVState(rootSchemaMap, currentApplicationState);
     if (key) {
       const object = getObjectInStateMap(currentApplicationState, key);
       const nextObject = getObjectInStateMap(nextApplicationState, key);
-      if (object && nextObject && JSON.stringify(object) != JSON.stringify(nextObject)) {
+      let pastKeyCount = 0;
+      let nextKeyCount = 0;
+      let pastKeys = new Set<string>();
+      for(let i = 0; i < currentKV.length; ++i) {
+        const kv = currentKV[i];
+        pastKeys.add(kv.key)
+        pastKeyCount++;
+      }
+      let hasAllKeys = true;
+      for(let i = 0; i < nextKV.length; ++i) {
+        const kv = nextKV[i];
+        if (!pastKeys.has(kv.key)) {
+          hasAllKeys = false;
+          break;
+        }
+        nextKeyCount++;
+      }
+      hasAllKeys = hasAllKeys && pastKeyCount == nextKeyCount;
+      if (hasAllChildren && object && nextObject && JSON.stringify(object) != JSON.stringify(nextObject)) {
         if (isStale) {
           return currentApplicationState as SchemaRoot;
         }
         return updateObjectInStateMap(nextApplicationState, key, object) as SchemaRoot;
       }
     }
-    const currentKV = generateKVState(rootSchemaMap, currentApplicationState);
-    const nextKV = generateKVState(rootSchemaMap, nextApplicationState);
     const diff = getDiff(currentKV, nextKV);
     if (Object.keys(diff.add).length == 0 && Object.keys(diff.remove).length == 0) {
       return currentApplicationState as SchemaRoot;
