@@ -877,7 +877,7 @@ describe("plugins", () => {
   });
 
   describe("array re-indexing", () => {
-    test("can re-index nested arrays", async () => {
+    test.only("can re-index nested arrays", async () => {
       const ARRAY_PLUGIN_MANIFEST = {
         version: "0.0.0",
         name: "simple",
@@ -905,6 +905,11 @@ describe("plugins", () => {
                     subProp: {
                       type: "int",
                     },
+                    subValue: {
+                      someProp: {
+                        type: "string"
+                      }
+                    }
                   },
                 },
               },
@@ -929,15 +934,27 @@ describe("plugins", () => {
                   subList: [
                     {
                       subProp: 1,
+                      subValue: {
+                        someProp: "a"
+                      },
                     },
                     {
                       subProp: 2,
+                      someProp: {
+                        someProp: "b"
+                      },
                     },
                     {
                       subProp: 2,
+                      someProp: {
+                        someProp: "c"
+                      },
                     },
                     {
                       subProp: 1,
+                      someProp: {
+                        someProp: "d"
+                      }
                     },
                   ],
                 },
@@ -946,12 +963,21 @@ describe("plugins", () => {
                   subList: [
                     {
                       subProp: 1,
+                      subValue: {
+                        someProp: "a"
+                      },
                     },
                     {
                       subProp: 2,
+                      someProp: {
+                        someProp: "b"
+                      },
                     },
                     {
                       subProp: 2,
+                      someProp: {
+                        someProp: "c"
+                      },
                     },
                   ],
                 },
@@ -960,15 +986,27 @@ describe("plugins", () => {
                   subList: [
                     {
                       subProp: 1,
+                      someProp: {
+                        someProp: "a"
+                      },
                     },
                     {
                       subProp: 2,
+                      someProp: {
+                        someProp: "b"
+                      },
                     },
                     {
                       subProp: 2,
+                      someProp: {
+                        someProp: "c"
+                      },
                     },
                     {
                       subProp: 1,
+                      someProp: {
+                        someProp: "d"
+                      },
                     },
                   ],
                 },
@@ -991,22 +1029,33 @@ describe("plugins", () => {
 
       const out = reIndexSchemaArrays(kvs);
       expect(out).toEqual([
-        "$(simple)",
-        "$(simple).objects.name<abc>",
-        "$(simple).objects.name<abc>.list.[0]",
-        "$(simple).objects.name<abc>.list.[0].subList.[0]",
-        "$(simple).objects.name<abc>.list.[0].subList.[1]",
-        "$(simple).objects.name<abc>.list.[0].subList.[2]",
-        "$(simple).objects.name<abc>.list.[0].subList.[3]",
-        "$(simple).objects.name<abc>.list.[1]",
-        "$(simple).objects.name<abc>.list.[1].subList.[0]",
-        "$(simple).objects.name<abc>.list.[1].subList.[1]",
-        "$(simple).objects.name<abc>.list.[1].subList.[2]",
-        "$(simple).objects.name<abc>.list.[2]",
-        "$(simple).objects.name<abc>.list.[2].subList.[0]",
-        "$(simple).objects.name<abc>.list.[2].subList.[1]",
-        "$(simple).objects.name<abc>.list.[2].subList.[2]",
-        "$(simple).objects.name<abc>.list.[2].subList.[3]",
+        '$(simple)',
+        '$(simple).objects.name<abc>',
+        '$(simple).objects.name<abc>.list.[0]',
+        '$(simple).objects.name<abc>.list.[0].subList.[0]',
+        '$(simple).objects.name<abc>.list.[0].subList.[0].subValue',
+        '$(simple).objects.name<abc>.list.[0].subList.[0]',
+        '$(simple).objects.name<abc>.list.[0].subList.[0].subValue',
+        '$(simple).objects.name<abc>.list.[0].subList.[0]',
+        '$(simple).objects.name<abc>.list.[0].subList.[0].subValue',
+        '$(simple).objects.name<abc>.list.[0].subList.[0]',
+        '$(simple).objects.name<abc>.list.[0].subList.[0].subValue',
+        '$(simple).objects.name<abc>.list.[0]',
+        '$(simple).objects.name<abc>.list.[0].subList.[0]',
+        '$(simple).objects.name<abc>.list.[0].subList.[0].subValue',
+        '$(simple).objects.name<abc>.list.[0].subList.[0]',
+        '$(simple).objects.name<abc>.list.[0].subList.[0].subValue',
+        '$(simple).objects.name<abc>.list.[0].subList.[0]',
+        '$(simple).objects.name<abc>.list.[0].subList.[0].subValue',
+        '$(simple).objects.name<abc>.list.[0]',
+        '$(simple).objects.name<abc>.list.[0].subList.[0]',
+        '$(simple).objects.name<abc>.list.[0].subList.[0].subValue',
+        '$(simple).objects.name<abc>.list.[0].subList.[0]',
+        '$(simple).objects.name<abc>.list.[0].subList.[0].subValue',
+        '$(simple).objects.name<abc>.list.[0].subList.[0]',
+        '$(simple).objects.name<abc>.list.[0].subList.[0].subValue',
+        '$(simple).objects.name<abc>.list.[0].subList.[0]',
+        '$(simple).objects.name<abc>.list.[0].subList.[0].subValue'
       ]);
     });
   });

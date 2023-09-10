@@ -2220,6 +2220,7 @@ export const getInvalidStates = async (
       appKvState.store[pluginName],
       pluginName
     );
+    debugger;
     const indexedKvs = reIndexSchemaArrays(
       appKvState?.store?.[pluginName] ?? []
     );
