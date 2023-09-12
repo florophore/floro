@@ -3,6 +3,17 @@ import pm2 from "pm2";
 
 const DAEMON_PROCESS_NAME = "floro-server-process";
 
+const getScriptPath = () => {
+  try {
+  let floroPath = require.resolve("floro");
+  return  path.join(path.dirname(floroPath), 'server.js');
+  } catch(e) {
+    return  path.join(__dirname, 'server.js');
+  }
+}
+
+const scriptPath = getScriptPath();
+
 export const startDaemon = async (): Promise<void> => {
   return new Promise(resolve => {
     pm2.connect(function (err) {
@@ -14,7 +25,7 @@ export const startDaemon = async (): Promise<void> => {
 
       pm2.start(
         {
-          script: path.join(__dirname, "server.js"),
+          script: scriptPath,
           name: DAEMON_PROCESS_NAME,
         },
         function (err, apps) {
