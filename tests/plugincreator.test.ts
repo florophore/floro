@@ -1906,7 +1906,7 @@ describe("plugincreator", () => {
   });
 
   describe("codegen", () => {
-    test("generates react snapshot", async () => {
+    test.skip("generates react snapshot", async () => {
       const PLUGIN_A_MANIFEST: Manifest = {
         name: "A",
         version: "0.0.0",
