@@ -7,7 +7,6 @@ import mime from "mime-types";
 import { isBinaryFile } from "arraybuffer-isbinary";
 import {
   existsAsync,
-  getRemoteHostSync,
   getPluginsJson,
   writeUserSession,
   writeUser,
@@ -3028,7 +3027,7 @@ app.post("/binary/upload", async (req, res) => {
             }
             const sha = hashBinary(fileData);
             const filename = `${sha}.${extension}`;
-            const binSubDir = path.join(vBinariesPath, sha.substring(0, 2));
+            const binSubDir = path.join(vBinariesPath(), sha.substring(0, 2));
             const existsBinSubDir = await existsAsync(binSubDir);
             if (!existsBinSubDir) {
               fs.promises.mkdir(binSubDir, { recursive: true });
@@ -3071,7 +3070,7 @@ app.get("/binary/:binaryRef", async (req, res) => {
   }
   res.header("Access-Control-Allow-Origin", "*");
   const binaryRef = req?.params?.["binaryRef"];
-  const binSubDir = path.join(vBinariesPath, binaryRef.substring(0, 2));
+  const binSubDir = path.join(vBinariesPath(), binaryRef.substring(0, 2));
   const existsBinSubDir = await existsAsync(binSubDir);
   if (!existsBinSubDir) {
     res.sendStatus(404);
@@ -3113,7 +3112,7 @@ app.get(
       !pathRemainer ||
       pathRemainer == "/"
     ) {
-      const filePath = path.join(vDEVPath, pluginName, version, "index.html");
+      const filePath = path.join(vDEVPath(), pluginName, version, "index.html");
       const exists = await existsAsync(filePath);
       if (!exists) {
         res.sendStatus(404);
@@ -3126,7 +3125,7 @@ app.get(
     }
 
     const filePath = path.join(
-      vDEVPath,
+      vDEVPath(),
       pluginName,
       version,
       ...pathRemainer.split("/")
@@ -3189,7 +3188,7 @@ app.get(
       pathRemainer == "/write/"
     ) {
       const filePath = path.join(
-        vPluginsPath,
+        vPluginsPath(),
         pluginName,
         pluginVersion,
         "index.html"
@@ -3206,7 +3205,7 @@ app.get(
     }
 
     const filePath = path.join(
-      vPluginsPath,
+      vPluginsPath(),
       pluginName,
       pluginVersion,
       ...pathRemainer.split("/")

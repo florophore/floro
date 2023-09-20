@@ -1,6 +1,12 @@
-import { Crypto } from "cryptojs";
+import sha256 from "crypto-js/sha256";
+import HexEncode from "crypto-js/enc-hex";
 import { StateDiff } from "./repo";
 import mdiff from "mdiff";
+
+const hash = (str: string|BinaryData): string => {
+  const hash = sha256(str);
+  return HexEncode.stringify(hash);
+}
 
 export interface DiffElement {
   key: string;
@@ -57,7 +63,7 @@ const fastHash = (str: string) => {
 };
 
 export const hashBinary = (bin: BinaryData) => {
-  return Crypto.SHA256(bin);
+  return hash(bin);
 };
 
 export const hashString = (str: string) => {
@@ -123,7 +129,7 @@ export const getDiffHash = (commitData: CommitData): string => {
     }/revertToSha:${commitData.revertToSha ?? "none"}/originalSha:${
       commitData?.originalSha ?? "none"
     }/diff:${diffString}`;
-    return Crypto.SHA256(str);
+    return hash(str);
   }
   if (!commitData.parent) {
     const str = `userId:${commitData.userId}/username:${
@@ -141,7 +147,7 @@ export const getDiffHash = (commitData: CommitData): string => {
     }/revertToSha:${commitData.revertToSha ?? "none"}/originalSha:${
       commitData?.originalSha ?? "none"
     }/diff:${diffString}`;
-    return Crypto.SHA256(str);
+    return hash(str);
   }
   if (!commitData.historicalParent) {
     const str = `userId:${commitData.userId}/username:${
@@ -157,7 +163,7 @@ export const getDiffHash = (commitData: CommitData): string => {
     }/revertFromSha:${commitData.revertFromSha ?? "none"}/revertToSha:${
       commitData.revertToSha ?? "none"
     }/originalSha:${commitData?.originalSha ?? "none"}/diff:${diffString}`;
-    return Crypto.SHA256(str);
+    return hash(str);
   }
   const str = `userId:${commitData.userId}/username:${
     commitData.username
@@ -174,7 +180,7 @@ export const getDiffHash = (commitData: CommitData): string => {
   }/revertToSha:${commitData.revertToSha ?? "none"}/originalSha:${
     commitData?.originalSha ?? "none"
   }/diff:${diffString}`;
-  return Crypto.SHA256(str);
+  return hash(str);
 };
 
 export const getLCS = (

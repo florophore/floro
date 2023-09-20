@@ -61,7 +61,7 @@ describe("plugincreator", () => {
     test("returns false when manifest is not present", async () => {
       makePluginCreationDirectory("simple", SIMPLE_PLUGIN_MANIFEST);
       const isPluginPath = await checkDirectoryIsPluginWorkingDirectory(
-        homePath
+        homePath()
       );
       expect(isPluginPath).toBe(false);
     });
@@ -73,7 +73,7 @@ describe("plugincreator", () => {
       const created = await exportPluginToDev(cwd);
       expect(created).toEqual(true);
       const indexHTMLDevPath = path.join(
-        vDEVPath,
+        vDEVPath(),
         SIMPLE_PLUGIN_MANIFEST.name,
         SIMPLE_PLUGIN_MANIFEST.version,
         "index.html"
@@ -83,7 +83,7 @@ describe("plugincreator", () => {
       const indexHTMLCWD = fs.readFileSync(indexHTMLCWDPath);
       expect(indexHTMLDev).toEqual(indexHTMLCWD);
       const indexJSDevPath = path.join(
-        vDEVPath,
+        vDEVPath(),
         SIMPLE_PLUGIN_MANIFEST.name,
         SIMPLE_PLUGIN_MANIFEST.version,
         "assets",
@@ -102,7 +102,7 @@ describe("plugincreator", () => {
       const didTar = await tarCreationPlugin(cwd);
 
       const tarOutPath = path.join(
-        vTMPPath,
+        vTMPPath(),
         "out",
         SIMPLE_PLUGIN_MANIFEST.name +
           "@" +

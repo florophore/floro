@@ -150,7 +150,7 @@ export const makeTestPlugin = (manifest: Manifest, isDev = false) => {
   const pluginName = manifest.name;
   const pluginVersion = manifest.version;
   const pluginDir = path.join(
-    isDev ? vDEVPath : vPluginsPath,
+    isDev ? vDEVPath() : vPluginsPath(),
     pluginName,
     pluginVersion
   );
@@ -174,7 +174,7 @@ export const getPluginCreationDirectoryRoot = async (name: string) => {
 };
 
 export const createBlankRepo = (repoId: string) => {
-  const repoPath = path.join(vReposPath, repoId);
+  const repoPath = path.join(vReposPath(), repoId);
   if (!fs.existsSync(repoPath)) {
     const binariesPath = path.join(repoPath, "binaries");
     const branchesPath = path.join(repoPath, "branches");

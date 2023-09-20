@@ -1,6 +1,6 @@
 import { fs, vol } from "memfs";
 import { DataSource, makeMemoizedDataSource } from "../src/datasource";
-import { buildFloroFilestructure, userHome } from "../src/filestructure";
+import { buildFloroFilestructure, setFloroEnv, userHome } from "../src/filestructure";
 import { Manifest, PluginElement } from "../src/plugins";
 import {
   getCurrentCommitSha,
@@ -43,6 +43,7 @@ describe("repoapi", () => {
   let datasource: DataSource;
   beforeEach(async () => {
     fs.mkdirSync(userHome, { recursive: true });
+    setFloroEnv("production");
     buildFloroFilestructure();
     await makeSignedInUser();
     createBlankRepo("abc");

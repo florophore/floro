@@ -344,7 +344,7 @@ export const exportPluginToDev = async (cwd: string) => {
     const floroManifest = JSON.parse(floroManifestString.toString());
     const pluginName = floroManifest.name;
     const pluginVersion = floroManifest.version;
-    const devPathDir = path.join(vDEVPath, pluginName);
+    const devPathDir = path.join(vDEVPath(), pluginName);
     const devVersionPathDir = path.join(devPathDir, pluginVersion);
     const devVersionPathExists = await existsAsync(devVersionPathDir);
     if (devVersionPathExists) {
@@ -515,11 +515,11 @@ export const tarCreationPlugin = async (
     const pluginName = floroManifest.name;
     const pluginVersion = floroManifest.version;
     const buildPathDir = path.join(
-      vTMPPath,
+      vTMPPath(),
       "build",
       `${pluginName}@${pluginVersion}`
     );
-    const outPathDir = path.join(vTMPPath, "out");
+    const outPathDir = path.join(vTMPPath(), "out");
     const buildPathExists = await existsAsync(buildPathDir);
     const outPathExists = await existsAsync(buildPathDir);
     if (!outPathExists) {
@@ -539,7 +539,7 @@ export const tarCreationPlugin = async (
     await fs.promises.copyFile(sourceIndexHTMLPath, destIndexHTMLPath);
     await copyDirectory(sourceAssetsPath, destAssetsPath);
     const tarFile = path.join(
-      vTMPPath,
+      vTMPPath(),
       "out",
       `${pluginName}@${pluginVersion}.tar.gz`
     );

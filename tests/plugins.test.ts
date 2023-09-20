@@ -877,7 +877,7 @@ describe("plugins", () => {
   });
 
   describe("array re-indexing", () => {
-    test.only("can re-index nested arrays", async () => {
+    test("can re-index nested arrays", async () => {
       const ARRAY_PLUGIN_MANIFEST = {
         version: "0.0.0",
         name: "simple",

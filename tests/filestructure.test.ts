@@ -1,6 +1,6 @@
-import { fs, vol } from 'memfs'; 
+import { fs, vol } from 'memfs';
 
-import { 
+import {
     buildFloroFilestructure,
     userHome,
     homePath,
@@ -11,7 +11,9 @@ import {
     vPluginsPath,
     vTMPPath,
     vConfigCORSPath,
-    vConfigRemotePath
+    vConfigRemotePath,
+    setFloroEnv,
+    floroEnvPath
 } from '../src/filestructure';
 
 jest.mock('fs');
@@ -32,31 +34,66 @@ describe('buildFloroFilestructure', () => {
             {},
             userHome
         );
-        expect(fs.existsSync(homePath)).toBe(false);
-        expect(fs.existsSync(vConfigPath)).toBe(false);
-        expect(fs.existsSync(vCachePath)).toBe(false);
-        expect(fs.existsSync(vUserPath)).toBe(false);
-        expect(fs.existsSync(vReposPath)).toBe(false);
-        expect(fs.existsSync(vPluginsPath)).toBe(false);
-        expect(fs.existsSync(vTMPPath)).toBe(false);
+        expect(fs.existsSync(homePath())).toBe(false);
+        expect(fs.existsSync(vConfigPath())).toBe(false);
+        expect(fs.existsSync(vCachePath())).toBe(false);
+        expect(fs.existsSync(vUserPath())).toBe(false);
+        expect(fs.existsSync(vReposPath())).toBe(false);
+        expect(fs.existsSync(vPluginsPath())).toBe(false);
+        expect(fs.existsSync(vTMPPath())).toBe(false);
 
-        expect(fs.existsSync(vConfigCORSPath)).toBe(false);
-        expect(fs.existsSync(vConfigRemotePath)).toBe(false);
-        expect(fs.existsSync(vConfigRemotePath)).toBe(false);
+        expect(fs.existsSync(vConfigCORSPath())).toBe(false);
+        expect(fs.existsSync(vConfigRemotePath())).toBe(false);
+        expect(fs.existsSync(vConfigRemotePath())).toBe(false);
 
 
         buildFloroFilestructure();
 
-        expect(fs.existsSync(homePath)).toBe(true);
-        expect(fs.existsSync(vConfigPath)).toBe(true);
-        expect(fs.existsSync(vCachePath)).toBe(true);
-        expect(fs.existsSync(vUserPath)).toBe(true);
-        expect(fs.existsSync(vReposPath)).toBe(true);
-        expect(fs.existsSync(vPluginsPath)).toBe(true);
-        expect(fs.existsSync(vTMPPath)).toBe(true);
+        expect(fs.existsSync(homePath())).toBe(true);
+        expect(fs.existsSync(vConfigPath())).toBe(true);
+        expect(fs.existsSync(vCachePath())).toBe(true);
+        expect(fs.existsSync(vUserPath())).toBe(true);
+        expect(fs.existsSync(vReposPath())).toBe(true);
+        expect(fs.existsSync(vPluginsPath())).toBe(true);
+        expect(fs.existsSync(vTMPPath())).toBe(true);
 
-        expect(fs.existsSync(vConfigCORSPath)).toBe(true);
-        expect(fs.existsSync(vConfigRemotePath)).toBe(true);
-        expect(fs.existsSync(vConfigRemotePath)).toBe(true);
+        expect(fs.existsSync(vConfigCORSPath())).toBe(true);
+        expect(fs.existsSync(vConfigRemotePath())).toBe(true);
+        expect(fs.existsSync(vConfigRemotePath())).toBe(true);
+    });
+
+    test('it creates floro file structure under staging', async () => {
+        vol.fromJSON(
+            {},
+            userHome
+        );
+        expect(fs.existsSync(homePath())).toBe(false);
+        expect(fs.existsSync(vConfigPath())).toBe(false);
+        expect(fs.existsSync(vCachePath())).toBe(false);
+        expect(fs.existsSync(vUserPath())).toBe(false);
+        expect(fs.existsSync(vReposPath())).toBe(false);
+        expect(fs.existsSync(vPluginsPath())).toBe(false);
+        expect(fs.existsSync(vTMPPath())).toBe(false);
+
+        expect(fs.existsSync(vConfigCORSPath())).toBe(false);
+        expect(fs.existsSync(vConfigRemotePath())).toBe(false);
+        expect(fs.existsSync(vConfigRemotePath())).toBe(false);
+
+
+        setFloroEnv("staging");
+        buildFloroFilestructure();
+        expect(fs.readFileSync(floroEnvPath, { encoding: 'utf8'})).toEqual("staging");
+
+        expect(fs.existsSync(homePath())).toBe(true);
+        expect(fs.existsSync(vConfigPath())).toBe(true);
+        expect(fs.existsSync(vCachePath())).toBe(true);
+        expect(fs.existsSync(vUserPath())).toBe(true);
+        expect(fs.existsSync(vReposPath())).toBe(true);
+        expect(fs.existsSync(vPluginsPath())).toBe(true);
+        expect(fs.existsSync(vTMPPath())).toBe(true);
+
+        expect(fs.existsSync(vConfigCORSPath())).toBe(true);
+        expect(fs.existsSync(vConfigRemotePath())).toBe(true);
+        expect(fs.existsSync(vConfigRemotePath())).toBe(true);
     });
 })

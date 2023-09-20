@@ -164,7 +164,7 @@ export const readRepoDescription = async (
   if (!repoId) {
     return null;
   }
-  const exists = await existsAsync(path.join(vReposPath, repoId));
+  const exists = await existsAsync(path.join(vReposPath(), repoId));
   if (!exists) {
     return;
   }
@@ -183,7 +183,7 @@ export const getRepoCloneState = async (
       totalCommits: 1,
     };
   }
-  const exists = await existsAsync(path.join(vReposPath, repoId));
+  const exists = await existsAsync(path.join(vReposPath(), repoId));
   if (!exists) {
     return {
       state: "none",
@@ -2145,7 +2145,6 @@ export const resolveMerge = async (datasource: DataSource, repoId: string) => {
     await datasource.saveCurrentRepoState(repoId, updated);
     return currentAppState;
   } catch (e) {
-    console.log("E", e);
     return null;
   }
 };
@@ -3944,7 +3943,6 @@ export const changeCommandMode = async (
     await datasource.saveCurrentRepoState(repoId, nextRepoState);
     return nextRepoState;
   } catch (e) {
-    console.log("E", e)
     return null;
   }
 };

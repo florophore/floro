@@ -1,5 +1,6 @@
 import path from "path";
 import fs, { createWriteStream } from "fs";
+import os from 'os';
 import {
   apiKeysJSON,
   existsAsync,
@@ -179,7 +180,7 @@ export interface DataSource {
 
 export const readDevPlugins = async (): Promise<Array<string>> => {
   try {
-  const pluginNames = await fs.promises.readdir(vDEVPath);
+  const pluginNames = await fs.promises.readdir(vDEVPath());
   return pluginNames ?? [];
   } catch (e) {
     return []
@@ -188,7 +189,7 @@ export const readDevPlugins = async (): Promise<Array<string>> => {
 
 export const readDevPluginVersions = async (pluginName: string): Promise<Array<string>> => {
   try {
-  const pluginPath = path.join(vDEVPath, pluginName);
+  const pluginPath = path.join(vDEVPath(), pluginName);
   const pluginVersions = await fs.promises.readdir(pluginPath);
   return pluginVersions ?? [];
   } catch (e) {
@@ -244,7 +245,7 @@ export const readDevPluginManifest = async (
   }
   try {
     const pluginManifestPath = path.join(
-      vDEVPath,
+      vDEVPath(),
       pluginName,
       pluginVersion.split("@")?.[1] ?? "none",
       "floro",
@@ -265,8 +266,8 @@ const pullPluginTar = async (
   link: string,
   hash: string
 ): Promise<Manifest | null> => {
-  const downloadPath = path.join(vTMPPath, `${hash}.tar.gz`);
-  const pluginPath = path.join(vPluginsPath, name, version);
+  const downloadPath = path.join(vTMPPath(), `${hash}.tar.gz`);
+  const pluginPath = path.join(vPluginsPath(), name, version);
   const didWrite = await axios.get(link);
   await axios({
     method: "get",
@@ -302,7 +303,7 @@ const pullPluginTar = async (
   const exists = await existsAsync(pluginPath);
   if (!exists && didWrite) {
     await fs.promises.mkdir(pluginPath, { recursive: true });
-    if (process.env.NODE_ENV != "test") {
+    if (process.env.NODE_ENV != "test" && os.platform() != "win32") {
       await fs.promises.chmod(pluginPath, 0o755);
     }
     await tar.x({
@@ -322,7 +323,7 @@ const pullPluginTar = async (
   }
   if (didWrite) {
     const pluginManifestPath = path.join(
-      vPluginsPath,
+      vPluginsPath(),
       name,
       version,
       "floro",
@@ -371,7 +372,7 @@ export const downloadPlugin = async (
     const installResponse = request.data;
     for (const dependency of installResponse.dependencies) {
       const pluginManifestPath = path.join(
-        vPluginsPath,
+        vPluginsPath(),
         dependency.name,
         dependency.version,
         "floro",
@@ -417,7 +418,7 @@ export const getPluginManifest = async (
     return null;
   }
   const pluginManifestPath = path.join(
-    vPluginsPath,
+    vPluginsPath(),
     pluginName,
     pluginValue,
     "floro",
@@ -439,7 +440,7 @@ const pluginManifestExists = async (
   pluginVersion: string
 ): Promise<boolean> => {
   const pluginManifestPath = path.join(
-    vPluginsPath,
+    vPluginsPath(),
     pluginName,
     pluginVersion,
     "floro",
@@ -451,7 +452,7 @@ const pluginManifestExists = async (
 /* REPOS */
 
 export const readRepos = async (): Promise<string[]> => {
-  const repoDir = await fs.promises.readdir(vReposPath);
+  const repoDir = await fs.promises.readdir(vReposPath());
   return repoDir?.filter((repoName) => {
     return /^[0-9a-fA-F]{8}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{12}$/.test(
       repoName
@@ -463,7 +464,7 @@ const repoExists = async (repoId?: string): Promise<boolean> => {
   if (!repoId) {
     return false;
   }
-  return await existsAsync(path.join(vReposPath, repoId));
+  return await existsAsync(path.join(vReposPath(), repoId));
 };
 
 const deleteRepo = async (repoId?: string): Promise<boolean> => {
@@ -471,9 +472,9 @@ const deleteRepo = async (repoId?: string): Promise<boolean> => {
     if (!repoId) {
       return false;
     }
-    const exists = existsAsync(path.join(vReposPath, repoId));
+    const exists = existsAsync(path.join(vReposPath(), repoId));
     if (exists) {
-      await fs.promises.rm(path.join(vReposPath, repoId), { recursive: true, force: true});
+      await fs.promises.rm(path.join(vReposPath(), repoId), { recursive: true, force: true});
     }
     return true;
   } catch(e) {
@@ -483,7 +484,7 @@ const deleteRepo = async (repoId?: string): Promise<boolean> => {
 
 const readRepoSettings = async (repoId: string): Promise<RepoSetting> => {
   try {
-    const repoPath = path.join(vReposPath, repoId);
+    const repoPath = path.join(vReposPath(), repoId);
     const settingsPath = path.join(repoPath, `settings.json`);
     const settings = await fs.promises.readFile(settingsPath);
     return JSON.parse(settings.toString());
@@ -496,7 +497,7 @@ const readRenderedState = async (
   repoId: string
 ): Promise<RenderedApplicationState> => {
   try {
-    const repoPath = path.join(vReposPath, repoId);
+    const repoPath = path.join(vReposPath(), repoId);
     const statePath = path.join(repoPath, `state.json`);
     const state = await fs.promises.readFile(statePath);
     return JSON.parse(state.toString());
@@ -510,7 +511,7 @@ const saveRenderedState = async (
   state: RenderedApplicationState
 ): Promise<RenderedApplicationState> => {
   try {
-    const repoPath = path.join(vReposPath, repoId);
+    const repoPath = path.join(vReposPath(), repoId);
     const statePath = path.join(repoPath, `state.json`);
     await fs.promises.writeFile(statePath, JSON.stringify(state), "utf-8");
     return state;
@@ -521,7 +522,7 @@ const saveRenderedState = async (
 
 const readCurrentRepoState = async (repoId: string): Promise<RepoState> => {
   try {
-    const repoPath = path.join(vReposPath, repoId);
+    const repoPath = path.join(vReposPath(), repoId);
     const currentPath = path.join(repoPath, `current.json`);
     const current = await fs.promises.readFile(currentPath);
     return JSON.parse(current.toString());
@@ -535,7 +536,7 @@ const saveCurrentRepoState = async (
   state: RepoState
 ): Promise<RepoState> => {
   try {
-    const repoPath = path.join(vReposPath, repoId);
+    const repoPath = path.join(vReposPath(), repoId);
     const currentPath = path.join(repoPath, `current.json`);
     await fs.promises.writeFile(
       currentPath,
@@ -553,7 +554,7 @@ const readBranch = async (
   branchId: string
 ): Promise<Branch> => {
   try {
-    const repoPath = path.join(vReposPath, repoId);
+    const repoPath = path.join(vReposPath(), repoId);
     const branchPath = path.join(repoPath, "branches", `${branchId}.json`);
     const branchData = await fs.promises.readFile(branchPath);
     const branch = JSON.parse(branchData.toString());
@@ -568,7 +569,7 @@ const readBranch = async (
 };
 
 const readBranches = async (repoId: string): Promise<Array<Branch>> => {
-  const branchesPath = path.join(vReposPath, repoId, "branches");
+  const branchesPath = path.join(vReposPath(), repoId, "branches");
   const branchesDir = await fs.promises.readdir(branchesPath);
   const branches = await Promise.all(
     branchesDir
@@ -590,7 +591,7 @@ const deleteBranch = async (
   branchId: string
 ): Promise<boolean> => {
   try {
-    const repoPath = path.join(vReposPath, repoId);
+    const repoPath = path.join(vReposPath(), repoId);
     const branchPath = path.join(repoPath, "branches", `${branchId}.json`);
     await fs.promises.rm(branchPath);
     return true;
@@ -605,7 +606,7 @@ const saveBranch = async (
   branchData: Branch
 ): Promise<Branch> => {
   try {
-    const repoPath = path.join(vReposPath, repoId);
+    const repoPath = path.join(vReposPath(), repoId);
     const branchPath = path.join(repoPath, "branches", `${branchId}.json`);
     await fs.promises.writeFile(
       branchPath,
@@ -618,7 +619,7 @@ const saveBranch = async (
 };
 
 const getCommitDirPath = (repoId: string, commitSha: string): string => {
-  return path.join(vReposPath, repoId, "commits", commitSha.substring(0, 2));
+  return path.join(vReposPath(), repoId, "commits", commitSha.substring(0, 2));
 };
 
 const saveCommit = async (
@@ -662,6 +663,7 @@ const readCommit = async (repoId: string, sha: string): Promise<CommitData> => {
       return null;
     }
     const commitDir = getCommitDirPath(repoId, sha);
+    debugger;
     const commitPath = path.join(commitDir, `${sha.substring(2)}.json`);
     const commitDataString = await fs.promises.readFile(commitPath);
     return JSON.parse(commitDataString.toString());
@@ -674,7 +676,7 @@ const readCommits = async (
   repoId: string
 ): Promise<Array<SourceCommitNode>> => {
   try {
-    const commitRoot = path.join(vReposPath, repoId, "commits");
+    const commitRoot = path.join(vReposPath(), repoId, "commits");
     const commitDirs = await fs.promises.readdir(commitRoot);
     const commitPromises: Array<Promise<Array<CommitData>>> = [];
     for (let commitDir of commitDirs) {
@@ -727,7 +729,7 @@ const readHotCheckpoint = async (
   repoId: string
 ): Promise<[string, ApplicationKVState]|null> => {
   try {
-    const hotPath = path.join(vReposPath, repoId, "hotcheckpoint.json");
+    const hotPath = path.join(vReposPath(), repoId, "hotcheckpoint.json");
     const hotPointExists = await existsAsync(hotPath);
     if (!hotPointExists) {
       return null;
@@ -746,7 +748,7 @@ const saveHotCheckpoint = async (
   commitState: ApplicationKVState
 ): Promise<[string, ApplicationKVState]> => {
   try {
-    const hotPath = path.join(vReposPath, repoId, "hotcheckpoint.json");
+    const hotPath = path.join(vReposPath(), repoId, "hotcheckpoint.json");
     await fs.promises.writeFile(
       hotPath,
       JSON.stringify([sha, commitState]),
@@ -760,7 +762,7 @@ const saveHotCheckpoint = async (
 
 const deleteHotCheckpoint = async (repoId: string): Promise<boolean> => {
   try {
-    const hotPath = path.join(vReposPath, repoId, "hotcheckpoint.json");
+    const hotPath = path.join(vReposPath(), repoId, "hotcheckpoint.json");
     const hotPointExists = await existsAsync(hotPath);
     if (!hotPointExists) {
       return true;
@@ -779,7 +781,7 @@ const deleteHotCheckpoint = async (repoId: string): Promise<boolean> => {
 
 const getCheckpointDirPath = (repoId: string, commitSha: string): string => {
   return path.join(
-    vReposPath,
+    vReposPath(),
     repoId,
     "checkpoints",
     commitSha.substring(0, 2)
@@ -810,7 +812,7 @@ const saveCheckpoint = async (
   commitState: ApplicationKVState
 ): Promise<ApplicationKVState> => {
   try {
-    const baseCheckpoint = path.join(vReposPath, repoId, "checkpoints");
+    const baseCheckpoint = path.join(vReposPath(), repoId, "checkpoints");
     const baseCheckpointDirExists = await existsAsync(baseCheckpoint);
     if (!baseCheckpointDirExists) {
       await fs.promises.mkdir(baseCheckpoint);
@@ -845,7 +847,7 @@ const readStash = async (
   repoState: RepoState
 ): Promise<Array<ApplicationKVState>> => {
   try {
-    const stashDir = path.join(vReposPath, repoId, "stash");
+    const stashDir = path.join(vReposPath(), repoId, "stash");
     const stashName = getStashName(repoState);
     const stashPath = path.join(stashDir, stashName);
     const existsStash = await existsAsync(stashPath);
@@ -866,7 +868,7 @@ const saveStash = async (
   stashState: Array<ApplicationKVState>
 ) => {
   try {
-    const stashDir = path.join(vReposPath, repoId, "stash");
+    const stashDir = path.join(vReposPath(), repoId, "stash");
     const stashName = getStashName(repoState);
     const stashPath = path.join(stashDir, stashName);
     await fs.promises.writeFile(stashPath, JSON.stringify(stashState));
@@ -880,7 +882,7 @@ const readBranchesMetaState = async (
   repoId: string
 ): Promise<BranchesMetaState> => {
   try {
-    const branchesPath = path.join(vReposPath, repoId, "branches.json");
+    const branchesPath = path.join(vReposPath(), repoId, "branches.json");
     const branchesMetaStateString = await fs.promises.readFile(
       branchesPath,
       "utf8"
@@ -899,7 +901,7 @@ const saveBranchesMetaState = async (
   branchesMetaState: BranchesMetaState
 ): Promise<BranchesMetaState> => {
   try {
-    const branchesPath = path.join(vReposPath, repoId, "branches.json");
+    const branchesPath = path.join(vReposPath(), repoId, "branches.json");
     await fs.promises.writeFile(
       branchesPath,
       JSON.stringify(branchesMetaState),
@@ -913,7 +915,7 @@ const saveBranchesMetaState = async (
 
 const checkBinary = async (binaryId: string): Promise<boolean> => {
   try {
-    const binDir = path.join(vBinariesPath, binaryId.substring(0, 2));
+    const binDir = path.join(vBinariesPath(), binaryId.substring(0, 2));
     const binPath = path.join(binDir, binaryId);
     return await existsAsync(binPath);
   } catch (e) {
@@ -923,7 +925,7 @@ const checkBinary = async (binaryId: string): Promise<boolean> => {
 
 const writeBinary = async (fileName: string, content: string | NodeJS.ArrayBufferView | Iterable<string | NodeJS.ArrayBufferView> | AsyncIterable<string | NodeJS.ArrayBufferView> | Stream): Promise<boolean> => {
   try {
-    const binDir = path.join(vBinariesPath, fileName.substring(0, 2));
+    const binDir = path.join(vBinariesPath(), fileName.substring(0, 2));
     const binPath = path.join(binDir, fileName);
     const existsBinSubDir = await existsAsync(binDir)
     if (!existsBinSubDir) {
@@ -942,7 +944,7 @@ const writeBinary = async (fileName: string, content: string | NodeJS.ArrayBuffe
 
 const checkCloneFile = async (repoId: string): Promise<boolean> => {
   try {
-    const cloneFilePath = path.join(vReposPath, repoId, "clonefile.json");
+    const cloneFilePath = path.join(vReposPath(), repoId, "clonefile.json");
     const cloneFileExists = await existsAsync(cloneFilePath);
     return cloneFileExists;
   } catch (e) {
@@ -952,7 +954,7 @@ const checkCloneFile = async (repoId: string): Promise<boolean> => {
 
 const readCloneFile = async (repoId: string): Promise<CloneFile> => {
   try {
-    const cloneFilePath = path.join(vReposPath, repoId, "clonefile.json");
+    const cloneFilePath = path.join(vReposPath(), repoId, "clonefile.json");
     const cloneFileExists = await existsAsync(cloneFilePath);
     if (!cloneFileExists) {
       return null;
@@ -967,30 +969,30 @@ const readCloneFile = async (repoId: string): Promise<CloneFile> => {
 
 const saveCloneFile = async (repoId: string, cloneFile: CloneFile): Promise<CloneFile> => {
   try {
-    const repoPath = path.join(vReposPath, repoId);
+    const repoPath = path.join(vReposPath(), repoId);
     const repoPathExists = await existsAsync(repoPath);
     if (!repoPathExists) {
       await fs.promises.mkdir(repoPath, { recursive: true });
-      if (process.env.NODE_ENV != "test") {
+      if (process.env.NODE_ENV != "test" && os.platform() != "win32") {
         await fs.promises.chmod(repoPath, 0o755);
       }
       const commitsPath = path.join(repoPath, "commits");
       await fs.promises.mkdir(commitsPath, { recursive: true });
-      if (process.env.NODE_ENV != "test") {
+      if (process.env.NODE_ENV != "test" && os.platform() != "win32") {
         await fs.promises.chmod(commitsPath, 0o755);
       }
       const branchesPath = path.join(repoPath, "branches");
       await fs.promises.mkdir(branchesPath, { recursive: true });
-      if (process.env.NODE_ENV != "test") {
+      if (process.env.NODE_ENV != "test" && os.platform() != "win32") {
         await fs.promises.chmod(branchesPath, 0o755);
       }
       const stashPath = path.join(repoPath, "stash");
       await fs.promises.mkdir(stashPath, { recursive: true });
-      if (process.env.NODE_ENV != "test") {
+      if (process.env.NODE_ENV != "test" && os.platform() != "win32") {
         await fs.promises.chmod(stashPath, 0o755);
       }
     }
-    const cloneFilePath = path.join(vReposPath, repoId, "clonefile.json");
+    const cloneFilePath = path.join(vReposPath(), repoId, "clonefile.json");
     await fs.promises.writeFile(
       cloneFilePath,
       JSON.stringify(cloneFile),
@@ -1005,7 +1007,7 @@ const saveCloneFile = async (repoId: string, cloneFile: CloneFile): Promise<Clon
 
 const deleteCloneFile = async (repoId: string):  Promise<boolean> => {
   try {
-    const cloneFilePath = path.join(vReposPath, repoId, "clonefile.json");
+    const cloneFilePath = path.join(vReposPath(), repoId, "clonefile.json");
     const cloneFileExists = await existsAsync(cloneFilePath);
     if (!cloneFileExists) {
       return true;
@@ -1019,7 +1021,7 @@ const deleteCloneFile = async (repoId: string):  Promise<boolean> => {
 
 const readRemoteSettings = async (repoId: string): Promise<RemoteSettings> => {
   try {
-    const repoPath = path.join(vReposPath, repoId);
+    const repoPath = path.join(vReposPath(), repoId);
     const settingsPath = path.join(repoPath, `remote_settings.json`);
     const current = await fs.promises.readFile(settingsPath);
     return JSON.parse(current.toString());
@@ -1033,7 +1035,7 @@ const saveRemoteSettings = async (
   state: RemoteSettings
 ): Promise<RemoteSettings> => {
   try {
-    const repoPath = path.join(vReposPath, repoId);
+    const repoPath = path.join(vReposPath(), repoId);
     const settingsPath = path.join(repoPath, `remote_settings.json`);
     await fs.promises.writeFile(
       settingsPath,
@@ -1048,7 +1050,7 @@ const saveRemoteSettings = async (
 
 const readLocalSettings = async (repoId: string): Promise<RemoteSettings> => {
   try {
-    const repoPath = path.join(vReposPath, repoId);
+    const repoPath = path.join(vReposPath(), repoId);
     const settingsPath = path.join(repoPath, `local_settings.json`);
     const current = await fs.promises.readFile(settingsPath);
     return JSON.parse(current.toString());
@@ -1062,7 +1064,7 @@ const saveLocalSettings = async (
   state: RemoteSettings
 ): Promise<RemoteSettings> => {
   try {
-    const repoPath = path.join(vReposPath, repoId);
+    const repoPath = path.join(vReposPath(), repoId);
     const settingsPath = path.join(repoPath, `local_settings.json`);
     await fs.promises.writeFile(
       settingsPath,
@@ -1077,7 +1079,7 @@ const saveLocalSettings = async (
 
 const readInfo = async (repoId: string): Promise<RepoInfo> => {
   try {
-    const repoPath = path.join(vReposPath, repoId);
+    const repoPath = path.join(vReposPath(), repoId);
     const infoPath = path.join(repoPath, `info.json`);
     const current = await fs.promises.readFile(infoPath);
     return JSON.parse(current.toString());
@@ -1091,7 +1093,7 @@ const saveInfo = async (
   repoInfo: RepoInfo
 ): Promise<RepoInfo> => {
   try {
-    const repoPath = path.join(vReposPath, repoId);
+    const repoPath = path.join(vReposPath(), repoId);
     const infoPath = path.join(repoPath, `info.json`);
     await fs.promises.writeFile(
       infoPath,
@@ -1109,12 +1111,12 @@ const readPluginClientStorage = async (
   pluginId: string
 ): Promise<object> => {
   try {
-    const repoPath = path.join(vReposPath, repoId);
+    const repoPath = path.join(vReposPath(), repoId);
     const pluginStorageDirPath = path.join(repoPath, "plugin_storage");
     const dirExists = fs.existsSync(pluginStorageDirPath);
     if (!dirExists) {
       await fs.promises.mkdir(pluginStorageDirPath, { recursive: true });
-      if (process.env.NODE_ENV != "test") {
+      if (process.env.NODE_ENV != "test" && os.platform() != "win32") {
         await fs.promises.chmod(pluginStorageDirPath, 0o755);
       }
     }
@@ -1126,7 +1128,7 @@ const readPluginClientStorage = async (
         JSON.stringify({}),
         "utf8"
       );
-      if (process.env.NODE_ENV != "test") {
+      if (process.env.NODE_ENV != "test" && os.platform() != "win32") {
         await fs.promises.chmod(pluginPath, 0o755);
       }
       return {};
@@ -1157,12 +1159,12 @@ const savePluginClientStorage = async (
   storage: object
 ) => {
   try {
-    const repoPath = path.join(vReposPath, repoId);
+    const repoPath = path.join(vReposPath(), repoId);
     const pluginStorageDirPath = path.join(repoPath, "plugin_storage");
     const dirExists = fs.existsSync(pluginStorageDirPath);
     if (!dirExists) {
       await fs.promises.mkdir(pluginStorageDirPath, { recursive: true });
-      if (process.env.NODE_ENV != "test") {
+      if (process.env.NODE_ENV != "test" && os.platform() != "win32") {
         await fs.promises.chmod(pluginStorageDirPath, 0o755);
       }
     }
@@ -1174,7 +1176,7 @@ const savePluginClientStorage = async (
         JSON.stringify(storage),
         "utf8"
       );
-      if (process.env.NODE_ENV != "test") {
+      if (process.env.NODE_ENV != "test" && os.platform() != "win32") {
         await fs.promises.chmod(pluginPath, 0o755);
       }
       return storage;
@@ -1192,7 +1194,7 @@ const savePluginClientStorage = async (
 
 const readApiKeys = async (): Promise<Array<ApiKey>> => {
   try {
-    const keys = await fs.promises.readFile(apiKeysJSON);
+    const keys = await fs.promises.readFile(apiKeysJSON());
     return JSON.parse(keys.toString()) as Array<ApiKey>;
   } catch(e) {
     return null;
@@ -1202,7 +1204,7 @@ const readApiKeys = async (): Promise<Array<ApiKey>> => {
 const writeApiKeys = async (apiKeys: Array<ApiKey>): Promise<Array<ApiKey>> => {
   try {
     await fs.promises.writeFile(
-      apiKeysJSON,
+      apiKeysJSON(),
       JSON.stringify(apiKeys),
       "utf8"
     );
@@ -1215,7 +1217,7 @@ const writeApiKeys = async (apiKeys: Array<ApiKey>): Promise<Array<ApiKey>> => {
 
 const readWebhookKeys = async (): Promise<Array<WebhookKey>> => {
   try {
-    const keys = await fs.promises.readFile(webhookKeysJSON);
+    const keys = await fs.promises.readFile(webhookKeysJSON());
     return JSON.parse(keys.toString()) as Array<WebhookKey>;
   } catch(e) {
     return null;
@@ -1225,7 +1227,7 @@ const readWebhookKeys = async (): Promise<Array<WebhookKey>> => {
 const writeWebhookKeys = async (webhookKeys: Array<WebhookKey>): Promise<Array<WebhookKey>> => {
   try {
     await fs.promises.writeFile(
-      webhookKeysJSON,
+      webhookKeysJSON(),
       JSON.stringify(webhookKeys),
       "utf8"
     );
@@ -1237,12 +1239,12 @@ const writeWebhookKeys = async (webhookKeys: Array<WebhookKey>): Promise<Array<W
 
 const readRepoEnabledApiKeys = async (repoId: string): Promise<Array<RepoEnabledApiKey>> =>  {
   try {
-    const repoPath = path.join(vReposPath, repoId);
+    const repoPath = path.join(vReposPath(), repoId);
     const keysPath = path.join(repoPath, "keys");
     const dirExists = fs.existsSync(keysPath);
     if (!dirExists) {
       await fs.promises.mkdir(keysPath, { recursive: true });
-      if (process.env.NODE_ENV != "test") {
+      if (process.env.NODE_ENV != "test" && os.platform() != "win32") {
         await fs.promises.chmod(keysPath, 0o755);
       }
     }
@@ -1266,12 +1268,12 @@ const readRepoEnabledApiKeys = async (repoId: string): Promise<Array<RepoEnabled
 
 const writeRepoEnabledApiKeys = async (repoId: string, keys: Array<RepoEnabledApiKey>): Promise<Array<RepoEnabledApiKey>> =>  {
   try {
-    const repoPath = path.join(vReposPath, repoId);
+    const repoPath = path.join(vReposPath(), repoId);
     const keysPath = path.join(repoPath, "keys");
     const dirExists = fs.existsSync(keysPath);
     if (!dirExists) {
       await fs.promises.mkdir(keysPath, { recursive: true });
-      if (process.env.NODE_ENV != "test") {
+      if (process.env.NODE_ENV != "test" && os.platform() != "win32") {
         await fs.promises.chmod(keysPath, 0o755);
       }
     }
@@ -1289,12 +1291,12 @@ const writeRepoEnabledApiKeys = async (repoId: string, keys: Array<RepoEnabledAp
 
 const readRepoEnabledWebhookKeys = async (repoId: string): Promise<Array<RepoEnabledWebhookKey>> =>  {
   try {
-    const repoPath = path.join(vReposPath, repoId);
+    const repoPath = path.join(vReposPath(), repoId);
     const keysPath = path.join(repoPath, "keys");
     const dirExists = fs.existsSync(keysPath);
     if (!dirExists) {
       await fs.promises.mkdir(keysPath, { recursive: true });
-      if (process.env.NODE_ENV != "test") {
+      if (process.env.NODE_ENV != "test" && os.platform() != "win32") {
         await fs.promises.chmod(keysPath, 0o755);
       }
     }
@@ -1317,12 +1319,12 @@ const readRepoEnabledWebhookKeys = async (repoId: string): Promise<Array<RepoEna
 }
 const writeRepoEnabledWebhookKeys = async (repoId: string, keys: Array<RepoEnabledWebhookKey>): Promise<Array<RepoEnabledWebhookKey>> =>  {
   try {
-    const repoPath = path.join(vReposPath, repoId);
+    const repoPath = path.join(vReposPath(), repoId);
     const keysPath = path.join(repoPath, "keys");
     const dirExists = fs.existsSync(keysPath);
     if (!dirExists) {
       await fs.promises.mkdir(keysPath, { recursive: true });
-      if (process.env.NODE_ENV != "test") {
+      if (process.env.NODE_ENV != "test" && os.platform() != "win32") {
         await fs.promises.chmod(keysPath, 0o755);
       }
     }

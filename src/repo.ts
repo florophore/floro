@@ -351,7 +351,7 @@ const MAX_PULL_RETRY_ATTEMPTS = 10;
 export const BRANCH_NAME_REGEX = /^[-_ ()[\]'"|a-zA-Z0-9]{3,100}$/;
 
 export const getRepos = async (): Promise<string[]> => {
-  const repoDir = await fs.promises.readdir(vReposPath);
+  const repoDir = await fs.promises.readdir(vReposPath());
   return repoDir?.filter((repoName) => {
     return /^[0-9a-fA-F]{8}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{12}$/.test(
       repoName
@@ -2220,7 +2220,6 @@ export const getInvalidStates = async (
       appKvState.store[pluginName],
       pluginName
     );
-    debugger;
     const indexedKvs = reIndexSchemaArrays(
       appKvState?.store?.[pluginName] ?? []
     );
@@ -2639,7 +2638,7 @@ export const pushBinary = async (
   branchId: string
 ): Promise<boolean | null> => {
   try {
-    const binSubDir = path.join(vBinariesPath, binaryRef.substring(0, 2));
+    const binSubDir = path.join(vBinariesPath(), binaryRef.substring(0, 2));
     const existsBinSubDir = await existsAsync(binSubDir);
     if (!existsBinSubDir) {
       return null;
