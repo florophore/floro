@@ -19,6 +19,7 @@ import {
   getUserAsync,
   getUserSessionAsync,
   getRemoteHostAsync,
+  getRemoteHostSync,
 } from "./filestructure";
 import { Server } from "socket.io";
 import { createProxyMiddleware } from "http-proxy-middleware";
@@ -133,8 +134,8 @@ const datasource = makeMemoizedDataSource();
 
 const pluginsJSON = getPluginsJson();
 
-const safeOriginRegex =
-  /^(https?:\/\/(localhost|127\.0\.0\.1):\d{1,5})|(https:\/\/floro\.io)/;
+const remoteHost = getRemoteHostSync();
+const safeOriginRegex = new RegExp(`^(https?://(localhost|127.0.0.1):\\d{1,5})|(${remoteHost})`);
 
 const corsNoNullOriginDelegate = (req, callback) => {
   const origin = req.headers?.origin;
@@ -2977,8 +2978,7 @@ app.post("/binary/upload", async (req, res) => {
         res.sendStatus(400);
         return;
     }
-    // fix this
-    res.header("Access-Control-Allow-Origin", "*");
+    res.header("Access-Control-Allow-Origin", `http://localhost:63403,${remoteHost}`);
 
     let numFiles = 0;
     let didCancel = false;
@@ -3068,7 +3068,7 @@ app.get("/binary/:binaryRef", async (req, res) => {
       res.sendStatus(400);
       return;
   }
-  res.header("Access-Control-Allow-Origin", "*");
+  res.header("Access-Control-Allow-Origin", `http://localhost:63403,${remoteHost}`);
   const binaryRef = req?.params?.["binaryRef"];
   const binSubDir = path.join(vBinariesPath(), binaryRef.substring(0, 2));
   const existsBinSubDir = await existsAsync(binSubDir);
