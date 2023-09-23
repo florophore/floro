@@ -2978,7 +2978,7 @@ app.post("/binary/upload", async (req, res) => {
         res.sendStatus(400);
         return;
     }
-    res.header("Access-Control-Allow-Origin", `http://localhost:63403,${remoteHost}`);
+    res.header("Access-Control-Allow-Origin", "*");
 
     let numFiles = 0;
     let didCancel = false;
@@ -3068,7 +3068,7 @@ app.get("/binary/:binaryRef", async (req, res) => {
       res.sendStatus(400);
       return;
   }
-  res.header("Access-Control-Allow-Origin", `http://localhost:63403,${remoteHost}`);
+  res.header("Access-Control-Allow-Origin", "*");
   const binaryRef = req?.params?.["binaryRef"];
   const binSubDir = path.join(vBinariesPath(), binaryRef.substring(0, 2));
   const existsBinSubDir = await existsAsync(binSubDir);
