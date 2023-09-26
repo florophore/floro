@@ -1657,10 +1657,6 @@ export const flattenStateToSchemaPathKV = (
     });
   }
   for (const prop of sets) {
-    if (!(state?.[prop] ?? []).forEach) {
-      console.log("WHAT THE HELL", state);
-
-    }
     (state?.[prop] ?? []).forEach((element) => {
       kv.push(
         ...flattenStateToSchemaPathKV(
@@ -2400,7 +2396,7 @@ const traverseSchemaMapForStaticSetPaths = (
       continue;
     }
     if (
-      typeStruct[prop]?.type == "set" &&
+      (typeStruct[prop]?.type == "set" || typeStruct[prop]?.type == "array") &&
       typeof typeStruct[prop].values != "string"
     ) {
       const staticChildren = traverseSchemaMapForStaticSetPaths(

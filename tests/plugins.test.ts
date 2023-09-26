@@ -2434,6 +2434,161 @@ describe("plugins", () => {
         },
       });
     });
+
+    test("cascades nested refs in arrays", async () => {
+      const PLUGIN_A_MANIFEST: Manifest = {
+        name: "A",
+        version: "0.0.0",
+        displayName: "A",
+        icon: "",
+        imports: {},
+        types: {},
+        store: {
+          objects: {
+            type: "set",
+            values: {
+              name: {
+                isKey: true,
+                type: "string",
+              },
+              variables: {
+                type: "set",
+                values: {
+                  id: {
+                    isKey: true,
+                    type: "string",
+                  }
+                }
+              },
+              interpolations: {
+                type: "set",
+                values: {
+                  id: {
+                    isKey: true,
+                    type: "string",
+                  },
+                  conditions: {
+                    type: "array",
+                    values: {
+                      subconditions: {
+                        type: "array",
+                        values: {
+                          variableRef: {
+                            type: "ref<$.objects.values.variables.values>"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+          },
+        },
+      };
+
+      const schemaMap: { [key: string]: Manifest } = {
+        [PLUGIN_A_MANIFEST.name]: PLUGIN_A_MANIFEST as Manifest,
+      };
+
+      const stateMap = {
+        [PLUGIN_A_MANIFEST.name]: {
+          objects: [
+            {
+              name: "abc",
+              variables: [
+                {
+                  id: "var1",
+                },
+                //{
+                //  id: "var2",
+                //},
+                {
+                  id: "var3",
+                },
+              ],
+              interpolations: [
+                {
+                  id: "inter1",
+                  conditions: [
+                    {
+                      subconditions: [
+                        {
+                          variableRef: "$(A).objects.name<abc>.variables.id<var1>"
+                        },
+                        {
+                          variableRef: "$(A).objects.name<abc>.variables.id<var2>"
+                        },
+                        {
+                          variableRef: "$(A).objects.name<abc>.variables.id<var3>"
+                        },
+                        {
+                          variableRef: "$(A).objects.name<abc>.variables.id<var2>"
+                        },
+                        {
+                          variableRef: "$(A).objects.name<abc>.variables.id<var3>"
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      };
+
+      const cascadedAState = await cascadePluginState(
+        {
+          ...datasource,
+          getPluginManifest: async (pluginName) => {
+            return schemaMap[pluginName];
+          },
+        },
+        schemaMap,
+        stateMap
+      );
+      expect(cascadedAState).toEqual({
+        A: {
+          objects: [
+            {
+              name: "abc",
+              variables: [
+                {
+                  id: "var1",
+                },
+                {
+                  id: "var3",
+                },
+              ],
+              interpolations: [
+                {
+                  id: "inter1",
+                  conditions: [
+                    {
+                      subconditions: [
+                        {
+                          variableRef:
+                            "$(A).objects.name<abc>.variables.id<var1>",
+                        },
+                        {
+                          variableRef:
+                            "$(A).objects.name<abc>.variables.id<var3>",
+                        },
+                        {
+                          variableRef:
+                            "$(A).objects.name<abc>.variables.id<var3>",
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      });
+    });
   });
 
   describe("enforceBoundedSets", () => {
