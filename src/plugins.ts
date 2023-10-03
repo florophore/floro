@@ -1706,7 +1706,7 @@ export const indexArrayDuplicates = (
     if (value["(id)"]) {
       const id = ids[ids.length - 1];
       const count = visitedIds[concatenatedId].count ?? 0;
-      value["(id)"] = value["(id)"].replace(id, `${id}:${count}`);
+      value["(id)"] = `${id}:${count}`;
     }
     out.push({ key: updatedKey, value });
   }

@@ -2286,12 +2286,14 @@ export const getCanPopStashedChanges = async (
       return false;
     }
     const topChanges = stashList.pop();
+    debugger;
     const canPop = await canAutoMergeCommitStates(
       datasource,
       topChanges, // theirs
       currentKVState, // yours
       unstagedState // origin
     );
+    debugger;
     return canPop;
   } catch (e) {
     return null;

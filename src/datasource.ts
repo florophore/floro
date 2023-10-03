@@ -663,7 +663,6 @@ const readCommit = async (repoId: string, sha: string): Promise<CommitData> => {
       return null;
     }
     const commitDir = getCommitDirPath(repoId, sha);
-    debugger;
     const commitPath = path.join(commitDir, `${sha.substring(2)}.json`);
     const commitDataString = await fs.promises.readFile(commitPath);
     return JSON.parse(commitDataString.toString());

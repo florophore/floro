@@ -2715,7 +2715,6 @@ app.post("/repo/:repoId/paste", cors(corsNoNullOriginDelegate),async (req, res):
     }
     res.send(apiResponse);
   } catch(e) {
-    console.log("E", e)
       res.sendStatus(400);
   }
 })
