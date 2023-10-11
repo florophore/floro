@@ -1540,7 +1540,6 @@ export const getStateId = (schema: TypeStruct, state: object): string => {
       });
     }
     if (schema[prop].type == "set" || schema[prop].type == "array") {
-      // TODO: REMOVE REDUCE
       hashPairs.push({
         key: prop,
         value: state[prop]?.reduce((s: string, element: object) => {
@@ -1557,7 +1556,6 @@ export const getStateId = (schema: TypeStruct, state: object): string => {
       });
     }
   }
-  // TODO: REMOVE REDUCE
   return fastHash(
     hashPairs.reduce((s, { key, value }) => {
       if (key == "(id)") {

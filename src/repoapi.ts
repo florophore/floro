@@ -52,6 +52,7 @@ import {
   saveRemoteSha,
   getMergeOriginSha,
   branchIdIsCyclic,
+  applyStateDiffToCommitState,
 } from "./repo";
 import {
   CommitData,
@@ -76,6 +77,7 @@ import {
   manifestListToSchemaMap,
   getKVStateForPlugin,
   enforceBoundedSets,
+  indexArrayDuplicates,
 } from "./plugins";
 import { LicenseCodes } from "./licensecodes";
 import { DataSource } from "./datasource";
@@ -1052,6 +1054,10 @@ export const writeRepoCommit = async (
     }
     const currentState = await datasource.readCurrentRepoState(repoId);
     const currentRenderedState = await datasource.readRenderedState(repoId);
+    const isCurrentRenderedStateValid = await isRenderedStateValid(datasource, currentRenderedState);
+    if (!isCurrentRenderedStateValid) {
+      return null;
+    }
     const currentKVState = await convertRenderedCommitStateToKv(
       datasource,
       currentRenderedState
@@ -1093,11 +1099,18 @@ export const writeRepoCommit = async (
     if (!commit) {
       return null;
     }
+    const appliedKVState = applyStateDiffToCommitState(unstagedState, commitData.diff);
+    const appliedKVStateString = JSON.stringify(appliedKVState);
+    const currentKVStateString = JSON.stringify(currentKVState);
+    if (appliedKVStateString != currentKVStateString) {
+      return null;
+    }
     if (currentState.branch) {
       const branchState = await datasource.readBranch(
         repoId,
         currentState.branch
       );
+
       const nextBranch = await datasource.saveBranch(repoId, currentState.branch, {
         ...branchState,
         lastCommit: sha,
@@ -1121,6 +1134,7 @@ export const writeRepoCommit = async (
           return branch;
         }
       );
+
       await datasource.saveBranchesMetaState(repoId, branchMetaState);
     }
     await updateCurrentCommitSHA(datasource, repoId, sha, false);
@@ -3719,6 +3733,7 @@ export const renderApiReponse = async (
     datasource,
     renderedApplicationState?.plugins
   );
+
   const schemaMap = manifestListToSchemaMap(manifests);
   const branch = await getBranchFromRepoState(repoId, datasource, repoState);
   const baseBranch = await getBaseBranchFromBranch(repoId, datasource, branch);
@@ -4133,6 +4148,45 @@ export const getApplicationState = async (
   return await datasource.readRenderedState(repoId);
 };
 
+export const isRenderedStateValid = async (
+  datasource: DataSource,
+  renderedAppState: RenderedApplicationState
+): Promise<boolean> => {
+
+  const seenPlugins = new Set();
+  for (const { key } of renderedAppState.plugins ?? []) {
+    if (seenPlugins.has(key)) {
+      return false;
+    }
+    seenPlugins.add(key);
+  }
+
+  const seenLicenses = new Set();
+  for (const { key } of renderedAppState.licenses) {
+    if (seenLicenses.has(key)) {
+      return false;
+    }
+    seenLicenses.add(key);
+  }
+
+  const indexedKvStore =
+    await convertRenderedStateStoreToArrayDuplicateIndexedKV(
+      datasource,
+      renderedAppState
+    );
+  for (const pluginName in indexedKvStore) {
+    const indexedKV = indexedKvStore[pluginName];
+    const seenKeys = new Set();
+    for (const { key } of indexedKV) {
+      if (seenKeys.has(key)) {
+        return false;
+      }
+      seenKeys.add(key);
+    }
+  }
+  return true;
+}
+
 export const convertRenderedCommitStateToKv = async (
   datasource: DataSource,
   renderedAppState: RenderedApplicationState
@@ -4179,6 +4233,29 @@ export const convertRenderedStateStoreToKV = async (
   return out;
 };
 
+export const convertRenderedStateStoreToArrayDuplicateIndexedKV = async (
+  datasource: DataSource,
+  renderedAppState: RenderedApplicationState
+): Promise<{[pluginName: string]: Array<DiffElement>}> => {
+  let out = {};
+  const manifests = await getPluginManifests(
+    datasource,
+    renderedAppState.plugins
+  );
+  for (const pluginManifest of manifests) {
+    const schemaMap = await getSchemaMapForManifest(datasource, pluginManifest);
+    const kv = await getKVStateForPlugin(
+      datasource,
+      schemaMap,
+      pluginManifest.name,
+      renderedAppState.store
+    );
+    const kvArray = indexArrayDuplicates(kv);
+    out[pluginManifest.name] = kvArray;
+  }
+  return out;
+};
+
 export const sanitizeApplicationKV = async (
   datasource: DataSource,
   renderedAppState: RenderedApplicationState
@@ -4197,6 +4274,21 @@ export const sanitizeApplicationKV = async (
   return rendered;
 };
 
+
+export const dedupApplicationKV = async (
+  datasource: DataSource,
+  applicationKV: ApplicationKVState
+): Promise<ApplicationKVState> => {
+  const rendered = await convertCommitStateToRenderedState(
+    datasource,
+    applicationKV
+  );
+  return await convertRenderedCommitStateToKv(
+    datasource,
+    rendered
+  );
+};
+
 export const getDefaultComparison = async (
   datasource: DataSource,
   repoId: string,
@@ -4208,15 +4300,6 @@ export const getDefaultComparison = async (
     renderedState
   );
   const unstagedState = await getUnstagedCommitState(datasource, repoId);
-  const isWIP =
-    unstagedState &&
-    (await getIsWip(
-      datasource,
-      repoId,
-      repoState,
-      unstagedState,
-      applicationKVState
-    ));
   if (repoState.isInMergeConflict) {
     return {
       against: "merge",

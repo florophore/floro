@@ -10,12 +10,17 @@
     "esModuleInterop": true,
     "emitDecoratorMetadata": true,
     "experimentalDecorators": true,
+    "resolveJsonModule": true,
     "removeComments": false,
     "noImplicitAny": false,
     "outDir": "dist",
     "types": ["node", "jest", "express"],
     "typeRoots" : ["./types", "./node_modules/@types"]
   },
+  "include": [
+    "**/*.json",
+    "**/*.ts",
+  ],
   "exclude": [
     "node_modules",
     "../../node_modules",

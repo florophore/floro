@@ -45,6 +45,7 @@ import {
 } from "./sequenceoperations";
 import { SourceCommitNode } from "./sourcegraph";
 import { DiffElement } from "./sequenceoperations";
+import { dedupApplicationKV } from "./repoapi";
 
 export interface FetchInfo {
   canPushBranch: boolean;
@@ -1326,6 +1327,25 @@ export const getCommitState = async (
   checkedHot?: boolean,
   hotCheckpoint?: [string, ApplicationKVState]
 ): Promise<ApplicationKVState | null> => {
+  const result = await getCommitStateRaw(
+    datasource,
+    repoId,
+    sha,
+    historyLength,
+    checkedHot,
+    hotCheckpoint
+  )
+  return dedupApplicationKV(datasource, result);
+}
+
+export const getCommitStateRaw = async (
+  datasource: DataSource,
+  repoId: string,
+  sha: string | null,
+  historyLength?: number,
+  checkedHot?: boolean,
+  hotCheckpoint?: [string, ApplicationKVState]
+): Promise<ApplicationKVState | null> => {
   if (!sha) {
     return EMPTY_COMMIT_STATE;
   }
@@ -1357,7 +1377,7 @@ export const getCommitState = async (
       return checkpointState;
     }
   }
-  const state = await getCommitState(
+  const state = await getCommitStateRaw(
     datasource,
     repoId,
     commitData.parent,
@@ -1447,7 +1467,7 @@ export const getUnstagedCommitState = async (
   const hotCheckpoint = await datasource.readHotCheckpoint(repoId);
   if (hotCheckpoint && currentRepoState.commit) {
     if (hotCheckpoint[0] == currentRepoState.commit) {
-      return hotCheckpoint[1];
+      return dedupApplicationKV(datasource, hotCheckpoint[1]);
     }
   }
   const commitState = await getCommitState(
@@ -1462,7 +1482,7 @@ export const getUnstagedCommitState = async (
       commitState
     );
   }
-  return commitState;
+  return dedupApplicationKV(datasource, commitState);
 };
 
 export const updateCurrentWithNewBranch = async (

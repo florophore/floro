@@ -3,11 +3,30 @@ import {
 } from "./floro-generator-schema-api";
 import path from "path";
 import fs from "fs";
+import floroGeneratorFile from "../floro/floro.generator.json";
 
+export function filename() {
+  return __filename;
+}
+
+export function getFloroGenerator() {
+  return floroGeneratorFile;
+}
+
+export async function getJSON<T>(
+  state: SchemaRoot,
+  args?: {},
+  mode?: "build" | "hot" | "live-update",
+  assetAccessor?: (binaryRef: string) => Promise<string | Buffer | null>
+): Promise<T> {
+  return {} as T;
+}
 
 export async function generate(
   state: SchemaRoot,
   outDir: string,
-  args?: object
+  args: {} = {},
+  assetAccessor: (binaryRef: string) => Promise<Buffer | string | null>
 ) {
+
 }

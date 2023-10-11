@@ -1903,5 +1903,5 @@ describe("repoapi", () => {
       const isCylicC = branchIdIsCyclic("C", branches);
       expect(isCylicC).toBe(false);
     });
-  })
+  });
 });
