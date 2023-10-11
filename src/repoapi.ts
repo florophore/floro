@@ -4244,13 +4244,15 @@ export const convertRenderedStateStoreToArrayDuplicateIndexedKV = async (
   );
   for (const pluginManifest of manifests) {
     const schemaMap = await getSchemaMapForManifest(datasource, pluginManifest);
-    const kv = await getKVStateForPlugin(
+    const kvs = await getKVStateForPlugin(
       datasource,
       schemaMap,
       pluginManifest.name,
       renderedAppState.store
     );
-    const kvArray = indexArrayDuplicates(kv);
+
+    const kvCopy = kvs.map(kv => ({key: kv.key, value: Object.assign({}, kv.value)}));
+    const kvArray = indexArrayDuplicates(kvCopy);
     out[pluginManifest.name] = kvArray;
   }
   return out;

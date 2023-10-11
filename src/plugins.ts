@@ -2089,11 +2089,12 @@ const drawSchemaTypesFromImports = (
 
 export const getStateFromKVForPlugin = (
   schemaMap: { [key: string]: Manifest },
-  kv: Array<DiffElement>,
+  kvs: Array<DiffElement>,
   pluginName: string
 ): object => {
   const rootSchema = getRootSchemaForPlugin(schemaMap, pluginName);
-  const kvArray = indexArrayDuplicates(kv);
+  const kvCopy = kvs.map(kv => ({key: kv.key, value: Object.assign({}, kv.value)}));
+  const kvArray = indexArrayDuplicates(kvCopy);
   let out = {};
   let memo = {};
   let visitedKeys = new Set<string>([]);
