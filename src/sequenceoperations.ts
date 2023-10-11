@@ -4,8 +4,8 @@ import { StateDiff } from "./repo";
 import mdiff from "mdiff";
 
 const hash = (str: string|BinaryData): string => {
-  const hash = sha256(str);
-  return HexEncode.stringify(hash);
+  const hash = sha256(str?.toString());
+  return hash.toString(HexEncode);
 }
 
 export interface DiffElement {

@@ -477,7 +477,11 @@ export const usePublicApi = (app: Express, datasource: DataSource) => {
       }
       const kvState = await getCommitState(datasource, repositoryId, sha);
       const binaries = kvState.binaries.map((binaryRef) => {
-        return `http://127.0.0.1:63403/binary/${binaryRef}?token=${binarySession.token}`;
+        return {
+          hash: binaryRef.split(".")[0],
+          fileName: binaryRef,
+          url: `http://127.0.0.1:63403/binary/${binaryRef}?token=${binarySession.token}`
+        }
       });
       res.send({ binaries });
     }

@@ -452,12 +452,16 @@ const pluginManifestExists = async (
 /* REPOS */
 
 export const readRepos = async (): Promise<string[]> => {
-  const repoDir = await fs.promises.readdir(vReposPath());
-  return repoDir?.filter((repoName) => {
-    return /^[0-9a-fA-F]{8}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{12}$/.test(
-      repoName
-    );
-  });
+  try {
+    const repoDir = await fs.promises.readdir(vReposPath());
+    return repoDir?.filter((repoName) => {
+      return /^[0-9a-fA-F]{8}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{12}$/.test(
+        repoName
+      );
+    });
+  } catch(e) {
+    return [];
+  }
 };
 
 const repoExists = async (repoId?: string): Promise<boolean> => {

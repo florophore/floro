@@ -436,6 +436,7 @@ export const generateTypeScriptGeneratorAPI = async (
   );
 
   let code = "";
+  code += "export type FileRef = `${string}.${string}`;\n\n";
 
   const schemaTypesCode = drawSchematicTypes(
     diffableListWithPartials,

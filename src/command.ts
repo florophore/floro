@@ -24,6 +24,7 @@ import clc from "cli-color";
 import yargs from "yargs";
 import { render } from 'prettyjson';
 import { buildFloroGeneratorTemplate, checkDirectoryIsGeneratorWorkingDirectory, generateLocalTypescriptGeneratorAPI, inspectLocalGeneratorManifest, installGeneratorDependency, pullGeneratorDeps, validateLocalGenerator } from "./generatorcreator";
+import { buildModule, syncModule, watchModule } from "./module";
 
 buildFloroFilestructure();
 
@@ -50,16 +51,6 @@ yargs
     handler: async () => {
       await killDaemon();
       await startDaemon();
-      pm2.disconnect();
-    },
-  })
-  .command({
-    command: "reset-disk",
-    describe: "Removes local .floro from disk (Caution)",
-    handler: async () => {
-      await logout();
-      await killDaemon();
-      await reset();
       pm2.disconnect();
     },
   })
@@ -111,13 +102,126 @@ yargs
     },
   })
   .command({
+    command: "module",
+    describe: "Build application state from repository",
+    builder: (yargs) => {
+      return yargs
+        .option("m", {
+          alias: "module",
+          describe: `specify the floro module script`,
+          default: 'floro.module.js',
+          type: 'string'
+        })
+        .option("k", {
+          alias: "remote-key",
+          describe: `specify a remote api key to pull with (only needed if logged out)`,
+          type: 'string'
+        })
+        .option("l", {
+          alias: "local",
+          describe: `syncs meta state from local repository branch`,
+          type: 'boolean'
+        })
+        .command({
+          command: "sync",
+          describe: "syncs meta.",
+          builder: (yargs) => {
+            return yargs
+            .option("b", {
+              alias: "build",
+              describe: `build after syncing.`,
+              type: "boolean",
+            });
+          },
+          handler: async (options) => {
+            const cwd = process.cwd();
+            const syncResult = await syncModule(cwd, options.module, options.local ?? false);
+            if (syncResult.status == "ok") {
+              console.log(
+                clc.cyanBright.bgBlack.underline(
+                  syncResult.message
+                )
+              );
+            } else {
+              console.log(
+                clc.redBright.bgBlack.underline(
+                  syncResult.message
+                )
+              )
+              process.exitCode = 1;
+              return;
+            }
+            if (options.build) {
+              const buildResult = await buildModule(cwd, options.module, options.local ?? false, options['remote-key']);
+              if (buildResult.status == "ok") {
+                console.log(
+                  clc.cyanBright.bgBlack.underline(
+                    buildResult.message
+                  )
+                );
+              } else {
+                console.log(
+                  clc.redBright.bgBlack.underline(
+                    buildResult.message
+                  )
+                )
+                process.exitCode = 1;
+                return;
+              }
+            }
+          },
+        })
+        .command({
+          command: "build",
+          describe: "builds application state from floro repository",
+          handler: async (options) => {
+            const cwd = process.cwd();
+            const result = await buildModule(cwd, options.module, options.local ?? false);
+            if (result.status == "ok") {
+              console.log(
+                clc.cyanBright.bgBlack.underline(
+                  result.message
+                )
+              );
+            } else {
+              clc.redBright.bgBlack.underline(
+                result.message
+              )
+              process.exitCode = 1;
+              return;
+            }
+          },
+        })
+        .command({
+          command: "watch",
+          describe: "watch floro state and rebuild",
+          handler: async (options) => {
+            const cwd = process.cwd();
+            console.log("watching module");
+            console.log("crl+c to stop watching");
+            const result = await watchModule(cwd, options.module);
+            if (result?.message) {
+              console.log(
+                clc.cyanBright.bgBlack.underline(
+                  result.message
+                )
+              );
+            }
+          },
+        })
+    },
+    handler: () => {
+      yargs.showHelp();
+    },
+  })
+  .command({
     command: "generator",
     describe: "Generator development commands",
     builder: (yargs) => {
       return yargs
         .command({
           command: "pull-deps",
-          describe: "Installs dependies from floro.manifest.json",
+          describe: "Installs dependies from floro.generator.json",
           handler: async () => {
             const readFunction = await getLocalManifestReadFunction(process.cwd());
             if (!readFunction) {
@@ -275,7 +379,9 @@ yargs
           },
         })
     },
-    handler: null
+    handler: () => {
+      yargs.showHelp();
+    },
   })
   .command({
     command: "plugin",
@@ -516,6 +622,14 @@ yargs
           },
         })
     },
-    handler: null,
+    handler: () => {
+      yargs.showHelp();
+    },
+  })
+  .command({
+    command: '*',
+    handler() {
+      yargs.showHelp();
+    }
   })
   .help().argv;

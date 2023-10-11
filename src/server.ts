@@ -127,6 +127,7 @@ import {
 } from "./apikeys";
 import { usePublicApi } from "./api";
 import webhookQueue from "./webhook_queue";
+import { triggerExtensionStateUpdate, watchRepos } from "./watch";
 
 const app = express();
 const server = http.createServer(app);
@@ -136,28 +137,45 @@ const pluginsJSON = getPluginsJson();
 
 const remoteHost = getRemoteHostSync();
 const safeOriginRegex = new RegExp(`^(https?://(localhost|127.0.0.1):\\d{1,5})|(${remoteHost})`);
+const chromeExtSafeOriginRegex = new RegExp(
+  "^(chrome-extension://*|(https?://(localhost|127.0.0.1):\\d{1,5})|(${remoteHost}))"
+);
 
-const corsNoNullOriginDelegate = (req, callback) => {
+const corsNoNullOriginDelegate = async (req, callback) => {
   const origin = req.headers?.origin;
   if (
     origin != 'null' && (
-      safeOriginRegex.test(req.connection.remoteAddress) ||
-      req.connection.remoteAddress == "127.0.0.1"
+      (origin && safeOriginRegex.test(origin)) ||
+      (req.connection.remoteAddress == "127.0.0.1" && !origin)
     )
   ) {
     callback(null, {
       origin: true,
     });
   } else {
+    if (req.connection.remoteAddress == "127.0.0.1" && origin && origin != "null") {
+        const apiKeySecret = req.headers?.authorization;
+        if (apiKeySecret) {
+          const globalApiKeys = await datasource.readApiKeys();
+          const apiKey = globalApiKeys.find((k) => k.secret == apiKeySecret);
+          if (apiKey) {
+            callback(null, {
+              origin: true,
+            });
+            return;
+          }
+        }
+    }
     callback("Invalid origin", {
-      origin: false,
+      origin: false
     });
   }
 };
 
 const io = new Server(server, {
   cors: {
-    origin: safeOriginRegex,
+    origin: chromeExtSafeOriginRegex,
+    credentials: true
   },
 });
 
@@ -170,24 +188,47 @@ const host = !!process.env.FLORO_VCDN_HOST
   ? process.env.FLORO_VCDN_HOST
   : DEFAULT_HOST;
 
-io.on("connection", (socket) => {
+io.on("connection", async (socket) => {
+
+  const origin = socket.handshake?.headers.origin;
+  const remoteAddress = socket?.handshake?.address;
+  let allowConnection = false;
   if (
-    socket?.handshake?.headers?.referer &&
-    !safeOriginRegex.test(socket?.handshake?.headers?.referer)
+    origin != 'null' && (
+      (origin && safeOriginRegex.test(origin)) ||
+      (remoteAddress == "127.0.0.1" && !origin)
+    )
   ) {
+    allowConnection = true;
+  } else {
+    if (remoteAddress == "127.0.0.1" && origin && origin != "null") {
+        const apiKeySecret = socket?.handshake?.query?.['authorization'];
+        if (apiKeySecret) {
+          const globalApiKeys = await datasource.readApiKeys();
+          const apiKey = globalApiKeys.find((k) => k.secret == apiKeySecret);
+          if (apiKey) {
+            allowConnection = true;
+          }
+        }
+    }
+  }
+  if (!allowConnection) {
     socket.disconnect();
     return;
   }
+
   const client = socket?.handshake?.query?.["client"] as
     | undefined
-    | ("web" | "desktop" | "cli");
-  if (["web", "desktop", "cli"].includes(client)) {
+    | ("web" | "desktop" | "cli" | "extension");
+  if (["web", "desktop", "cli", "extension"].includes(client)) {
     multiplexer[client].push(socket);
-    socket.on("disconnect", () => {
+    socket.conn.on("close", () => {
       multiplexer[client] = multiplexer[client].filter((s) => s !== socket);
     });
   }
 });
+
+watchRepos(datasource);
 
 app.use(busboy());
 
@@ -198,7 +239,7 @@ app.use(function (_req, res, next) {
   res.header("Access-Control-Allow-Origin", "*");
   res.header(
     "Access-Control-Allow-Headers",
-    "Origin, X-Requested-With, Content-Type, Accept"
+    "Origin, X-Requested-With, Content-Type, Accept, Authorization"
   );
   next();
 });
@@ -216,7 +257,8 @@ app.get(
 app.get(
   "/session",
   cors(corsNoNullOriginDelegate),
-  async (_req, res): Promise<void> => {
+  async (req, res): Promise<void> => {
+    res.header("Access-Control-Allow-Origin", "*");
     const session = await getUserSessionAsync();
     res.send(session);
   }
@@ -226,6 +268,7 @@ app.post(
   "/session",
   cors(corsNoNullOriginDelegate),
   async (req, res): Promise<void> => {
+    res.header("Access-Control-Allow-Origin", "*");
     const session = await getUserSessionAsync();
     const postedSession: { clientKey: string}|null = req.body.session;
     const postedUser: any|null = req.body.user;
@@ -683,6 +726,25 @@ app.get(
     res.send({
       repoInfos,
     });
+  }
+);
+
+app.post(
+  "/repo/:repoId/watch/update",
+  cors(corsNoNullOriginDelegate),
+  async (req, res): Promise<void> => {
+    const repoId = req.params["repoId"];
+    const exists = await datasource.repoExists(repoId);
+    try {
+      if (exists) {
+        await triggerExtensionStateUpdate(datasource, repoId);
+        res.send({ status: "ok" });
+      } else {
+        res.send({ status: "fail" });
+      }
+    } catch(e) {
+        res.send({ status: "fail" });
+    }
   }
 );
 
@@ -3057,6 +3119,7 @@ app.post("/binary/upload", async (req, res) => {
       });
     }
   } catch (e) {
+    console.log("E", e);
     res.sendStatus(400);
   }
 });
@@ -3084,7 +3147,7 @@ app.get("/binary/:binaryRef", async (req, res) => {
   const mimeType = mime.contentType(path.extname(fullPath));
   res.setHeader("Content-Type", mimeType);
   const readStream = fs.createReadStream(fullPath);
-  readStream.on("data", (data) => res.send(data));
+  readStream.on("data", (data) => res.write(data));
   readStream.on("close", () => res.end());
 });
 

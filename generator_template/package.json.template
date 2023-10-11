@@ -1,10 +1,22 @@
 {
   "name": "GENERATOR_NAME",
-  "main": "dist/src/index.js",
+  "version": "0.0.0",
+  "main": "dist/cjs/src/index.js",
+  "module": "src/index.ts",
+  "types": "./dist/types/src/index.d.ts",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/types/src/index.d.ts",
+      "import": "./src/index.ts",
+      "require": "./dist/cjs/src/index.js",
+      "default": "./src/index.ts"
+    }
+  },
   "scripts": {
-    "tsc": "tsc --build",
-    "clean": "rimraf build tsconfig.tsbuildinfo",
-    "build": "npm run clean && npm run tsc",
+    "compile": "tsc -b ./tsconfig.cjs.json ./tsconfig.esm.json ./tsconfig.types.json",
+    "build:clean": "rm -rf ./dist",
+    "build": "yarn build:clean && yarn compile && ./fixup.sh",
     "test": "jest"
   },
   "author": "",

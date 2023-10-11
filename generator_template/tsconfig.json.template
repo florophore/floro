@@ -1,8 +1,7 @@
 {
   "compilerOptions": {
     "declaration": true,
-    "isolatedModules": false,
-    "composite": true,
+    "isolatedModules": true,
     "target": "ESNext",
     "module": "CommonJS",
     "moduleResolution": "node",
@@ -13,6 +12,10 @@
     "removeComments": false,
     "noImplicitAny": false,
     "resolveJsonModule": true,
+    "rootDirs": [
+      "src",
+      "floro"
+    ],
     "outDir": "dist",
     "types": ["node", "jest"],
     "typeRoots" : ["./node_modules/@types"],
@@ -20,8 +23,10 @@
   "exclude": [
     "node_modules",
     "dist",
+    "exports",
   ],
   "include": [
+    "floro/floro-generator-schema-api.ts",
     "**/*.ts",
     "**/*.json",
   ]

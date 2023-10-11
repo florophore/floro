@@ -1,6 +1,6 @@
 {
   "name": "floro",
-  "version": "0.0.13",
+  "version": "0.0.14",
   "description": "",
   "main": "dist/src/index.js",
   "bin": {
@@ -13,6 +13,7 @@
     "test": "FLORO_VCDN_HOST=localhost FLORO_VCDN_PORT=63405 jest",
     "test:debug": "FLORO_VCDN_HOST=localhost FLORO_VCDN_PORT=63405 node --inspect-brk node_modules/.bin/jest --runInBand",
     "dev": "NODE_ENV=development nodemon -e ts --watch ./src --ignore ./dist --experimental-specifier-resolution=node src/server.ts",
+    "dev:command": "NODE_ENV=development nodemon -e ts --watch ./src --ignore ./dist --experimental-specifier-resolution=node --exec yarn build && ts-node",
     "dev:debug": "nodemon --exec \"node --inspect-brk=0.0.0.0:9229 --require ts-node/register src/server.ts\""
   },
   "author": "",
