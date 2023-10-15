@@ -35,72 +35,75 @@ class WebhookQueue {
     if (this.events[event.eventId] !== undefined) {
       clearTimeout(this.events[event.eventId]);
       delete this.events[event.eventId];
-      this.events[event.eventId] = setTimeout(async () => {
-        try {
-          delete this.events[event.eventId];
-          const webhookKeys = await datasource.readWebhookKeys();
-          const enabledWebhooks = await datasource.readRepoEnabledWebhookKeys(
-            event.repositoryId
+    }
+    this.events[event.eventId] = setTimeout(async () => {
+      try {
+        delete this.events[event.eventId];
+        const webhookKeys = await datasource.readWebhookKeys();
+        const enabledWebhooks = await datasource.readRepoEnabledWebhookKeys(
+          event.repositoryId
+        );
+        for (const enabledWebhook of enabledWebhooks) {
+          const webhookKey = webhookKeys.find(
+            (k) => k.id == enabledWebhook.webhookKeyId
           );
-          for (const enabledWebhook of enabledWebhooks) {
-            const webhookKey = webhookKeys.find(
-              (k) => k.id == enabledWebhook.webhookKeyId
-            );
-            if (!webhookKey) {
-              continue;
-            }
-            const url = await getWebhookUrl(
-              datasource,
-              event.repositoryId,
-              enabledWebhook.webhookKeyId
-            );
-            const secret = await getWebhookSecret(
-              datasource,
-              event.repositoryId,
-              enabledWebhook.webhookKeyId
-            );
+          if (!webhookKey) {
+            continue;
+          }
+          const url = await getWebhookUrl(
+            datasource,
+            event.repositoryId,
+            enabledWebhook.id
+          );
+          const secret = await getWebhookSecret(
+            datasource,
+            event.repositoryId,
+            enabledWebhook.id
+          );
 
-            const jsonPayload = JSON.stringify({
-              event: event.eventName,
-              repositoryId: event.repositoryId,
-              payload: event.payload,
-            });
-            const hmac = createHmac("sha256", secret);
-            const signature =
-              "sha256=" + hmac.update(jsonPayload).digest("hex");
-            const attempt = async () => {
-              try {
-                const result = await axios({
-                  method: "post",
-                  url,
-                  headers: {
-                    "Content-Type": "application/json",
-                    "Floro-Signature-256": signature,
-                  },
-                  data: jsonPayload,
-                  timeout: 5000,
-                });
-                return result.status >= 200 && result.status < 300;
-              } catch (e) {
-                return false;
-              }
-            };
-
-            for (let i = 0; i < 3; ++i) {
-              const isOkay = await attempt();
-              if (isOkay) {
-                break;
-              }
-              // back off 1s
-              await new Promise((resolve) => {
-                setTimeout(() => resolve(true), 1000 * Math.pow(i, 2));
+          const jsonPayload = JSON.stringify({
+            event: event.eventName,
+            repositoryId: event.repositoryId,
+            payload: event.payload,
+          });
+          const hmac = createHmac("sha256", secret);
+          const signature =
+            "sha256=" + hmac.update(jsonPayload).digest("hex");
+          const attempt = async () => {
+            try {
+              const result = await axios({
+                method: "post",
+                url,
+                headers: {
+                  "Content-Type": "application/json",
+                  "Floro-Signature-256": signature,
+                },
+                data: jsonPayload,
+                timeout: 5000,
               });
+              return result.status >= 200 && result.status < 300;
+            } catch (e) {
+              return false;
             }
+          };
+
+          let isOkay = false;
+          for (let i = 0; i < 3; ++i) {
+            isOkay = await attempt();
+            if (isOkay) {
+              break;
+            }
+            // back off 1s
+            await new Promise((resolve) => {
+              setTimeout(() => resolve(true), 1000 * Math.pow(i, 2));
+            });
+          }
+          if (!isOkay) {
             console.error("Failed to send webhook event to " + url);
           }
-        } catch (e) {}
-      }, DEBOUNCE_TIME);
-    }
+        }
+      } catch (e) {}
+    }, DEBOUNCE_TIME);
   }
 
   public addBranchUpdate(
