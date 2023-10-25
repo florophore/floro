@@ -101,6 +101,7 @@ export interface RemoteSettings {
   canReadRepo: boolean;
   canPushBranches: boolean;
   canChangeSettings: boolean;
+  canWriteAnnouncements: boolean;
   accountInGoodStanding: boolean;
   branchRules: Array<BranchRuleSettings>;
 }
