@@ -220,12 +220,21 @@ io.on("connection", async (socket) => {
   const client = socket?.handshake?.query?.["client"] as
     | undefined
     | ("web" | "desktop" | "cli" | "extension");
+
+  const onOpenEvent = (args) => {
+    if (client != "web") {
+      return;
+    }
+    broadcastToClient("desktop", "open-link", args);
+  }
   if (["web", "desktop", "cli", "extension"].includes(client)) {
     multiplexer[client].push(socket);
     socket.conn.on("close", () => {
       multiplexer[client] = multiplexer[client].filter((s) => s !== socket);
+      socket.off("open-event", onOpenEvent);
     });
   }
+  socket.on("open-event", onOpenEvent);
 });
 
 watchRepos(datasource);
@@ -260,7 +269,7 @@ app.get(
   async (req, res): Promise<void> => {
     res.header("Access-Control-Allow-Origin", "*");
     const session = await getUserSessionAsync();
-    res.send(session);
+    res.send(session ?? {});
   }
 );
 
