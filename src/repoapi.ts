@@ -78,6 +78,7 @@ import {
   getKVStateForPlugin,
   enforceBoundedSets,
   indexArrayDuplicates,
+  defaultVoidedState,
 } from "./plugins";
 import { LicenseCodes } from "./licensecodes";
 import { DataSource } from "./datasource";
@@ -1311,7 +1312,6 @@ export const updatePlugins = async (
     store = await cascadePluginState(datasource, schemaMap, store);
     store = await nullifyMissingFileRefs(datasource, schemaMap, store);
     const binaries = await collectFileRefs(datasource, schemaMap, store);
-    const storeBefore = { ...currentRenderedState.store };
     currentRenderedState.store = store;
     currentRenderedState.plugins = sortedUpdatedPlugins;
     currentRenderedState.binaries = uniqueStrings(binaries);
@@ -1320,7 +1320,6 @@ export const updatePlugins = async (
       currentRenderedState
     );
     sanitizedRenderedState.store = {
-      //...storeBefore, // this is so uninstalling doesn't delete the plugin state from the store until commit
       ...sanitizedRenderedState.store,
     };
     await datasource.saveRenderedState(repoId, sanitizedRenderedState);
@@ -4273,9 +4272,13 @@ export const sanitizeApplicationKV = async (
   rendered.plugins = uniqueKVObj(rendered.plugins);
   rendered.licenses = uniqueKVObj(rendered.licenses);
   rendered.binaries = uniqueStrings(rendered.binaries);
+
+  const manifests = await getPluginManifests(datasource, rendered.plugins);
+  const schemaMap = manifestListToSchemaMap(manifests);
+  const store = await defaultVoidedState(datasource, schemaMap, rendered.store);
+  rendered.store = store;
   return rendered;
 };
-
 
 export const dedupApplicationKV = async (
   datasource: DataSource,

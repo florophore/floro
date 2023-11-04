@@ -17,6 +17,7 @@ import { broadcastAllDevices } from "./multiplexer";
 import {
   cascadePluginState,
   collectFileRefs,
+  defaultVoidedState,
   enforceBoundedSets,
   getInvalidRootStates,
   getKVStateForPlugin,
@@ -1648,9 +1649,12 @@ export const convertCommitStateToRenderedState = async (
   appKVState: ApplicationKVState
 ): Promise<RenderedApplicationState> => {
   const store = await buildStateStore(datasource, appKVState);
+  const manifests = await getPluginManifests(datasource, appKVState.plugins);
+  const schemaMap = manifestListToSchemaMap(manifests);
+  const defaultedStore = await defaultVoidedState(datasource, schemaMap, store);
   return {
     ...appKVState,
-    store,
+    store: defaultedStore,
   };
 };
 
