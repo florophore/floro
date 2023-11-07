@@ -363,7 +363,11 @@ export const writeToDevManifestCache = async (
       vDevManifestCachePath(),
       { encoding: "utf-8" }
     );
-    const cache = JSON.parse(manifestCacheString.toString());
+    const cache = JSON.parse(
+      (manifestCacheString.toString() ?? "") == ""
+        ? "{}"
+        : manifestCacheString.toString()
+    );
     cache[pluginName] = manifest;
     await fs.promises.writeFile(
       vDevManifestCachePath(),

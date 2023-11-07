@@ -38,7 +38,6 @@ import { broadcastAllDevices } from "./multiplexer";
 import tar from "tar";
 import { SourceCommitNode } from "./sourcegraph";
 import { Stream } from "stream";
-import { dir } from "console";
 import { ApiKey, RepoEnabledApiKey, RepoEnabledWebhookKey, WebhookKey } from "./apikeys";
 
 axios.defaults.validateStatus = function () {
@@ -710,7 +709,9 @@ const readCommits = async (
             parent: commit.parent,
             historicalParent: commit.historicalParent,
             userId: commit.userId,
+            username: commit.username,
             authorUserId: commit.authorUserId,
+            authorUsername: commit.authorUsername,
             mergeBase: commit.mergeBase,
             revertFromSha: commit.revertFromSha,
             revertToSha: commit.revertToSha,

@@ -4,7 +4,9 @@ export interface SourceCommitNode extends CommitHistory {
     children?: Array<SourceCommitNode>;
     message: string;
     userId: string;
+    username: string;
     authorUserId: string;
+    authorUsername: string;
     timestamp: string;
     isBranchHead?: boolean;
     isInBranchLineage?: boolean;

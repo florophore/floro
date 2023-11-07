@@ -250,7 +250,7 @@ export const syncModule = async (
       const generatorSchemaMap = manifestListToSchemaMap(generatorManifestList);
       const tmpDataStore = makeDataSource({
         getPluginManifest: async (pluginName, pluginVersion) => {
-          return (
+          const result = (
             repoManifests?.find(
               (m) => m.name == pluginName && m.version == pluginVersion
             ) ??
@@ -258,6 +258,23 @@ export const syncModule = async (
               (m) => m.name == pluginName && m.version == pluginVersion
             )
           );
+          if (result) {
+            return result;
+          }
+
+          const pluginManifestPath = path.join(
+            vPluginsPath(),
+            pluginName,
+            pluginVersion,
+            "floro",
+            "floro.manifest.json"
+          );
+          const existsLocallly = await existsAsync(pluginManifestPath);
+          if (existsLocallly) {
+            const manifestString = await fs.promises.readFile(pluginManifestPath);
+            return JSON.parse(manifestString.toString());
+          }
+          return null;
         },
       });
       const isCompatible = await pluginManifestIsSubsetOfManifest(
@@ -498,7 +515,7 @@ export const buildModuleFromState = async (cwd: string, moduleFile: string) => {
       const generatorSchemaMap = manifestListToSchemaMap(generatorManifestList);
       const tmpDataStore = makeDataSource({
         getPluginManifest: async (pluginName, pluginVersion) => {
-          return (
+          const result = (
             repoManifests?.find(
               (m) => m.name == pluginName && m.version == pluginVersion
             ) ??
@@ -506,6 +523,23 @@ export const buildModuleFromState = async (cwd: string, moduleFile: string) => {
               (m) => m.name == pluginName && m.version == pluginVersion
             )
           );
+          if (result) {
+            return result;
+          }
+
+          const pluginManifestPath = path.join(
+            vPluginsPath(),
+            pluginName,
+            pluginVersion,
+            "floro",
+            "floro.manifest.json"
+          );
+          const existsLocallly = await existsAsync(pluginManifestPath);
+          if (existsLocallly) {
+            const manifestString = await fs.promises.readFile(pluginManifestPath);
+            return JSON.parse(manifestString.toString());
+          }
+          return null;
         },
       });
 
