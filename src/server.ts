@@ -138,7 +138,7 @@ const pluginsJSON = getPluginsJson();
 const remoteHost = getRemoteHostSync();
 const safeOriginRegex = new RegExp(`^(https?://(localhost|127.0.0.1):\\d{1,5})|(${remoteHost})`);
 const chromeExtSafeOriginRegex = new RegExp(
-  "^(chrome-extension://*|(https?://(localhost|127.0.0.1):\\d{1,5})|(${remoteHost}))"
+  `^(chrome-extension://*|(https?://(localhost|127.0.0.1):\\d{1,5})|(${remoteHost}))`
 );
 
 const corsNoNullOriginDelegate = async (req, callback) => {

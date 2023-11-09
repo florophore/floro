@@ -8,7 +8,7 @@ export const userHome = os.homedir();
 // ~/.floro_env
 export const floroEnvPath = path.join(userHome, ".floro_env");
 let floroEnv: "production" | "staging" | "dev" =
-  fs.existsSync(floroEnvPath) ? (fs.readFileSync(floroEnvPath, { encoding: "utf-8" }) as
+  fs.existsSync(floroEnvPath) ? (fs.readFileSync(floroEnvPath, { encoding: "utf-8" })?.trim?.() as
     | "production"
     | "staging"
     | "dev") ?? "production" : "production";
@@ -321,7 +321,7 @@ export const writePluginsJsonAsync = async (plugins: {[key: string]: { proxy?: b
 
 export const getRemoteHostSync = (): string => {
   try {
-    const remoteHostTxt = fs.readFileSync(vConfigRemotePath());
+    const remoteHostTxt = fs.readFileSync(vConfigRemotePath(), { encoding: 'utf-8'});
     return remoteHostTxt.toString().split(os.EOL).find(s => {
       if (s.trimStart()[0] == '#') {
         return false
