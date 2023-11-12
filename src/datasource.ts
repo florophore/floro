@@ -267,8 +267,7 @@ const pullPluginTar = async (
 ): Promise<Manifest | null> => {
   const downloadPath = path.join(vTMPPath(), `${hash}.tar.gz`);
   const pluginPath = path.join(vPluginsPath(), name, version);
-  const didWrite = await axios.get(link);
-  await axios({
+  const didWrite = await axios({
     method: "get",
     url: link,
     onDownloadProgress: (progressEvent) => {
@@ -298,40 +297,47 @@ const pullPluginTar = async (
         }
       });
     });
-  });
-  const exists = await existsAsync(pluginPath);
-  if (!exists && didWrite) {
-    await fs.promises.mkdir(pluginPath, { recursive: true });
-    if (process.env.NODE_ENV != "test" && os.platform() != "win32") {
-      await fs.promises.chmod(pluginPath, 0o755);
+  }).catch(e => {
+    return false;
+  })
+  try {
+    const exists = await existsAsync(pluginPath);
+    if (!exists && didWrite) {
+      await fs.promises.mkdir(pluginPath, { recursive: true });
+      if (process.env.NODE_ENV != "test" && os.platform() != "win32") {
+        await fs.promises.chmod(pluginPath, 0o755);
+      }
+      await tar.x({
+        file: downloadPath,
+        cwd: pluginPath,
+      });
     }
-    await tar.x({
-      file: downloadPath,
-      cwd: pluginPath,
-    });
+
+    if (exists && didWrite) {
+      await tar.x({
+        file: downloadPath,
+        cwd: pluginPath,
+      });
+    }
+    const downloadExists = await existsAsync(downloadPath);
+    if (downloadExists) {
+      await fs.promises.rm(downloadPath);
+    }
+    if (didWrite) {
+      const pluginManifestPath = path.join(
+        vPluginsPath(),
+        name,
+        version,
+        "floro",
+        "floro.manifest.json"
+      );
+      const manifestString = await fs.promises.readFile(pluginManifestPath);
+      return JSON.parse(manifestString.toString());
+    }
+    return null;
+  } catch(e) {
+    return null;
   }
-  if (exists && didWrite) {
-    await tar.x({
-      file: downloadPath,
-      cwd: pluginPath,
-    });
-  }
-  const downloadExists = await existsAsync(downloadPath);
-  if (downloadExists) {
-    await fs.promises.rm(downloadPath);
-  }
-  if (didWrite) {
-    const pluginManifestPath = path.join(
-      vPluginsPath(),
-      name,
-      version,
-      "floro",
-      "floro.manifest.json"
-    );
-    const manifestString = await fs.promises.readFile(pluginManifestPath);
-    return JSON.parse(manifestString.toString());
-  }
-  return null;
 };
 
 export const fetchRemoteManifest = async (

@@ -59,6 +59,7 @@ export const watchRepos = async (datasource: DataSource) => {
   broadcastToClient("extension", "update:repos", {
     repos
   });
+
   fs.watch(vReposPath(), async () => {
     await watchStateFiles(datasource);
   });
