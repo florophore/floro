@@ -20,6 +20,7 @@ import {
   getUserSessionAsync,
   getRemoteHostAsync,
   getRemoteHostSync,
+  getNoramlizedEnv,
 } from "./filestructure";
 import { Server } from "socket.io";
 import { createProxyMiddleware } from "http-proxy-middleware";
@@ -278,9 +279,14 @@ app.post(
   cors(corsNoNullOriginDelegate),
   async (req, res): Promise<void> => {
     res.header("Access-Control-Allow-Origin", "*");
+    if (req.body.env != getNoramlizedEnv()) {
+      res.sendStatus(400);
+      return;
+    }
     const session = await getUserSessionAsync();
     const postedSession: { clientKey: string}|null = req.body.session;
     const postedUser: any|null = req.body.user;
+    const env: any|null = req.body.env;
     if (postedSession?.clientKey) {
       if (!session || session?.clientKey != postedSession?.clientKey) {
         await writeUserSession(postedSession);
@@ -3005,6 +3011,10 @@ app.post("/login", cors(corsNoNullOriginDelegate), async (req, res) => {
 
 app.post("/logout", cors(corsNoNullOriginDelegate), async (req, res) => {
   try {
+    if (req.body.env != getNoramlizedEnv()) {
+      res.send({});
+      return;
+    }
     await removeUserSession();
     await removeUser();
   } catch (e) {

@@ -31,6 +31,16 @@ const getEnvHomeName = () => {
   return ".floro";
 }
 
+export const getNoramlizedEnv = () => {
+  if (floroEnv == "staging") {
+    return `staging`;
+  }
+  if (floroEnv == "dev") {
+    return `development`;
+  }
+  return "production";
+}
+
 const getEnvRemoteHostName = () => {
   if (floroEnv == "staging") {
     return `https://floro-staging.com`;
