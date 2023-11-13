@@ -722,7 +722,8 @@ export const generateTypeScriptAPI = async (
   const providerCode = drawProviderApiCode();
   code += providerCode;
 
-  code += GENERATED_CODE_FUNCTIONS + "\n\n";
+  const generatedCodeFunctions = await GENERATED_CODE_FUNCTIONS();
+  code += generatedCodeFunctions + "\n\n";
 
   const queryTypesCode = drawMakeQueryRef(referenceArgsMap, useReact);
   code += queryTypesCode + "\n\n";

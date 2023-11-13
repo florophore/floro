@@ -1,11 +1,22 @@
 import React from "react";
+import { FloroProvider } from "./floro-schema-api";
 
-function App() {
+
+function Main() {
   return (
     <div>
       {'hello world'}
     </div>
   );
 }
+
+const App = () => {
+ return (
+  <FloroProvider>
+    <Main/>
+  </FloroProvider>
+ )
+}
+
 
 export default App;
