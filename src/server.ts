@@ -213,6 +213,11 @@ io.on("connection", async (socket) => {
         }
     }
   }
+  const normalizedEnv = socket?.handshake?.query?.["env"];
+  if (normalizedEnv && getNoramlizedEnv() != normalizedEnv) {
+    socket.disconnect();
+    return;
+  }
   if (!allowConnection) {
     socket.disconnect();
     return;
