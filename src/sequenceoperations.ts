@@ -295,7 +295,9 @@ export const getMergeSequence = (
   origin: Array<string>,
   from: Array<string>,
   into: Array<string>,
-  direction: "theirs" | "yours" = "yours"
+  direction: "theirs" | "yours" = "yours",
+  reconciliationDirection: "right" | "left" = "right",
+  skipLeftReconciliationCheck: boolean = false
 ): Array<string> => {
   if (from.length == 0 && into.length == 0) {
     return [];
@@ -317,21 +319,23 @@ export const getMergeSequence = (
 
   const lcs = getGreatestCommonLCS(origin, from, into);
   if (lcs.length == 0) {
-    return getMergeSubSequence(from, into, direction);
+    return getMergeSubSequence(from, into, direction, reconciliationDirection);
   }
-  const originOffsets = getLCSBoundaryOffsets(origin, lcs);
+  const originOffsets = getLCSBoundaryOffsets(origin, lcs, reconciliationDirection);
   const originSequences = getLCSOffsetMergeSeqments(origin, originOffsets);
-  const fromOffsets = getLCSBoundaryOffsets(from, lcs);
+  const fromOffsets = getLCSBoundaryOffsets(from, lcs, reconciliationDirection);
   const fromSequences = getLCSOffsetMergeSeqments(from, fromOffsets);
   const fromReconciledSequences = getReconciledSequence(
     originSequences,
-    fromSequences
+    fromSequences,
+    reconciliationDirection
   );
-  const intoOffsets = getLCSBoundaryOffsets(into, lcs);
+  const intoOffsets = getLCSBoundaryOffsets(into, lcs, reconciliationDirection);
   const intoSequences = getLCSOffsetMergeSeqments(into, intoOffsets);
   const intoReconciledSequences = getReconciledSequence(
     originSequences,
-    intoSequences
+    intoSequences,
+    reconciliationDirection
   );
 
   let mergeSequences = [];
@@ -349,7 +353,8 @@ export const getMergeSequence = (
         getMergeSubSequence(
           fromReconciledSequences[mergeIndex],
           intoReconciledSequences[mergeIndex],
-          direction
+          direction,
+          reconciliationDirection
         )
       );
     }
@@ -358,15 +363,50 @@ export const getMergeSequence = (
     }
     mergeIndex++;
   }
-  const merge = mergeSequences.flatMap((v) => v);
-  return merge;
+  const reconciledMerge = mergeSequences.flatMap((v) => v);
+
+  if (!skipLeftReconciliationCheck) {
+    const canAutoMerge =
+      reconciledMerge ===
+      getMergeSequence(
+        origin,
+        from,
+        into,
+        direction == "theirs" ? "yours" : "theirs",
+        "right",
+        true
+      );
+    if (!canAutoMerge && reconciliationDirection == "right") {
+      const leftReconciledYours = getMergeSequence(
+        origin,
+        from,
+        into,
+        "yours",
+        "left",
+        true
+      );
+      const leftReconciledTheirs = getMergeSequence(
+        origin,
+        from,
+        into,
+        "theirs",
+        "left",
+        true
+      );
+      if (leftReconciledYours == leftReconciledTheirs) {
+        return leftReconciledYours;
+      }
+    }
+  }
+  return reconciledMerge;
 };
 
 // yours prioritizes into (you) from (them)
 const getMergeSubSequence = (
   from: Array<string>,
   into: Array<string>,
-  direction: "theirs" | "yours" = "yours"
+  direction: "theirs" | "yours" = "yours",
+  reconciliationDirection: "right" | "left" = "right",
 ): Array<string> => {
   if (from.length == 0 && into.length == 0) {
     return [];
@@ -380,10 +420,10 @@ const getMergeSubSequence = (
     }
   }
 
-  const fromOffsets = getLCSBoundaryOffsets(from, lcs);
+  const fromOffsets = getLCSBoundaryOffsets(from, lcs, reconciliationDirection);
   const fromSequences = getLCSOffsetMergeSeqments(from, fromOffsets);
 
-  const intoOffsets = getLCSBoundaryOffsets(into, lcs);
+  const intoOffsets = getLCSBoundaryOffsets(into, lcs, reconciliationDirection);
   const intoSequences = getLCSOffsetMergeSeqments(into, intoOffsets);
 
   let mergeSequences = [];
@@ -481,7 +521,8 @@ const sequencesAreEqual = (a: Array<string>, b: Array<string>) => {
 
 const getReconciledSequence = (
   originSequences: Array<Array<string>>,
-  sequences: Array<Array<string>>
+  sequences: Array<Array<string>>,
+  reconciliationDirection: "right" | "left"
 ): Array<Array<string>> => {
   let out = [];
   for (let i = 0; i < sequences.length; ++i) {
@@ -489,7 +530,7 @@ const getReconciledSequence = (
       out.push([]);
     } else {
       const subLCS = getLCS(originSequences[i], sequences[i]);
-      const offsets = getLCSBoundaryOffsets(sequences[i], subLCS);
+      const offsets = getLCSBoundaryOffsets(sequences[i], subLCS, reconciliationDirection);
       let offsetIndex = 0;
       const next = [];
       for (let j = 0; j < sequences[i].length; ++j) {
@@ -510,6 +551,7 @@ const getReconciledSequence = (
  * idx        0 1 2 3 4 5 6 7
  * sequence = A F C Z Z C Z Z
  * lcs =      A C Z Z
+ * reconciliationDirection = "right"
  *
  * we get the matching graph
  * where 1 denotes a match and 0 is a mismatch
@@ -554,7 +596,8 @@ const getReconciledSequence = (
  */
 const getLCSBoundaryOffsets = (
   sequence: Array<string>,
-  lcs: Array<string>
+  lcs: Array<string>,
+  reconciliationDirection: "left"|"right"
 ): Array<number> => {
   let graph = [];
   for (let i = 0; i < lcs.length; ++i) {
@@ -579,10 +622,19 @@ const getLCSBoundaryOffsets = (
   let out = [];
   for (let i = 0; i < graph.length; ++i) {
     let max = Math.max(...graph[i]);
-    for (let j = sequence.length - 1; j >= 0; --j) {
-      if (graph[i][j] == max) {
-        out.push(j);
-        break;
+    if (reconciliationDirection == "right") {
+      for (let j = sequence.length - 1; j >= 0; --j) {
+        if (graph[i][j] == max) {
+          out.push(j);
+          break;
+        }
+      }
+    } else {
+      for (let j = 0; j < sequence.length; ++j) {
+        if (graph[i][j] == max) {
+          out.push(j);
+          break;
+        }
       }
     }
   }
@@ -636,12 +688,12 @@ export const getCopySequence = (
   if (lcs.length == 0) {
     return [...copyInto, ...copyFrom.filter(s => copySet.has(s))];
   }
-  const intoBoundaryOffests = getLCSBoundaryOffsets(copyInto, lcs);
+  const intoBoundaryOffests = getLCSBoundaryOffsets(copyInto, lcs, "right");
   const intoMergeSegments = getLCSOffsetMergeSeqments(
     copyInto,
     intoBoundaryOffests
   );
-  const fromBoundaryOffests = getLCSBoundaryOffsets(copyFrom, lcs);
+  const fromBoundaryOffests = getLCSBoundaryOffsets(copyFrom, lcs, "right");
   const fromMergeSegments = getLCSOffsetMergeSeqments(
     copyFrom,
     fromBoundaryOffests
