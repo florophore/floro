@@ -1,0 +1,548 @@
+type ValueOf<T> = T[keyof T];
+
+interface Packet {
+  id: number;
+  chunk: string;
+  index: number;
+  totalPackets: number;
+  pluginName: string;
+}
+
+interface PluginState {
+  commandMode: "view" | "edit" | "compare";
+  compareFrom: "none" | "before" | "after";
+  themeName: "light" | "dark";
+  applicationState: SchemaRoot | null;
+  apiStoreInvalidity: { [key: string]: Array<string> };
+  conflictList: Array<string>;
+  changeset: Array<string>;
+  binaryUrls: {
+    upload: null | string;
+    download: null | string;
+    binaryToken: null | string;
+  };
+  binaryMap: { [key: string]: string };
+  isCopyMode: boolean;
+  copyList: Array<ValueOf<QueryTypes>>;
+  rootSchemaMap: TypeStruct;
+  clientStorage: { [key: string]: unknown };
+}
+
+interface IFloroContext {
+  commandMode: "view" | "edit" | "compare";
+  compareFrom: "none" | "before" | "after";
+  applicationState: SchemaRoot | null;
+  currentPluginAppState: React.MutableRefObject<SchemaRoot | null>;
+  changeset: Set<string>;
+  apiStoreInvalidity: { [key: string]: Array<string> };
+  apiStoreInvaliditySets: { [key: string]: Set<string> };
+  conflictSet: Set<string>;
+  hasLoaded: boolean;
+  saveState: <T extends keyof SchemaRoot>(
+    pluginName: T,
+    state: SchemaRoot | null
+  ) => number | null;
+  setPluginState: (state: PluginState) => void;
+  saveCopyList: (copyList: Array<ValueOf<QueryTypes>>) => void;
+  saveClientStorage: (_: object) => void;
+  clearClientStorage: () => void;
+  isCopyMode: boolean;
+  copyList: Array<ValueOf<QueryTypes>>;
+  pluginState: PluginState;
+  clientStorage: { [key: string]: unknown };
+  lastEditKey: React.MutableRefObject<string | null>;
+}
+
+const FloroContext = createContext({
+  commandMode: "view",
+  compareFrom: "none",
+  applicationState: null,
+  changeset: new Set([]),
+  apiStoreInvalidity: {},
+  apiStoreInvaliditySets: {},
+  conflictSet: new Set([]),
+  hasLoaded: false,
+  saveState: (_state: null) => null,
+  setPluginState: (_state: PluginState) => {},
+  saveCopyList: (_copyList: Array<ValueOf<QueryTypes>>) => {},
+  saveClientStorage: (_storage: object) => {},
+  clearClientStorage: () => {},
+  isCopyMode: false,
+  copyList: [],
+  pathKeys: [],
+  rootSchemaMap: {},
+  clientStorage: {},
+  lastEditKey: { current: null },
+  currentPluginAppState: { current: null },
+  pluginState: {
+    commandMode: "view",
+    compareFrom: "none",
+    themeName: "light",
+    isCopyMode: false,
+    copyList: [],
+    pathKeys: [],
+    applicationState: null,
+    apiStoreInvalidity: {},
+    conflictList: [],
+    changeset: [],
+    binaryUrls: {
+      upload: null,
+      download: null,
+      binaryToken: null,
+    },
+    binaryMap: {},
+    rootSchemaMap: {},
+    clientStorage: {},
+  },
+} as IFloroContext);
+
+export interface Props {
+  children: React.ReactElement;
+}
+
+const MAX_DATA_SIZE = 10_000;
+const sendMessagetoParent = (
+  id: number,
+  pluginName: string | null,
+  command: string,
+  data: object
+) => {
+  const dataString = JSON.stringify({ command, data });
+  const totalPackets = Math.floor(dataString.length / MAX_DATA_SIZE);
+  for (let i = 0; i < dataString.length; i += MAX_DATA_SIZE) {
+    const chunk =
+      i + MAX_DATA_SIZE > dataString.length
+        ? dataString.substring(i)
+        : dataString.substring(i, i + MAX_DATA_SIZE);
+    setTimeout(() => {
+      window.parent?.postMessage(
+        {
+          id,
+          chunk,
+          index: i / MAX_DATA_SIZE,
+          totalPackets,
+          pluginName,
+        },
+        "*"
+      );
+    }, 0);
+  }
+};
+
+export const FloroProvider = (props: Props) => {
+  const [pluginState, setPluginState] = useState<PluginState>({
+    commandMode: "view",
+    compareFrom: "none",
+    themeName: "light",
+    applicationState: null,
+    apiStoreInvalidity: {},
+    conflictList: [],
+    changeset: [],
+    binaryUrls: {
+      upload: null,
+      download: null,
+      binaryToken: null,
+    },
+    binaryMap: {},
+    isCopyMode: false,
+    copyList: [],
+    rootSchemaMap: {},
+    clientStorage: {},
+  });
+  const currentPluginAppState = useRef<PluginState["applicationState"]>({
+    ...pluginState.applicationState,
+  } as PluginState["applicationState"]);
+  const currentClientStorage = useRef<object>({ ...pluginState.clientStorage });
+  const rootSchemaMap = useRef(pluginState.rootSchemaMap);
+  const [hasLoaded, setHasLoaded] = useState(false);
+  const ids = useRef<Set<number>>(new Set());
+  const [copyList, setCopyList] = useState<Array<ValueOf<QueryTypes>>>([]);
+  const updateTimeout = useRef<NodeJS.Timeout>();
+  const lastEditKey = useRef<string | null>(null);
+  const currentPluginState = useRef<PluginState>(pluginState);
+
+  useEffect(() => {
+    currentPluginState.current = pluginState;
+  }, [pluginState]);
+
+  useEffect(() => {
+    setCopyList(pluginState?.copyList);
+  }, [pluginState?.isCopyMode]);
+
+  const incoming = useRef<{
+    [id: number]: {
+      data: Array<string>;
+      counter: number;
+    };
+  }>({});
+  const updateCounter = useRef(1);
+
+  const commandMode = useMemo(() => {
+    return pluginState.commandMode;
+  }, [pluginState.commandMode]);
+
+  const commandModeRef = useRef(commandMode);
+
+  const compareFrom = useMemo(() => {
+    return pluginState.compareFrom;
+  }, [pluginState.compareFrom]);
+
+  const changeset = useMemo(() => {
+    return new Set(pluginState.changeset);
+  }, [pluginState.changeset]);
+
+  const conflictSet = useMemo(() => {
+    return new Set(pluginState.conflictList ?? []);
+  }, [pluginState.conflictList]);
+
+  useEffect(() => {
+    const commandToggleListeners = (event: KeyboardEvent) => {
+      if (event.metaKey && event.shiftKey && event.key == "p") {
+        window.parent?.postMessage("toggle-vcs", "*");
+      }
+      if (event.metaKey && event.shiftKey && event.key == "e") {
+        window.parent?.postMessage("toggle-command-mode", "*");
+      }
+
+      if (event.metaKey && event.shiftKey && event.key == "[") {
+        window.parent?.postMessage("toggle-before", "*");
+      }
+
+      if (event.metaKey && event.shiftKey && event.key == "]") {
+        window.parent?.postMessage("toggle-after", "*");
+      }
+
+      if (event.metaKey && event.shiftKey && event.key == "c") {
+        window.parent?.postMessage("toggle-compare-mode", "*");
+      }
+
+      if (event.metaKey && event.shiftKey && event.key == "b") {
+        window.parent?.postMessage("toggle-branches", "*");
+      }
+    };
+    window.addEventListener("keydown", commandToggleListeners);
+    return () => {
+      window.removeEventListener("keydown", commandToggleListeners);
+    };
+  }, []);
+
+  const saveState = useCallback(
+    <T extends keyof SchemaRoot>(
+      pluginName: T,
+      state: SchemaRoot | null
+    ): number | null => {
+      if (commandMode != "edit") {
+        return null;
+      }
+      if (state == null || state[pluginName] == null) {
+        return null;
+      }
+      clearTimeout(updateTimeout.current);
+      if (ids.current) {
+        updateCounter.current += 2;
+        const id = updateCounter.current;
+        ids.current = new Set([...Array.from(ids.current), id]);
+        setTimeout(() => {
+          sendMessagetoParent(id, pluginName, "save", state[pluginName]);
+        }, 0);
+        return id;
+      }
+      return null;
+    },
+    [commandMode]
+  );
+
+  const saveCopyList = useCallback(
+    (copyList: Array<ValueOf<QueryTypes>>) => {
+      if (!pluginState.isCopyMode) {
+        return;
+      }
+      clearTimeout(updateTimeout.current);
+      setCopyList(copyList);
+      if (ids.current) {
+        updateCounter.current += 2;
+        const id = updateCounter.current;
+        ids.current = new Set([...Array.from(ids.current), id]);
+        setTimeout(() => {
+          sendMessagetoParent(id, null, "update-copy", copyList);
+        }, 0);
+        return id;
+      }
+      return null;
+    },
+    [pluginState.isCopyMode]
+  );
+
+  const saveClientStorage = useCallback(
+    (clientStorage: object) => {
+      clearTimeout(updateTimeout.current);
+      if (ids.current) {
+        updateCounter.current += 2;
+        const id = updateCounter.current;
+        ids.current = new Set([...Array.from(ids.current), id]);
+        currentClientStorage.current = { ...clientStorage };
+        setTimeout(() => {
+          sendMessagetoParent(id, null, "update-client-storage", clientStorage);
+        }, 0);
+        return id;
+      }
+      return null;
+    },
+    [commandMode, pluginState]
+  );
+
+  const clearClientStorage = useCallback(() => {
+    if (ids.current) {
+      currentClientStorage.current = {};
+      window.parent?.postMessage("clear-client-storage", "*");
+      setPluginState({
+        ...pluginState,
+        clientStorage: {},
+      });
+    }
+    return null;
+  }, [pluginState]);
+
+  const applicationState = useMemo(() => {
+    if (!hasLoaded) {
+      return {} as SchemaRoot;
+    }
+    return pluginState.applicationState;
+  }, [pluginState.applicationState, hasLoaded]);
+
+  const apiStoreInvalidity = useMemo(() => {
+    if (!hasLoaded) {
+      return {} as { [key: string]: Array<string> };
+    }
+    return pluginState.apiStoreInvalidity ?? {};
+  }, [pluginState.apiStoreInvalidity, hasLoaded]);
+
+  const apiStoreInvalidityStr = useMemo(() => {
+    return JSON.stringify(apiStoreInvalidity);
+  }, [apiStoreInvalidity]);
+
+  const apiStoreInvaliditySets = useMemo(() => {
+    const out: { [key: string]: Set<string> } = {};
+    for (let plugin in apiStoreInvalidity) {
+      out[plugin] = new Set(apiStoreInvalidity?.[plugin] ?? []);
+    }
+    return out;
+  }, [apiStoreInvalidityStr]);
+
+  useEffect(() => {
+    const onMessage = ({ data }: { data: Packet }) => {
+      if (!incoming.current[data.id]) {
+        incoming.current[data.id] = {
+          counter: 0,
+          data: new Array(data.totalPackets + 1),
+        };
+      }
+      incoming.current[data.id].data[data.index] = data.chunk;
+      incoming.current[data.id].counter++;
+      if (incoming.current[data.id].counter == data.totalPackets + 1) {
+        const response: { event: string; data: unknown } = JSON.parse(
+          incoming.current[data.id].data.join("")
+        );
+        if (response.event == "load") {
+          const state: PluginState = response.data as PluginState;
+          rootSchemaMap.current = state.rootSchemaMap;
+          setPluginState(state);
+          currentPluginAppState.current = state.applicationState;
+          commandModeRef.current = state.commandMode;
+          setHasLoaded(true);
+        }
+        if (response.event == "ack" || response.event == "update") {
+          clearTimeout(updateTimeout.current);
+          const isStale = updateCounter?.current > data.id;
+          const state: PluginState = response.data as PluginState;
+          if (currentPluginAppState.current && state.applicationState) {
+            const nextApplicationState = getNextApplicationState(
+              currentPluginAppState.current,
+              state.applicationState,
+              state.rootSchemaMap,
+              lastEditKey,
+              isStale
+            );
+            const didChangeStorage =
+              JSON.stringify(state.clientStorage) !=
+              JSON.stringify(currentClientStorage.current);
+            const nextClientStorage = didChangeStorage
+              ? state.clientStorage
+              : { ...currentClientStorage.current };
+            const nextState = {
+              ...state,
+              applicationState: nextApplicationState
+                ? nextApplicationState
+                : (currentClientStorage.current as SchemaRoot),
+              clientStorage: nextClientStorage,
+            };
+            rootSchemaMap.current = state.rootSchemaMap;
+            currentPluginAppState.current = nextState.applicationState;
+            currentClientStorage.current = { ...nextClientStorage };
+            commandModeRef.current = state.commandMode;
+            if (nextState.applicationState) {
+              setPluginState(nextState);
+            }
+            updateTimeout.current = setTimeout(() => {
+              lastEditKey.current = null;
+            }, 200);
+          }
+        }
+        for (const id in incoming.current) {
+          const idInt = parseInt(id);
+          if (idInt < (updateCounter?.current ?? 0)) {
+            delete incoming.current[data.id];
+            ids.current.delete(idInt);
+          }
+        }
+      }
+      if (data.id > updateCounter.current) {
+        updateCounter.current = data.id + 1;
+      }
+    };
+    window.addEventListener("message", onMessage, true);
+    window.parent?.postMessage("ready", "*");
+    return () => {
+      window.removeEventListener("message", onMessage, true);
+    };
+  }, []);
+
+  return (
+    <FloroContext.Provider
+      value={{
+        applicationState,
+        currentPluginAppState,
+        apiStoreInvalidity,
+        apiStoreInvaliditySets,
+        changeset,
+        conflictSet,
+        commandMode,
+        compareFrom,
+        hasLoaded,
+        saveState,
+        setPluginState,
+        pluginState,
+        clientStorage: pluginState.clientStorage,
+        saveCopyList,
+        saveClientStorage,
+        clearClientStorage,
+        isCopyMode: pluginState.isCopyMode,
+        copyList,
+        lastEditKey,
+      }}
+    >
+      {props.children}
+    </FloroContext.Provider>
+  );
+};
+
+export const useFloroContext = () => {
+  return useContext(FloroContext);
+};
+
+function getPluginNameFromQuery(query: string | null): keyof SchemaRoot | null {
+  if (query == null) {
+    return null;
+  }
+  const [pluginWrapper] = query.split(".");
+  const pluginName = /^\$\((.+)\)$/.exec(pluginWrapper as string)?.[1] ?? null;
+  if (!pluginName) {
+    return null;
+  }
+  return pluginName as keyof SchemaRoot;
+}
+
+export const useCopyApi = (pointer: ValueOf<QueryTypes> | null) => {
+  const { copyList, saveCopyList, isCopyMode } = useFloroContext();
+  const isCopied = useMemo(() => {
+    if (!pointer) {
+      return false;
+    }
+    return copyList.includes(pointer);
+  }, [copyList, pointer]);
+
+  const toggleCopy = useCallback(() => {
+    if (!isCopyMode || !pointer) {
+      return;
+    }
+    if (!isCopied) {
+      const nextList = [...copyList, pointer];
+      saveCopyList(nextList);
+    } else {
+      const nextList = copyList.filter(
+        (copiedPointer) => copiedPointer != pointer
+      );
+      saveCopyList(nextList);
+    }
+  }, [isCopied, isCopyMode, copyList, pointer]);
+  return {
+    isCopied,
+    toggleCopy,
+  };
+};
+
+export const useClientStorageApi = <T,>(
+  clientStorageKey: string
+): [T | null, (value: T | null) => void, () => void] => {
+  const {
+    clientStorage,
+    saveClientStorage,
+    pluginState,
+    setPluginState,
+    commandMode,
+  } = useFloroContext();
+
+  const value = useMemo((): T | null => {
+    return (clientStorage?.[clientStorageKey] as T) ?? (null as T);
+  }, [clientStorageKey, clientStorage?.[clientStorageKey], commandMode]);
+  const [getter, setter] = useState<T | null>(value);
+  const timeout = useRef<NodeJS.Timeout>();
+  useEffect(() => {
+    clearTimeout(timeout?.current);
+    timeout.current = setTimeout(() => {
+      if (value != getter) {
+        setter(value);
+      }
+    }, 300);
+    return () => {
+      clearTimeout(timeout.current);
+    };
+  }, [value]);
+
+  const set = useCallback(
+    (value: T | null) => {
+      const next = {
+        ...clientStorage,
+        [clientStorageKey]: value,
+      };
+      setter(value);
+      saveClientStorage(next);
+    },
+    [
+      clientStorage,
+      clientStorageKey,
+      pluginState,
+      commandMode,
+      setPluginState,
+      saveClientStorage,
+    ]
+  );
+
+  const remove = useCallback(() => {
+    const next = {
+      ...clientStorage,
+    };
+    delete next[clientStorageKey];
+    setter(null);
+    saveClientStorage(next);
+  }, [
+    clientStorage,
+    clientStorageKey,
+    pluginState,
+    commandMode,
+    setPluginState,
+    saveClientStorage,
+  ]);
+
+  return [getter, set, remove];
+};

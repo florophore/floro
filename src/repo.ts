@@ -1614,12 +1614,16 @@ export const buildStateStore = async (
   for (const pluginManifest of manifests) {
     const kv = appKvState?.store?.[pluginManifest.name] ?? [];
     const schemaMap = await getSchemaMapForManifest(datasource, pluginManifest);
-    const pluginState = getStateFromKVForPlugin(
-      schemaMap,
-      kv,
-      pluginManifest.name
-    );
-    out[pluginManifest.name] = pluginState;
+    try {
+      const pluginState = getStateFromKVForPlugin(
+        schemaMap,
+        kv,
+        pluginManifest.name
+      );
+      out[pluginManifest.name] = pluginState;
+    } catch(e) {
+      console.log("E", e);
+    }
   }
   return out;
 };
