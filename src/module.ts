@@ -368,6 +368,39 @@ export const watchModule = async (
       });
     });
   } catch (e) {
+    console.log("Error", e);
+  }
+};
+
+export const buildCurrent = async (
+  cwd: string,
+  moduleFile: string
+): Promise<{ status: string; message: string }> => {
+  try {
+    const modulePath = path.join(cwd, moduleFile);
+    const moduleDir = path.dirname(modulePath);
+    const exists = await existsAsync(modulePath);
+
+    if (!exists) {
+      return {
+        status: "error",
+        message: `Could not find floro module at "${modulePath}".`,
+      };
+    }
+    const moduleImport = require(modulePath);
+    const module: Module = moduleImport();
+    const metaFileName = module?.metaFileName ?? "meta.floro.json";
+    const metaFilePath = path.join(moduleDir, metaFileName);
+    const metaExists = await existsAsync(metaFilePath);
+    if (!metaExists) {
+      return {
+        status: "error",
+        message: `Could not find meta file "${metaFileName}".`,
+      };
+    }
+    const result = buildModuleFromState(cwd, moduleFile);
+    return result;
+  } catch (e) {
     console.log("e", e);
   }
 };

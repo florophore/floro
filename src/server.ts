@@ -127,7 +127,7 @@ import {
   getWebhookSecret,
 } from "./apikeys";
 import { usePublicApi } from "./api";
-import webhookQueue from "./webhook_queue";
+import webhookQueue from "./webhookqueue";
 import { triggerExtensionStateUpdate, watchRepos } from "./watch";
 
 const app = express();

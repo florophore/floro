@@ -1,5 +1,5 @@
 import path from "path";
-import webhookQueue from "./webhook_queue";
+import webhookQueue from "./webhookqueue";
 import { existsAsync, vReposPath, getUserAsync, User } from "./filestructure";
 import binarySession from "./binary_session";
 import {
@@ -1142,6 +1142,7 @@ export const writeRepoCommit = async (
     await datasource.saveHotCheckpoint(repoId, sha, currentKVState);
     return commit;
   } catch (e) {
+    console.log("Error", e)
     return null;
   }
 };
@@ -1393,16 +1394,16 @@ export const updatePluginState = async (
     sanitiziedRenderedState.store = await cascadePluginState(
       datasource,
       schemaMap,
-      stateStore
+      sanitiziedRenderedState.store
     );
     sanitiziedRenderedState.store = await nullifyMissingFileRefs(
       datasource,
       schemaMap,
-      renderedState.store
+      sanitiziedRenderedState.store
     );
 
     sanitiziedRenderedState.binaries = uniqueStrings(
-      await collectFileRefs(datasource, schemaMap, renderedState.store)
+      await collectFileRefs(datasource, schemaMap, sanitiziedRenderedState.store)
     );
     await datasource.saveRenderedState(repoId, sanitiziedRenderedState);
     return sanitiziedRenderedState;
@@ -1844,7 +1845,6 @@ export const mergeCommit = async (
       }
 
       const direction = "yours";
-
       const mergeState = await getMergedCommitState(
         datasource,
         fromCommitState,

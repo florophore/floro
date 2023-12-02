@@ -580,20 +580,23 @@ const getCounterArrowBalanance = (str: string): number => {
 
   export const reIndexSchemaArrays = (kvs: Array<DiffElement>): Array<string> => {
     const out: Array<string> = [];
-    const indexMap: { [path: string]: number } = {};
+    const indexMap: {[path: string]: number} = {};
     for (const { key } of kvs) {
       const decodedPath = decodeSchemaPath(key);
-      const parts: Array<string | DiffElement> = [];
+      const parts: Array<string|DiffElement> = [];
       const indexStack: Array<number> = [];
-      for (const part of decodedPath) {
+      for (const [index, part] of decodedPath.entries()) {
+        const isLast = index == decodedPath.length - 1;
         if (typeof part == "object" && part.key == "(id)") {
           const parentPathString = writePathString(parts);
-          if (!indexMap[parentPathString]) {
-            indexMap[parentPathString] = 0;
-          } else {
-            indexMap[parentPathString]++;
+          if (isLast) {
+            if (!indexMap?.hasOwnProperty(parentPathString)) {
+              indexMap[parentPathString] = 0;
+            } else {
+              indexMap[parentPathString]++;
+            }
           }
-          indexStack.push(indexMap[parentPathString]);
+          indexStack.push(indexMap[parentPathString])
         }
         parts.push(part);
       }

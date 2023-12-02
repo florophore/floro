@@ -403,8 +403,8 @@ export const getMergeSequence = (
 
 // yours prioritizes into (you) from (them)
 const getMergeSubSequence = (
-  from: Array<string>,
   into: Array<string>,
+  from: Array<string>,
   direction: "theirs" | "yours" = "yours",
   reconciliationDirection: "right" | "left" = "right",
 ): Array<string> => {
@@ -413,7 +413,7 @@ const getMergeSubSequence = (
   }
   const lcs = getLCS(from, into);
   if (lcs.length == 0) {
-    if (direction == "yours") {
+    if (direction == "theirs") {
       return [...from, ...into];
     } else {
       return [...into, ...from];
@@ -429,7 +429,7 @@ const getMergeSubSequence = (
   let mergeSequences = [];
   let mergeIndex = 0;
   while (mergeIndex <= lcs.length) {
-    if (direction == "yours") {
+    if (direction == "theirs") {
       mergeSequences.push(fromSequences[mergeIndex]);
       mergeSequences.push(intoSequences[mergeIndex]);
     } else {
@@ -446,8 +446,8 @@ const getMergeSubSequence = (
 
 const getGreatestCommonLCS = (
   origin: Array<string>,
-  from: Array<string>,
-  into: Array<string>
+  into: Array<string>,
+  from: Array<string>
 ) => {
   const fromLCS = getLCS(origin, from);
   const intoLCS = getLCS(origin, into);
@@ -577,7 +577,7 @@ const getReconciledSequence = (
  *  3-Z  0 0 0 1 1 0 1 1
  *
  * finally we get the LCS boundary index by looking first for the
- * maximum value on each row, then selecting the rightmost value
+ * maximum value on each row, then selecting the rightmost value (we are right right-biased)
  * for example. Row 0: the max value is 1 and it's rightmost location is index 0
  *
  *  IDX  0 1 2 3 4 5 6 7
@@ -591,47 +591,47 @@ const getReconciledSequence = (
  * The LCS Boundary Offsets are therefore [0, 5, 6, 7]
  * Which corresponds with                 [A, C, Z, Z]
  *
- * DP BFS here is way faster and more intuitive than recursive approach
- * O(M*N*min(M, N))
+ * A left biased result would be          [0, 2, 3, 4]
+ * Which corresponds with                 [A, C, Z, Z]
  */
 const getLCSBoundaryOffsets = (
   sequence: Array<string>,
   lcs: Array<string>,
   reconciliationDirection: "left"|"right"
 ): Array<number> => {
-  let graph = [];
+  let reconciliationGraph = [];
   for (let i = 0; i < lcs.length; ++i) {
-    graph.push([]);
+    reconciliationGraph.push([]);
     for (let j = 0; j < sequence.length; ++j) {
       if (lcs[i] == sequence[j]) {
-        graph[i].push(1);
+        reconciliationGraph[i].push(1);
         let backtrace = 0;
         while (
           i - backtrace > 0 &&
           j - backtrace > 0 &&
-          graph[i - backtrace - 1][j - backtrace - 1] > 0
+          reconciliationGraph[i - backtrace - 1][j - backtrace - 1] > 0
         ) {
-          graph[i - backtrace - 1][j - backtrace - 1]++;
+          reconciliationGraph[i - backtrace - 1][j - backtrace - 1]++;
           backtrace++;
         }
       } else {
-        graph[i].push(0);
+        reconciliationGraph[i].push(0);
       }
     }
   }
   let out = [];
-  for (let i = 0; i < graph.length; ++i) {
-    let max = Math.max(...graph[i]);
+  for (let i = 0; i < reconciliationGraph.length; ++i) {
+    let max = Math.max(...reconciliationGraph[i]);
     if (reconciliationDirection == "right") {
       for (let j = sequence.length - 1; j >= 0; --j) {
-        if (graph[i][j] == max) {
+        if (reconciliationGraph[i][j] == max) {
           out.push(j);
           break;
         }
       }
     } else {
       for (let j = 0; j < sequence.length; ++j) {
-        if (graph[i][j] == max) {
+        if (reconciliationGraph[i][j] == max) {
           out.push(j);
           break;
         }
@@ -661,6 +661,9 @@ const getLCSBoundaryOffsets = (
  *
  * output is following,
  * [[], [ F,  C , Z , Z ], [], [], []]
+ *
+ * The reason we bias right, is so that the conflicts occur closer to the
+ * top of the sequence. The idea is that this makes them easier to spot
  */
 const getLCSOffsetMergeSeqments = (
   sequence: Array<string>,

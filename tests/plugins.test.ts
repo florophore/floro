@@ -1034,28 +1034,28 @@ describe("plugins", () => {
         '$(simple).objects.name<abc>.list.[0]',
         '$(simple).objects.name<abc>.list.[0].subList.[0]',
         '$(simple).objects.name<abc>.list.[0].subList.[0].subValue',
-        '$(simple).objects.name<abc>.list.[0].subList.[0]',
-        '$(simple).objects.name<abc>.list.[0].subList.[0].subValue',
-        '$(simple).objects.name<abc>.list.[0].subList.[0]',
-        '$(simple).objects.name<abc>.list.[0].subList.[0].subValue',
-        '$(simple).objects.name<abc>.list.[0].subList.[0]',
-        '$(simple).objects.name<abc>.list.[0].subList.[0].subValue',
-        '$(simple).objects.name<abc>.list.[0]',
-        '$(simple).objects.name<abc>.list.[0].subList.[0]',
-        '$(simple).objects.name<abc>.list.[0].subList.[0].subValue',
-        '$(simple).objects.name<abc>.list.[0].subList.[0]',
-        '$(simple).objects.name<abc>.list.[0].subList.[0].subValue',
-        '$(simple).objects.name<abc>.list.[0].subList.[0]',
-        '$(simple).objects.name<abc>.list.[0].subList.[0].subValue',
-        '$(simple).objects.name<abc>.list.[0]',
-        '$(simple).objects.name<abc>.list.[0].subList.[0]',
-        '$(simple).objects.name<abc>.list.[0].subList.[0].subValue',
-        '$(simple).objects.name<abc>.list.[0].subList.[0]',
-        '$(simple).objects.name<abc>.list.[0].subList.[0].subValue',
-        '$(simple).objects.name<abc>.list.[0].subList.[0]',
-        '$(simple).objects.name<abc>.list.[0].subList.[0].subValue',
-        '$(simple).objects.name<abc>.list.[0].subList.[0]',
-        '$(simple).objects.name<abc>.list.[0].subList.[0].subValue'
+        '$(simple).objects.name<abc>.list.[0].subList.[1]',
+        '$(simple).objects.name<abc>.list.[0].subList.[1].subValue',
+        '$(simple).objects.name<abc>.list.[0].subList.[2]',
+        '$(simple).objects.name<abc>.list.[0].subList.[2].subValue',
+        '$(simple).objects.name<abc>.list.[0].subList.[3]',
+        '$(simple).objects.name<abc>.list.[0].subList.[3].subValue',
+        '$(simple).objects.name<abc>.list.[1]',
+        '$(simple).objects.name<abc>.list.[1].subList.[0]',
+        '$(simple).objects.name<abc>.list.[1].subList.[0].subValue',
+        '$(simple).objects.name<abc>.list.[1].subList.[1]',
+        '$(simple).objects.name<abc>.list.[1].subList.[1].subValue',
+        '$(simple).objects.name<abc>.list.[1].subList.[2]',
+        '$(simple).objects.name<abc>.list.[1].subList.[2].subValue',
+        '$(simple).objects.name<abc>.list.[2]',
+        '$(simple).objects.name<abc>.list.[2].subList.[0]',
+        '$(simple).objects.name<abc>.list.[2].subList.[0].subValue',
+        '$(simple).objects.name<abc>.list.[2].subList.[1]',
+        '$(simple).objects.name<abc>.list.[2].subList.[1].subValue',
+        '$(simple).objects.name<abc>.list.[2].subList.[2]',
+        '$(simple).objects.name<abc>.list.[2].subList.[2].subValue',
+        '$(simple).objects.name<abc>.list.[2].subList.[3]',
+        '$(simple).objects.name<abc>.list.[2].subList.[3].subValue'
       ]);
     });
   });
@@ -3605,7 +3605,7 @@ describe("plugins", () => {
   });
 
   describe("topological subset", () => {
-    test("returns true when is not a valid subset", async () => {
+    test("returns true when IS a valid subset", async () => {
       const BEFORE_PLUGIN_MANIFEST = {
         version: "0.0.0",
         name: "a-plugin",

@@ -1739,6 +1739,9 @@ export const buildObjectsAtPath = (
   visitedKeys = new Set<string>([]),
   out = {}
 ): object => {
+  if (visitedKeys.has(path)) {
+    return out;
+  }
   // ignore $(store)
   const [pluginName, ...decodedPath] = decodeSchemaPath(path);
   let current = out;
@@ -3276,13 +3279,16 @@ export const reIndexSchemaArrays = (kvs: Array<DiffElement>): Array<string> => {
     const decodedPath = decodeSchemaPath(key);
     const parts: Array<string|DiffElement> = [];
     const indexStack: Array<number> = [];
-    for (const part of decodedPath) {
+    for (const [index, part] of decodedPath.entries()) {
+      const isLast = index == decodedPath.length - 1;
       if (typeof part == "object" && part.key == "(id)") {
         const parentPathString = writePathString(parts);
-        if (!indexMap[parentPathString]) {
-          indexMap[parentPathString] = 0;
-        } else {
-          indexMap[parentPathString]++;
+        if (isLast) {
+          if (!indexMap?.hasOwnProperty(parentPathString)) {
+            indexMap[parentPathString] = 0;
+          } else {
+            indexMap[parentPathString]++;
+          }
         }
         indexStack.push(indexMap[parentPathString])
       }
@@ -6710,7 +6716,8 @@ export const drawUseFloroStateFunction = (
 }
 
 export const USE_FLORO_STATE_FUNCTION = `
-export function useFloroState<T>(query: string, defaultData?: T): [T|null, (t: T, doSave?: boolean) => void, () => void] {
+export function useFloroState<T>(query: string, defaultData?: T): [T|null, (t: T, doSave?: true) => void, () => void];
+export function useFloroState<T>(query: string, defaultData?: T): [T|null, (t: T, doSave?: boolean) => void|(() => void), () => void] {
   const ctx = useFloroContext();
   const pluginName = useMemo(() => getPluginNameFromQuery(query), [query]);
 
@@ -6734,8 +6741,13 @@ export function useFloroState<T>(query: string, defaultData?: T): [T|null, (t: T
   const [getter, setter] = useState<T|null>(obj ?? defaultData ?? null);
 
   useEffect(() => {
-    setter(obj);
-  }, [obj])
+    if (ctx.commandMode == "edit" && query == ctx?.lastEditKey?.current) {
+      return;
+    }
+    if (obj != getter) {
+      setter(obj);
+    }
+  }, [obj, ctx.commandMode, query])
 
   const save = useCallback(() => {
     if (ctx.currentPluginAppState.current && pluginName && getter && ctx.commandMode == "edit") {
@@ -6762,6 +6774,17 @@ export function useFloroState<T>(query: string, defaultData?: T): [T|null, (t: T
         });
         ctx.currentPluginAppState.current = next;
         ctx.saveState(pluginName, next);
+      } else {
+        return () => {
+          ctx.lastEditKey.current = query;
+          const next = updateObjectInStateMap({...ctx.currentPluginAppState.current}, query, obj) as SchemaRoot
+          ctx.setPluginState({
+            ...ctx.pluginState,
+            applicationState: next
+          });
+          ctx.currentPluginAppState.current = next;
+          ctx.saveState(pluginName, next);
+        }
       }
     }
   }, [query, ctx.saveState, ctx.setPluginState, obj, pluginName, ctx.pluginState, ctx.commandMode]);

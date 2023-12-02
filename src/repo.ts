@@ -1622,7 +1622,7 @@ export const buildStateStore = async (
       );
       out[pluginManifest.name] = pluginState;
     } catch(e) {
-      console.log("E", e);
+      console.log("Error", e);
     }
   }
   return out;
@@ -1943,36 +1943,36 @@ export const getMergedCommitState = async (
 
     const tokenizedDescription = getMergeSequence(
       tokenizedOrigin.description,
-      tokenizedCommitFrom.description,
       tokenizedCommitInto.description,
+      tokenizedCommitFrom.description,
       direction
     );
 
     const tokenizedLicenses = getMergeSequence(
       tokenizedOrigin.licenses,
-      tokenizedCommitFrom.licenses,
       tokenizedCommitInto.licenses,
+      tokenizedCommitFrom.licenses,
       direction
     );
 
     const tokenizedPlugins = getMergeSequence(
       tokenizedOrigin.plugins,
-      tokenizedCommitFrom.plugins,
       tokenizedCommitInto.plugins,
+      tokenizedCommitFrom.plugins,
       direction
     );
 
     const tokenizedBinaries = getMergeSequence(
       tokenizedOrigin.binaries,
-      tokenizedCommitFrom.binaries,
       tokenizedCommitInto.binaries,
+      tokenizedCommitFrom.binaries,
       direction
     );
 
     const seen = new Set<string>([]);
     const pluginsToTraverse = Array.from([
-      ...Object.keys(tokenizedCommitFrom.store),
       ...Object.keys(tokenizedCommitInto.store),
+      ...Object.keys(tokenizedCommitFrom.store),
     ]).filter((v) => {
       if (seen.has(v)) {
         return false;
@@ -1982,13 +1982,13 @@ export const getMergedCommitState = async (
     });
     const tokenizedStore = {};
     for (const pluginName of pluginsToTraverse) {
-      const pluginKVsFrom = tokenizedCommitFrom?.store?.[pluginName] ?? [];
       const pluginKVsInto = tokenizedCommitInto?.store?.[pluginName] ?? [];
+      const pluginKVsFrom = tokenizedCommitFrom?.store?.[pluginName] ?? [];
       const orignKVs = tokenizedOrigin?.store?.[pluginName] ?? [];
       const pluginStoreSequence = getMergeSequence(
         orignKVs,
-        pluginKVsFrom,
         pluginKVsInto,
+        pluginKVsFrom,
         direction
       );
       tokenizedStore[pluginName] = pluginStoreSequence;

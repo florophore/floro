@@ -1169,7 +1169,60 @@ describe("repoapi", () => {
       };
       await updatePluginState(datasource, "abc", "A", state3);
       await writeRepoCommit(datasource, "abc", "C");
-      await mergeCommit(datasource, "abc", commitB.sha);
+      const mergeState = await mergeCommit(datasource, "abc", commitB.sha);
+      expect(mergeState).toEqual({
+        description: [],
+        licenses: [],
+        plugins: [
+          {
+            key: "A",
+            value: "0.0.0",
+          },
+        ],
+        store: {
+          A: {
+            aSet: [
+              {
+                mainKey: "key0",
+                someProp: {
+                  value: 0,
+                },
+              },
+              {
+                mainKey: "key1",
+                someProp: {
+                  value: 1,
+                },
+              },
+              {
+                mainKey: "key1a",
+                someProp: {
+                  value: 12,
+                },
+              },
+              {
+                mainKey: "key3",
+                someProp: {
+                  value: 3,
+                },
+              },
+              {
+                mainKey: "key4",
+                someProp: {
+                  value: 4,
+                },
+              },
+              {
+                mainKey: "key5",
+                someProp: {
+                  value: 5,
+                },
+              },
+            ],
+          },
+        },
+        binaries: [],
+      });
       await updateMergeDirection(datasource, "abc", "theirs");
       const resolvedOut = await resolveMerge(datasource, "abc");
       expect(resolvedOut).toEqual({

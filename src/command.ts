@@ -24,7 +24,7 @@ import clc from "cli-color";
 import yargs from "yargs";
 import { render } from 'prettyjson';
 import { buildFloroGeneratorTemplate, checkDirectoryIsGeneratorWorkingDirectory, generateLocalTypescriptGeneratorAPI, inspectLocalGeneratorManifest, installGeneratorDependency, pullGeneratorDeps, validateLocalGenerator } from "./generatorcreator";
-import { buildModule, syncModule, watchModule } from "./module";
+import { buildCurrent, buildModule, syncModule, watchModule } from "./module";
 
 buildFloroFilestructure();
 
@@ -200,6 +200,22 @@ yargs
             console.log("watching module");
             console.log("crl+c to stop watching");
             const result = await watchModule(cwd, options.module);
+            if (result?.message) {
+              console.log(
+                clc.cyanBright.bgBlack.underline(
+                  result.message
+                )
+              );
+            }
+          },
+        })
+        .command({
+          command: "current",
+          describe: "use current state and rebuild",
+          handler: async (options) => {
+            const cwd = process.cwd();
+            console.log("building current");
+            const result = await buildCurrent(cwd, options.module);
             if (result?.message) {
               console.log(
                 clc.cyanBright.bgBlack.underline(
