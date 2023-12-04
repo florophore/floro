@@ -401,7 +401,7 @@ export const buildCurrent = async (
     const result = buildModuleFromState(cwd, moduleFile);
     return result;
   } catch (e) {
-    console.log("e", e);
+    console.log("Error", e);
   }
 };
 

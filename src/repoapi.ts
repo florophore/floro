@@ -198,8 +198,8 @@ export const getRepoCloneState = async (
     const cloneFile = await datasource.readCloneFile(repoId);
     if (!cloneFile) {
       return {
-        state: "none",
-        downloadedCommits: 0,
+        state: "done",
+        downloadedCommits: 1,
         totalCommits: 1,
       };
     }

@@ -5791,6 +5791,7 @@ interface IFloroContext {
   pluginState: PluginState;
   clientStorage: { [key: string]: unknown };
   lastEditKey: React.MutableRefObject<string | null>;
+  lastEditStateId: React.MutableRefObject<string | null>;
 }
 
 const FloroContext = createContext({
@@ -5813,6 +5814,7 @@ const FloroContext = createContext({
   rootSchemaMap: {},
   clientStorage: {},
   lastEditKey: { current: null },
+  lastEditStateId: { current: null },
   currentPluginAppState: { current: null },
   pluginState: {
     commandMode: "view",
@@ -5899,6 +5901,7 @@ export const FloroProvider = (props: Props) => {
   const [copyList, setCopyList] = useState<Array<ValueOf<QueryTypes>>>([]);
   const updateTimeout = useRef<NodeJS.Timeout>();
   const lastEditKey = useRef<string | null>(null);
+  const lastEditStateId = useRef<string | null>(null);
   const currentPluginState = useRef<PluginState>(pluginState);
 
   useEffect(() => {
@@ -6169,6 +6172,7 @@ export const FloroProvider = (props: Props) => {
         isCopyMode: pluginState.isCopyMode,
         copyList,
         lastEditKey,
+        lastEditStateId,
       }}
     >
       {props.children}
@@ -6255,10 +6259,12 @@ export const useClientStorageApi = <T,>(
         ...clientStorage,
         [clientStorageKey]: value,
       };
+      clientStorage[clientStorageKey] = value;
       setter(value);
       saveClientStorage(next);
     },
     [
+      value,
       clientStorage,
       clientStorageKey,
       pluginState,
@@ -6273,9 +6279,11 @@ export const useClientStorageApi = <T,>(
       ...clientStorage,
     };
     delete next[clientStorageKey];
+    delete clientStorage[clientStorageKey];
     setter(null);
     saveClientStorage(next);
   }, [
+    value,
     clientStorage,
     clientStorageKey,
     pluginState,
@@ -6721,6 +6729,10 @@ export function useFloroState<T>(query: string, defaultData?: T): [T|null, (t: T
   const ctx = useFloroContext();
   const pluginName = useMemo(() => getPluginNameFromQuery(query), [query]);
 
+  const stateId = useMemo(() => {
+    return query + ":" + Math.random();
+  }, [query])
+
   const obj = useMemo((): T|null => {
     if (!ctx.hasLoaded) {
       return defaultData ?? null;
@@ -6742,16 +6754,20 @@ export function useFloroState<T>(query: string, defaultData?: T): [T|null, (t: T
 
   useEffect(() => {
     if (ctx.commandMode == "edit" && query == ctx?.lastEditKey?.current) {
+      if (stateId != ctx?.lastEditStateId?.current && obj != getter) {
+        setter(obj);
+      }
       return;
     }
     if (obj != getter) {
       setter(obj);
     }
-  }, [obj, ctx.commandMode, query])
+  }, [obj, ctx.commandMode, query, stateId])
 
   const save = useCallback(() => {
     if (ctx.currentPluginAppState.current && pluginName && getter && ctx.commandMode == "edit") {
       ctx.lastEditKey.current = query;
+      ctx.lastEditStateId.current = stateId;
       const next = updateObjectInStateMap({...ctx.currentPluginAppState.current}, query, getter) as SchemaRoot
       ctx.setPluginState({
         ...ctx.pluginState,
@@ -6760,12 +6776,13 @@ export function useFloroState<T>(query: string, defaultData?: T): [T|null, (t: T
       ctx.currentPluginAppState.current = next;
       ctx.saveState(pluginName, ctx.applicationState);
     }
-  }, [query, pluginName, obj, ctx.pluginState, ctx.commandMode, getter]);
+  }, [query, pluginName, obj, ctx.pluginState, ctx.commandMode, getter, stateId]);
 
   const set = useCallback((obj: T, doSave = true) => {
     if (ctx.currentPluginAppState.current && pluginName && obj && ctx.commandMode == "edit") {
       setter(obj);
       ctx.lastEditKey.current = query;
+      ctx.lastEditStateId.current = stateId;
       if (doSave) {
         const next = updateObjectInStateMap({...ctx.currentPluginAppState.current}, query, obj) as SchemaRoot
         ctx.setPluginState({
@@ -6777,6 +6794,7 @@ export function useFloroState<T>(query: string, defaultData?: T): [T|null, (t: T
       } else {
         return () => {
           ctx.lastEditKey.current = query;
+          ctx.lastEditStateId.current = stateId;
           const next = updateObjectInStateMap({...ctx.currentPluginAppState.current}, query, obj) as SchemaRoot
           ctx.setPluginState({
             ...ctx.pluginState,
@@ -7638,13 +7656,16 @@ export const reIndexSchemaArrays = (kvs: Array<DiffElement>): Array<string> => {
     const decodedPath = decodeSchemaPath(key);
     const parts: Array<string|DiffElement> = [];
     const indexStack: Array<number> = [];
-    for (const part of decodedPath) {
+    for (const [index, part] of decodedPath.entries()) {
+      const isLast = index == decodedPath.length - 1;
       if (typeof part == "object" && part.key == "(id)") {
         const parentPathString = writePathString(parts);
-        if (!indexMap[parentPathString]) {
-          indexMap[parentPathString] = 0;
-        } else {
-          indexMap[parentPathString]++;
+        if (isLast) {
+          if (!indexMap?.hasOwnProperty(parentPathString)) {
+            indexMap[parentPathString] = 0;
+          } else {
+            indexMap[parentPathString]++;
+          }
         }
         indexStack.push(indexMap[parentPathString])
       }

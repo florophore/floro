@@ -23,26 +23,30 @@ export const watchStateFiles = async (datasource: DataSource) => {
     const watcher = fs.watch(filePath, () => {
       clearTimeout(debounce);
       debounce = setTimeout(async () => {
-        broadcastToClient("cli", "state:changed", {
-          repoId,
-        });
-        const renderedState = await datasource.readRenderedState(repoId);
-        const binaries = await Promise.all(
-          renderedState.binaries.map(async (binaryRef) => {
-            const hash = binaryRef.split(".")[0];
-            const url = `http://localhost:63403/binary/${binaryRef}?token=${binarySession.token}`;
-            return {
-              hash,
-              url,
-              fileName: binaryRef,
-            };
-          })
-        );
-        broadcastToClient("extension", "state:changed", {
-          repoId,
-          store: renderedState.store,
-          binaries,
-        });
+        try {
+          broadcastToClient("cli", "state:changed", {
+            repoId,
+          });
+          const renderedState = await datasource.readRenderedState(repoId);
+          const binaries = await Promise?.all?.(
+            renderedState?.binaries?.map?.(async (binaryRef) => {
+              const hash = binaryRef?.split?.(".")?.[0];
+              const url = `http://localhost:63403/binary/${binaryRef}?token=${binarySession.token}`;
+              return {
+                hash,
+                url,
+                fileName: binaryRef,
+              };
+            }) ?? []
+          ) ?? [];
+          broadcastToClient("extension", "state:changed", {
+            repoId,
+            store: renderedState?.store ?? {},
+            binaries,
+          });
+        } catch(e) {
+          console.log("Error", e);
+        }
       }, 100);
     });
     repos.push({
@@ -66,21 +70,25 @@ export const watchRepos = async (datasource: DataSource) => {
 };
 
 export const triggerExtensionStateUpdate = async (datasource: DataSource, repoId: string) => {
-  const renderedState = await datasource.readRenderedState(repoId);
-  const binaries = await Promise.all(
-    renderedState.binaries.map(async (binaryRef) => {
-      const hash = binaryRef.split(".")[0];
-      const url = `http://localhost:63403/binary/${binaryRef}?token=${binarySession.token}`;
-      return {
-        hash,
-        url,
-        fileName: binaryRef,
-      };
-    })
-  );
-  broadcastToClient("extension", "state:changed", {
-    repoId,
-    store: renderedState.store,
-    binaries,
-  });
+  try {
+    const renderedState = await datasource.readRenderedState(repoId);
+    const binaries = await Promise?.all?.(
+      renderedState?.binaries?.map?.(async (binaryRef) => {
+        const hash = binaryRef?.split?.(".")?.[0];
+        const url = `http://localhost:63403/binary/${binaryRef}?token=${binarySession.token}`;
+        return {
+          hash,
+          url,
+          fileName: binaryRef,
+        };
+      }) ?? []
+    ) ?? [];
+    broadcastToClient("extension", "state:changed", {
+      repoId,
+      store: renderedState?.store ?? {},
+      binaries,
+    });
+  } catch(e) {
+    console.log("Error", e);
+  }
 };
