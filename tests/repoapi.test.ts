@@ -29,6 +29,7 @@ import {
   cherryPickRevision,
   createRepoBranch,
   updateCurrentCommitSHA,
+  updateLocalBranch,
 } from "../src/repoapi";
 import {
   createBlankRepo,
@@ -527,6 +528,111 @@ describe("repoapi", () => {
       expect(commitB).toEqual(null);
     });
   });
+
+  describe("branch", () => {
+    test("can update a branch and preserve wip", async () => {
+      const PLUGIN_A_0_MANIFEST: Manifest = {
+        name: "A",
+        version: "0.0.0",
+        displayName: "A",
+        icon: "",
+        imports: {},
+        types: {},
+        store: {
+          aSet: {
+            type: "set",
+            values: {
+              mainKey: {
+                isKey: true,
+                type: "string",
+              },
+              someProp: {
+                value: {
+                  type: "int",
+                },
+              },
+            },
+          },
+        },
+      };
+      makeTestPlugin(PLUGIN_A_0_MANIFEST);
+      const state1 = {
+        aSet: [
+          {
+            mainKey: "key1",
+            someProp: {
+              value: 1,
+            },
+          },
+          {
+            mainKey: "key2",
+            someProp: {
+              value: 2,
+            },
+          },
+          {
+            mainKey: "key3",
+            someProp: {
+              value: 3,
+            },
+          },
+          {
+            mainKey: "key4",
+            someProp: {
+              value: 4,
+            },
+          },
+        ],
+      };
+      let plugins: PluginElement[] = [
+        {
+          key: "A",
+          value: "0.0.0",
+        },
+      ];
+      await updatePlugins(datasource, "abc", plugins);
+      await updatePluginState(datasource, "abc", "A", state1);
+      await createRepoBranch(datasource, "abc", "main");
+      await switchRepoBranch(datasource, "abc", "main");
+      await createRepoBranch(datasource, "abc", "feature-branch", "main");
+      await switchRepoBranch(datasource, "abc", "feature-branch");
+      const commitA = await writeRepoCommit(datasource, "abc", "A");
+
+      const state2 = {
+        aSet: [
+          {
+            mainKey: "key1",
+            someProp: {
+              value: 1,
+            },
+          },
+          {
+            mainKey: "key1a",
+            someProp: {
+              value: 11,
+            },
+          },
+          {
+            mainKey: "key3",
+            someProp: {
+              value: 3,
+            },
+          },
+          {
+            mainKey: "key4",
+            someProp: {
+              value: 4,
+            },
+          },
+        ],
+      };
+      await updatePluginState(datasource, "abc", "A", state2);
+      const wipBefore = await getApplicationState(datasource, "abc");
+      await updateLocalBranch(datasource, "abc", "feature-branch-2", commitA.sha, "main")
+      const wipAfter = await getApplicationState(datasource, "abc");
+      expect(wipBefore).toEqual(wipAfter);
+    })
+  })
 
   describe("merge", () => {
     test("creates a new commit if can automerge", async () => {

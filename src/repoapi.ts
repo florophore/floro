@@ -319,10 +319,10 @@ export const updateLocalBranch = async (
       return null;
     }
 
-    const currentKVState = await getCommitState(
+    const currentAppState = await getApplicationState(datasource, repoId);
+    const currentKVState = await convertRenderedCommitStateToKv(
       datasource,
-      repoId,
-      originalBranch?.lastCommit
+      currentAppState
     );
     if (!currentKVState) {
       return null;
@@ -415,12 +415,12 @@ export const updateLocalBranch = async (
     });
 
     await datasource.saveBranchesMetaState(repoId, branchMetaState);
-    await datasource.saveRenderedState(repoId, newRenderedState);
     const newRepoState = await updateCurrentWithNewBranch(
       datasource,
       repoId,
       branchData
     );
+    await datasource.saveRenderedState(repoId, newRenderedState);
     return newRepoState;
   } catch (e) {
     return null;

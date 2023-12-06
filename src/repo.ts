@@ -1518,16 +1518,6 @@ export const updateCurrentWithNewBranch = async (
       } : null
     };
     await datasource.saveCurrentRepoState(repoId, updated);
-    const unrenderedState = await getCommitState(
-      datasource,
-      repoId,
-      branch?.lastCommit
-    );
-    const renderedState = await convertCommitStateToRenderedState(
-      datasource,
-      unrenderedState
-    );
-    await datasource.saveRenderedState(repoId, renderedState);
     return updated;
   } catch (e) {
     return null;
