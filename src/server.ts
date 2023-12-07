@@ -227,12 +227,21 @@ io.on("connection", async (socket) => {
     | undefined
     | ("web" | "desktop" | "cli" | "extension");
 
+  const onLogoutDidLoad = (args) => {
+    if (client != "desktop") {
+      return;
+    }
+    broadcastToClient("web", "logout-did-load", args);
+  }
+
   const onOpenEvent = (args) => {
     if (client != "web") {
       return;
     }
     broadcastToClient("desktop", "open-link", args);
   }
+
+  // universal socket messages
   if (["web", "desktop", "cli", "extension"].includes(client)) {
     multiplexer[client].push(socket);
     socket.conn.on("close", () => {
@@ -241,6 +250,14 @@ io.on("connection", async (socket) => {
     });
   }
   socket.on("open-event", onOpenEvent);
+
+  // desktop-only subscriptions
+  if (client == 'desktop') {
+    socket.conn.on("close", () => {
+      socket.off("logout-did-load", onLogoutDidLoad);
+    });
+    socket.on("logout-did-load", onLogoutDidLoad);
+  }
 });
 
 watchRepos(datasource);
