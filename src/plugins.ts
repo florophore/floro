@@ -3066,6 +3066,52 @@ export const copyState = async (
       [manifest.name]: index
     };
   }, {});
+  // need to mutate copyIntoStateMap
+  for (const copyFromManifest of topSortedCopyFromManifests) {
+    if (!copyInstructions[copyFromManifest.name]) {
+      continue;
+    }
+    const [, ...fromKvs] = await getKVStateForPlugin(
+      datasource,
+      copyFromSchemaMap,
+      copyFromManifest.name,
+      copyFromStateMap
+    );
+    const [intoTop, ...intoKvs] = await getKVStateForPlugin(
+      datasource,
+      copyIntoSchemaMap,
+      copyFromManifest.name,
+      copyIntoStateMap
+    );
+    const intoKvsSet = new Set(intoKvs.map(kv => kv.key));
+    const copyInstructionsForPlugin = copyInstructions[copyFromManifest.name];
+    if ( copyInstructionsForPlugin.isManualCopy) {
+      for (const key of copyInstructionsForPlugin.manualCopyList) {
+        const [pluginName, ...decodedPath] = decodeSchemaPath(key);
+        const path = [];
+        for (let i = 0; i < decodedPath.length; ++i) {
+          path.push(decodedPath[i]);
+          if (typeof decodedPath[i] != "string") {
+            const setPath = `${pluginName}.${writePathString([...path])}`;
+            if (copyInstructionsForPlugin.manualCopyList.includes(setPath)) {
+              continue;
+            }
+            if (!intoKvsSet.has(setPath)) {
+              const kv = fromKvs.find(kv => kv.key == setPath);
+              intoKvs.unshift(kv)
+            }
+          }
+        }
+      }
+      const state = getStateFromKVForPlugin(
+        copyIntoSchemaMap,
+        [intoTop, ...intoKvs],
+        copyFromManifest.name
+      );
+      copyIntoStateMap[copyFromManifest.name] = state;
+    }
+  }
+
   for (const copyFromManifest of topSortedCopyFromManifests) {
     if (!copyInstructions[copyFromManifest.name]) {
       continue;
@@ -3126,17 +3172,18 @@ const copySetsFromCopyFromOntoCopyInto = async (
   copyFromStateMap: { [key: string]: object },
   copyIntoSchemaMap: { [key: string]: Manifest },
   copyIntoStateMap: { [key: string]: object },
-  pluginOrdinalMap: {[pluginName: string]: number},
+  pluginOrdinalMap: { [pluginName: string]: number },
   copyGroup: CopyGroup,
-  priority: "yours"|"theirs",
-  referencePriority: "yours"|"theirs",
+  priority: "yours" | "theirs",
+  referencePriority: "yours" | "theirs"
 ) => {
-
   const beforeCopyIntoStateMapString = JSON.stringify(copyIntoStateMap);
 
   // mutate copyIntoStateMap
-  const copyFromRootSchemaMap = (await getRootSchemaMap(datasource, copyFromSchemaMap)) ?? {};
-  const copyIntoRootSchemaMap = (await getRootSchemaMap(datasource, copyIntoSchemaMap)) ?? {};
+  const copyFromRootSchemaMap =
+    (await getRootSchemaMap(datasource, copyFromSchemaMap)) ?? {};
+  const copyIntoRootSchemaMap =
+    (await getRootSchemaMap(datasource, copyIntoSchemaMap)) ?? {};
 
   const copyFromStaticSetPaths = traverseSchemaMapForStaticSetPaths(
     copyFromRootSchemaMap,
@@ -3147,39 +3194,70 @@ const copySetsFromCopyFromOntoCopyInto = async (
     copyIntoRootSchemaMap
   );
 
-  const copyFromReferences = compileStateRefs(copyFromStaticSetPaths, copyFromStateMap);
-  let copyIntoReferences = compileStateRefs(copyIntoStaticSetPaths, copyIntoStateMap);
+  const copyFromReferences = compileStateRefs(
+    copyFromStaticSetPaths,
+    copyFromStateMap
+  );
+  let copyIntoReferences = compileStateRefs(
+    copyIntoStaticSetPaths,
+    copyIntoStateMap
+  );
 
   for (const pluginName in copyGroup) {
-    const keysToTraverse = Object.keys(copyGroup[pluginName].sets).sort((a, b) => a.length >= b.length ? 1 : -1);
+    const keysToTraverse = Object.keys(copyGroup[pluginName].sets).sort(
+      (a, b) => (a.length >= b.length ? 1 : -1)
+    );
     for (const parentSetPath of keysToTraverse) {
       const referenceKeys = copyGroup[pluginName].sets[parentSetPath];
       const [, ...decodedParentPath] = decodeSchemaPath(parentSetPath);
       const parentPath = [pluginName, ...decodedParentPath];
-      const copyFromParentSet = accessSetInReferenceMap(copyFromReferences, parentPath);
-      // no need to worry about null pointers because we copy the missing nested sets over
-      // before getting to the children sets
-      const copyIntoParentSet = accessSetInReferenceMap(copyIntoReferences, parentPath);
-      const setKey = (decodeSchemaPath(referenceKeys[0]).pop() as DiffElement).key;
+      const copyFromParentSet = accessSetInReferenceMap(
+        copyFromReferences,
+        parentPath
+      );
+      const copyIntoParentSet = accessSetInReferenceMap(
+        copyIntoReferences,
+        parentPath
+      );
+      const setKey = (decodeSchemaPath(referenceKeys[0]).pop() as DiffElement)
+        .key;
       const copyParentSetFromValues = copyFromParentSet ?? copyIntoParentSet;
-      const copyFromKV = Object.keys(copyParentSetFromValues.values).map(key => {
-        return {
-          key: `${parentSetPath}.${setKey}<${key}>`,
-          value: copyParentSetFromValues.values[key]
+
+      const copyFromKV = Object.keys(copyParentSetFromValues.values).map(
+        (key) => {
+          return {
+            key: `${parentSetPath}.${setKey}<${key}>`,
+            value: copyParentSetFromValues.values[key],
+          };
         }
-      });
+      );
 
       const copyParentSetIntoValues = copyIntoParentSet ?? copyFromParentSet;
-      const copyIntoKV = Object.keys(copyParentSetIntoValues.values).map(key => {
-        return {
-          key: `${parentSetPath}.${setKey}<${key}>`,
-          value: copyParentSetIntoValues.values[key]
+      const copyIntoKV = Object.keys(copyParentSetIntoValues.values).map(
+        (key) => {
+          return {
+            key: `${parentSetPath}.${setKey}<${key}>`,
+            value: copyParentSetIntoValues.values[key],
+          };
         }
-      });
-      const copiedKV = copyKV(copyFromKV, copyIntoKV, referenceKeys, priority);
-      const parentReplacement = copiedKV?.filter(v => !!v?.value?.instance).map(v => v.value.instance);
-      copyParentSetIntoValues.parent.splice(0, copyParentSetIntoValues?.parent?.length ?? 0);
+      );
+      const copiedKV = copyKV<{ instance: object }>(
+        copyFromKV,
+        copyIntoKV,
+        referenceKeys,
+        priority
+      );
+      const parentReplacement = copiedKV
+        ?.filter((v) => !!v?.value?.instance)
+        .map((v) => {
+          return v.value.instance;
+        });
+      copyParentSetIntoValues.parent.splice(
+        0,
+        copyParentSetIntoValues?.parent?.length ?? 0
+      );
       copyParentSetIntoValues.parent.push(...parentReplacement);
+
       copyIntoReferences = compileStateRefs(copyIntoStaticSetPaths, copyIntoStateMap);
       const subSchema = getSchemaAtPath(copyIntoRootSchemaMap[pluginName], referenceKeys[0]);
       const subRefs = copiedKV.filter(v => {
@@ -3220,7 +3298,7 @@ const copySetsFromCopyFromOntoCopyInto = async (
     );
   }
   return copyIntoStateMap;
-}
+};
 
 interface CopyGroup {
   [pluginName: string]: {
@@ -5842,12 +5920,13 @@ export interface Props {
   children: React.ReactElement;
 }
 
-const MAX_DATA_SIZE = 10_000;
+const MAX_DATA_SIZE = 5_000;
 const sendMessagetoParent = (
   id: number,
   pluginName: string | null,
   command: string,
-  data: object
+  data: object,
+  saveCounter?: React.MutableRefObject<number>
 ) => {
   const dataString = JSON.stringify({ command, data });
   const totalPackets = Math.floor(dataString.length / MAX_DATA_SIZE);
@@ -5857,17 +5936,29 @@ const sendMessagetoParent = (
         ? dataString.substring(i)
         : dataString.substring(i, i + MAX_DATA_SIZE);
     setTimeout(() => {
+      if (command == "save" && id < ( saveCounter?.current ?? 0)) {
+        window.parent?.postMessage(
+          {
+            id,
+            command: "abort",
+            pluginName,
+          },
+          "*"
+        );
+        return;
+      }
       window.parent?.postMessage(
         {
           id,
           chunk,
           index: i / MAX_DATA_SIZE,
           totalPackets,
+          command,
           pluginName,
         },
         "*"
       );
-    }, 0);
+    }, 16);
   }
 };
 
@@ -5919,6 +6010,7 @@ export const FloroProvider = (props: Props) => {
     };
   }>({});
   const updateCounter = useRef(1);
+  const saveCounter = useRef(1);
 
   const commandMode = useMemo(() => {
     return pluginState.commandMode;
@@ -5986,7 +6078,7 @@ export const FloroProvider = (props: Props) => {
         const id = updateCounter.current;
         ids.current = new Set([...Array.from(ids.current), id]);
         setTimeout(() => {
-          sendMessagetoParent(id, pluginName, "save", state[pluginName]);
+          sendMessagetoParent(id, pluginName, "save", state[pluginName], saveCounter);
         }, 0);
         return id;
       }
@@ -6007,7 +6099,7 @@ export const FloroProvider = (props: Props) => {
         const id = updateCounter.current;
         ids.current = new Set([...Array.from(ids.current), id]);
         setTimeout(() => {
-          sendMessagetoParent(id, null, "update-copy", copyList);
+          sendMessagetoParent(id, null, "update-copy", copyList, saveCounter);
         }, 0);
         return id;
       }
@@ -6025,7 +6117,7 @@ export const FloroProvider = (props: Props) => {
         ids.current = new Set([...Array.from(ids.current), id]);
         currentClientStorage.current = { ...clientStorage };
         setTimeout(() => {
-          sendMessagetoParent(id, null, "update-client-storage", clientStorage);
+          sendMessagetoParent(id, null, "update-client-storage", clientStorage, saveCounter);
         }, 0);
         return id;
       }
@@ -6765,47 +6857,78 @@ export function useFloroState<T>(query: string, defaultData?: T): [T|null, (t: T
   }, [obj, ctx.commandMode, query, stateId])
 
   const save = useCallback(() => {
-    if (ctx.currentPluginAppState.current && pluginName && getter && ctx.commandMode == "edit") {
+    if (
+      ctx.currentPluginAppState.current &&
+      pluginName &&
+      getter &&
+      ctx.commandMode == "edit"
+    ) {
       ctx.lastEditKey.current = query;
       ctx.lastEditStateId.current = stateId;
-      const next = updateObjectInStateMap({...ctx.currentPluginAppState.current}, query, getter) as SchemaRoot
-      ctx.setPluginState({
-        ...ctx.pluginState,
-        applicationState: next
-      });
+      const next = updateObjectInStateMap(
+        { ...ctx.currentPluginAppState.current },
+        query,
+        getter
+      ) as SchemaRoot;
       ctx.currentPluginAppState.current = next;
       ctx.saveState(pluginName, ctx.applicationState);
     }
-  }, [query, pluginName, obj, ctx.pluginState, ctx.commandMode, getter, stateId]);
+  }, [
+    query,
+    pluginName,
+    obj,
+    ctx.saveState,
+    ctx.pluginState,
+    ctx.applicationState,
+    ctx.commandMode,
+    getter,
+    stateId,
+  ]);
 
-  const set = useCallback((obj: T, doSave = true) => {
-    if (ctx.currentPluginAppState.current && pluginName && obj && ctx.commandMode == "edit") {
-      setter(obj);
-      ctx.lastEditKey.current = query;
-      ctx.lastEditStateId.current = stateId;
-      if (doSave) {
-        const next = updateObjectInStateMap({...ctx.currentPluginAppState.current}, query, obj) as SchemaRoot
-        ctx.setPluginState({
-          ...ctx.pluginState,
-          applicationState: next
-        });
-        ctx.currentPluginAppState.current = next;
-        ctx.saveState(pluginName, next);
-      } else {
-        return () => {
-          ctx.lastEditKey.current = query;
-          ctx.lastEditStateId.current = stateId;
-          const next = updateObjectInStateMap({...ctx.currentPluginAppState.current}, query, obj) as SchemaRoot
-          ctx.setPluginState({
-            ...ctx.pluginState,
-            applicationState: next
-          });
+  const set = useCallback(
+    (obj: T, doSave = true) => {
+      if (
+        ctx.currentPluginAppState.current &&
+        pluginName &&
+        obj &&
+        ctx.commandMode == "edit"
+      ) {
+        setter(obj);
+        ctx.lastEditKey.current = query;
+        ctx.lastEditStateId.current = stateId;
+        if (doSave) {
+          const next = updateObjectInStateMap(
+            { ...ctx.currentPluginAppState.current },
+            query,
+            obj
+          ) as SchemaRoot;
           ctx.currentPluginAppState.current = next;
           ctx.saveState(pluginName, next);
+        } else {
+          return () => {
+            ctx.lastEditKey.current = query;
+            ctx.lastEditStateId.current = stateId;
+            const next = updateObjectInStateMap(
+              { ...ctx.currentPluginAppState.current },
+              query,
+              obj
+            ) as SchemaRoot;
+            ctx.currentPluginAppState.current = next;
+            ctx.saveState(pluginName, next);
+          };
         }
       }
-    }
-  }, [query, ctx.saveState, ctx.setPluginState, obj, pluginName, ctx.pluginState, ctx.commandMode]);
+    },
+    [
+      query,
+      ctx.saveState,
+      obj,
+      pluginName,
+      ctx.pluginState,
+      ctx.applicationState,
+      ctx.commandMode,
+    ]
+  );
   return [getter, set, save];
 };
 `;

@@ -685,6 +685,7 @@ export const deleteLocalBranch = async (
     const currentRepoState = await datasource.readCurrentRepoState(repoId);
     let finalBranchSha;
     let finalBranchId = currentRepoState.branch;
+    let isSwitchingToBase = false;
     if (currentRepoState.branch == branchId) {
       const currentBranch = await datasource.readBranch(repoId, branchId);
       finalBranchSha = currentBranch.lastCommit;
@@ -692,6 +693,7 @@ export const deleteLocalBranch = async (
         ? await datasource.readBranch(repoId, currentBranch.baseBranchId)
         : null;
       finalBranchId = baseBranch?.id;
+      isSwitchingToBase = true;
 
       finalBranchSha = baseBranch?.lastCommit;
       if (baseBranch && baseBranch?.lastCommit) {
@@ -726,31 +728,52 @@ export const deleteLocalBranch = async (
 
     let newRenderedState: null | RenderedApplicationState;
     if (finalBranchSha) {
-      const headState = await getCommitState(
-        datasource,
-        repoId,
-        finalBranchSha
-      );
-      if (!headState) {
-        return null;
-      }
       const currentAppState = await getApplicationState(datasource, repoId);
       const currentKVState = await convertRenderedCommitStateToKv(
         datasource,
         currentAppState
       );
       const unstagedState = await getUnstagedCommitState(datasource, repoId);
-      const newCurrentKVState = await getMergedCommitState(
+      const isWIP = await getIsWip(
         datasource,
-        headState, // theirs
-        currentKVState, // yours
-        unstagedState // origin
+        repoId,
+        currentRepoState,
+        unstagedState,
+        currentKVState
       );
 
-      newRenderedState = await convertCommitStateToRenderedState(
-        datasource,
-        newCurrentKVState
-      );
+      if (isSwitchingToBase && !isWIP) {
+        /// no need to merge, just update
+        const headState = await getCommitState(
+          datasource,
+          repoId,
+          finalBranchSha
+        );
+        newRenderedState = await convertCommitStateToRenderedState(
+          datasource,
+          headState
+        );
+      } else {
+        const headState = await getCommitState(
+          datasource,
+          repoId,
+          finalBranchSha
+        );
+        if (!headState) {
+          return null;
+        }
+        const newCurrentKVState = await getMergedCommitState(
+          datasource,
+          headState, // theirs
+          currentKVState, // yours
+          unstagedState // origin
+        );
+
+        newRenderedState = await convertCommitStateToRenderedState(
+          datasource,
+          newCurrentKVState
+        );
+      }
     }
     const currentBranches = await datasource.readBranches(repoId);
     if (!currentBranches.map((v) => v.id).includes(branchId)) {

@@ -386,7 +386,7 @@ describe("plugins", () => {
             "(id)": "-ecdy51",
             subProp: 2,
           },
-        }
+        },
       ];
 
       const s1 = getStateFromKVForPlugin(
@@ -907,9 +907,9 @@ describe("plugins", () => {
                     },
                     subValue: {
                       someProp: {
-                        type: "string"
-                      }
-                    }
+                        type: "string",
+                      },
+                    },
                   },
                 },
               },
@@ -935,26 +935,26 @@ describe("plugins", () => {
                     {
                       subProp: 1,
                       subValue: {
-                        someProp: "a"
+                        someProp: "a",
                       },
                     },
                     {
                       subProp: 2,
                       someProp: {
-                        someProp: "b"
+                        someProp: "b",
                       },
                     },
                     {
                       subProp: 2,
                       someProp: {
-                        someProp: "c"
+                        someProp: "c",
                       },
                     },
                     {
                       subProp: 1,
                       someProp: {
-                        someProp: "d"
-                      }
+                        someProp: "d",
+                      },
                     },
                   ],
                 },
@@ -964,19 +964,19 @@ describe("plugins", () => {
                     {
                       subProp: 1,
                       subValue: {
-                        someProp: "a"
+                        someProp: "a",
                       },
                     },
                     {
                       subProp: 2,
                       someProp: {
-                        someProp: "b"
+                        someProp: "b",
                       },
                     },
                     {
                       subProp: 2,
                       someProp: {
-                        someProp: "c"
+                        someProp: "c",
                       },
                     },
                   ],
@@ -987,25 +987,25 @@ describe("plugins", () => {
                     {
                       subProp: 1,
                       someProp: {
-                        someProp: "a"
+                        someProp: "a",
                       },
                     },
                     {
                       subProp: 2,
                       someProp: {
-                        someProp: "b"
+                        someProp: "b",
                       },
                     },
                     {
                       subProp: 2,
                       someProp: {
-                        someProp: "c"
+                        someProp: "c",
                       },
                     },
                     {
                       subProp: 1,
                       someProp: {
-                        someProp: "d"
+                        someProp: "d",
                       },
                     },
                   ],
@@ -1029,33 +1029,33 @@ describe("plugins", () => {
 
       const out = reIndexSchemaArrays(kvs);
       expect(out).toEqual([
-        '$(simple)',
-        '$(simple).objects.name<abc>',
-        '$(simple).objects.name<abc>.list.[0]',
-        '$(simple).objects.name<abc>.list.[0].subList.[0]',
-        '$(simple).objects.name<abc>.list.[0].subList.[0].subValue',
-        '$(simple).objects.name<abc>.list.[0].subList.[1]',
-        '$(simple).objects.name<abc>.list.[0].subList.[1].subValue',
-        '$(simple).objects.name<abc>.list.[0].subList.[2]',
-        '$(simple).objects.name<abc>.list.[0].subList.[2].subValue',
-        '$(simple).objects.name<abc>.list.[0].subList.[3]',
-        '$(simple).objects.name<abc>.list.[0].subList.[3].subValue',
-        '$(simple).objects.name<abc>.list.[1]',
-        '$(simple).objects.name<abc>.list.[1].subList.[0]',
-        '$(simple).objects.name<abc>.list.[1].subList.[0].subValue',
-        '$(simple).objects.name<abc>.list.[1].subList.[1]',
-        '$(simple).objects.name<abc>.list.[1].subList.[1].subValue',
-        '$(simple).objects.name<abc>.list.[1].subList.[2]',
-        '$(simple).objects.name<abc>.list.[1].subList.[2].subValue',
-        '$(simple).objects.name<abc>.list.[2]',
-        '$(simple).objects.name<abc>.list.[2].subList.[0]',
-        '$(simple).objects.name<abc>.list.[2].subList.[0].subValue',
-        '$(simple).objects.name<abc>.list.[2].subList.[1]',
-        '$(simple).objects.name<abc>.list.[2].subList.[1].subValue',
-        '$(simple).objects.name<abc>.list.[2].subList.[2]',
-        '$(simple).objects.name<abc>.list.[2].subList.[2].subValue',
-        '$(simple).objects.name<abc>.list.[2].subList.[3]',
-        '$(simple).objects.name<abc>.list.[2].subList.[3].subValue'
+        "$(simple)",
+        "$(simple).objects.name<abc>",
+        "$(simple).objects.name<abc>.list.[0]",
+        "$(simple).objects.name<abc>.list.[0].subList.[0]",
+        "$(simple).objects.name<abc>.list.[0].subList.[0].subValue",
+        "$(simple).objects.name<abc>.list.[0].subList.[1]",
+        "$(simple).objects.name<abc>.list.[0].subList.[1].subValue",
+        "$(simple).objects.name<abc>.list.[0].subList.[2]",
+        "$(simple).objects.name<abc>.list.[0].subList.[2].subValue",
+        "$(simple).objects.name<abc>.list.[0].subList.[3]",
+        "$(simple).objects.name<abc>.list.[0].subList.[3].subValue",
+        "$(simple).objects.name<abc>.list.[1]",
+        "$(simple).objects.name<abc>.list.[1].subList.[0]",
+        "$(simple).objects.name<abc>.list.[1].subList.[0].subValue",
+        "$(simple).objects.name<abc>.list.[1].subList.[1]",
+        "$(simple).objects.name<abc>.list.[1].subList.[1].subValue",
+        "$(simple).objects.name<abc>.list.[1].subList.[2]",
+        "$(simple).objects.name<abc>.list.[1].subList.[2].subValue",
+        "$(simple).objects.name<abc>.list.[2]",
+        "$(simple).objects.name<abc>.list.[2].subList.[0]",
+        "$(simple).objects.name<abc>.list.[2].subList.[0].subValue",
+        "$(simple).objects.name<abc>.list.[2].subList.[1]",
+        "$(simple).objects.name<abc>.list.[2].subList.[1].subValue",
+        "$(simple).objects.name<abc>.list.[2].subList.[2]",
+        "$(simple).objects.name<abc>.list.[2].subList.[2].subValue",
+        "$(simple).objects.name<abc>.list.[2].subList.[3]",
+        "$(simple).objects.name<abc>.list.[2].subList.[3].subValue",
       ]);
     });
   });
@@ -2457,8 +2457,8 @@ describe("plugins", () => {
                   id: {
                     isKey: true,
                     type: "string",
-                  }
-                }
+                  },
+                },
               },
               interpolations: {
                 type: "set",
@@ -2474,14 +2474,14 @@ describe("plugins", () => {
                         type: "array",
                         values: {
                           variableRef: {
-                            type: "ref<$.objects.values.variables.values>"
-                          }
-                        }
-                      }
-                    }
-                  }
-                }
-              }
+                            type: "ref<$.objects.values.variables.values>",
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
             },
           },
         },
@@ -2514,19 +2514,24 @@ describe("plugins", () => {
                     {
                       subconditions: [
                         {
-                          variableRef: "$(A).objects.name<abc>.variables.id<var1>"
+                          variableRef:
+                            "$(A).objects.name<abc>.variables.id<var1>",
                         },
                         {
-                          variableRef: "$(A).objects.name<abc>.variables.id<var2>"
+                          variableRef:
+                            "$(A).objects.name<abc>.variables.id<var2>",
                         },
                         {
-                          variableRef: "$(A).objects.name<abc>.variables.id<var3>"
+                          variableRef:
+                            "$(A).objects.name<abc>.variables.id<var3>",
                         },
                         {
-                          variableRef: "$(A).objects.name<abc>.variables.id<var2>"
+                          variableRef:
+                            "$(A).objects.name<abc>.variables.id<var2>",
                         },
                         {
-                          variableRef: "$(A).objects.name<abc>.variables.id<var3>"
+                          variableRef:
+                            "$(A).objects.name<abc>.variables.id<var3>",
                         },
                       ],
                     },
@@ -3932,7 +3937,6 @@ describe("plugins", () => {
   });
 
   describe("copy", () => {
-
     test("can copy over plugin state", async () => {
       const PLUGIN_A_MANIFEST: Manifest = {
         name: "A",
@@ -3950,13 +3954,12 @@ describe("plugins", () => {
                 type: "string",
               },
               someValue: {
-                type: "string"
-              }
+                type: "string",
+              },
             },
           },
         },
       };
-
 
       const PLUGIN_B_MANIFEST: Manifest = {
         name: "B",
@@ -3964,7 +3967,7 @@ describe("plugins", () => {
         displayName: "B",
         icon: "",
         imports: {
-          "A": "0.0.0"
+          A: "0.0.0",
         },
         types: {},
         managedCopy: true,
@@ -3977,13 +3980,12 @@ describe("plugins", () => {
                 type: "string",
               },
               hardRef: {
-                type: "ref<$(A).aObjects.values>"
-              }
+                type: "ref<$(A).aObjects.values>",
+              },
             },
           },
         },
       };
-
 
       const schemaMapCopyFrom: { [key: string]: Manifest } = {
         [PLUGIN_B_MANIFEST.name]: PLUGIN_B_MANIFEST as Manifest,
@@ -3995,81 +3997,76 @@ describe("plugins", () => {
         [PLUGIN_A_MANIFEST.name]: PLUGIN_A_MANIFEST as Manifest,
       };
 
-      const stateCopyFromMap =
-        {
-          [PLUGIN_A_MANIFEST.name]: {
-            aObjects: [
-              {
-                mainKey: "abc",
-                someValue: "version 1 a"
-              },
-              {
-                mainKey: "def",
-                someValue: "version 1 b"
-              },
-              {
-                mainKey: "ghi",
-                someValue: "version 1 c"
-              },
-            ],
-          },
-          [PLUGIN_B_MANIFEST.name]: {
-            bObjects: [
-              {
-                id: "123",
-                hardRef: "$(A).aObjects.mainKey<abc>",
-              },
-              {
-                id: "456",
-                hardRef: "$(A).aObjects.mainKey<abc>",
-              },
-              {
-                id: "789",
-                hardRef: "$(A).aObjects.mainKey<ghi>",
-              },
-            ],
-          },
-        };
+      const stateCopyFromMap = {
+        [PLUGIN_A_MANIFEST.name]: {
+          aObjects: [
+            {
+              mainKey: "abc",
+              someValue: "version 1 a",
+            },
+            {
+              mainKey: "def",
+              someValue: "version 1 b",
+            },
+            {
+              mainKey: "ghi",
+              someValue: "version 1 c",
+            },
+          ],
+        },
+        [PLUGIN_B_MANIFEST.name]: {
+          bObjects: [
+            {
+              id: "123",
+              hardRef: "$(A).aObjects.mainKey<abc>",
+            },
+            {
+              id: "456",
+              hardRef: "$(A).aObjects.mainKey<abc>",
+            },
+            {
+              id: "789",
+              hardRef: "$(A).aObjects.mainKey<ghi>",
+            },
+          ],
+        },
+      };
 
-      const stateCopyIntoMap =
-        {
-          [PLUGIN_A_MANIFEST.name]: {
-            aObjects: [
-              {
-                mainKey: "abc",
-                someValue: "version 2 a"
-              },
-              {
-                mainKey: "def",
-                someValue: "version 2 b"
-              }
-            ],
-          },
-          [PLUGIN_B_MANIFEST.name]: {
-            bObjects: [
-              {
-                id: "123",
-                hardRef: "$(A).aObjects.mainKey<abc>",
-              },
-              {
-                id: "456",
-                hardRef: "$(A).aObjects.mainKey<def>",
-              },
-            ],
-          },
-        };
+      const stateCopyIntoMap = {
+        [PLUGIN_A_MANIFEST.name]: {
+          aObjects: [
+            {
+              mainKey: "abc",
+              someValue: "version 2 a",
+            },
+            {
+              mainKey: "def",
+              someValue: "version 2 b",
+            },
+          ],
+        },
+        [PLUGIN_B_MANIFEST.name]: {
+          bObjects: [
+            {
+              id: "123",
+              hardRef: "$(A).aObjects.mainKey<abc>",
+            },
+            {
+              id: "456",
+              hardRef: "$(A).aObjects.mainKey<def>",
+            },
+          ],
+        },
+      };
 
       const copyInstructions: CopyInstructions = {
         [PLUGIN_B_MANIFEST.name]: {
           isManualCopy: true,
-          manualCopyList: [
-            "$(B).bObjects.id<123>",
-            "$(B).bObjects.id<789>",
-          ],
+          manualCopyList: ["$(B).bObjects.id<123>", "$(B).bObjects.id<789>"],
           copyPriority: "theirs",
-          referencePriority: "theirs"
-        }
-      }
+          referencePriority: "theirs",
+        },
+      };
       const result = await copyState(
         {
           ...datasource,
@@ -4114,6 +4111,131 @@ describe("plugins", () => {
             {
               id: "789",
               hardRef: "$(A).aObjects.mainKey<ghi>",
+            },
+          ],
+        },
+      });
+    });
+
+    test("can copy over plugin state even when parent is missing", async () => {
+      const PLUGIN_A_MANIFEST: Manifest = {
+        name: "A",
+        version: "0.0.0",
+        displayName: "A",
+        icon: "",
+        imports: {},
+        types: {},
+        store: {
+          aGroups: {
+            type: "set",
+            values: {
+              groupKey: {
+                isKey: true,
+                type: "string",
+              },
+              aObjects: {
+                type: "set",
+                values: {
+                  mainKey: {
+                    isKey: true,
+                    type: "string",
+                  },
+                  someValue: {
+                    type: "string",
+                  },
+                },
+              },
+            },
+          },
+        },
+      };
+
+      const schemaMapCopyFrom: { [key: string]: Manifest } = {
+        [PLUGIN_A_MANIFEST.name]: PLUGIN_A_MANIFEST as Manifest,
+      };
+
+      const schemaMapCopyInto: { [key: string]: Manifest } = {
+        [PLUGIN_A_MANIFEST.name]: PLUGIN_A_MANIFEST as Manifest,
+      };
+
+      const stateCopyFromMap = {
+        [PLUGIN_A_MANIFEST.name]: {
+          aGroups: [
+            {
+              groupKey: "one",
+              aObjects: [
+                {
+                  mainKey: "abc",
+                  someValue: "version 1 a",
+                },
+                {
+                  mainKey: "def",
+                  someValue: "not me",
+                },
+              ],
+            },
+          ],
+        },
+      };
+
+      const stateCopyIntoMap = {
+        [PLUGIN_A_MANIFEST.name]: {
+          aGroups: [
+            {
+              groupKey: "two",
+              aObjects: [
+                {
+                  mainKey: "abc",
+                  someValue: "version 2 a",
+                },
+              ],
+            },
+          ],
+        },
+      };
+
+      const copyInstructions: CopyInstructions = {
+        [PLUGIN_A_MANIFEST.name]: {
+          isManualCopy: true,
+          manualCopyList: ["$(A).aGroups.groupKey<one>.aObjects.mainKey<abc>"],
+          copyPriority: "theirs",
+          referencePriority: "theirs",
+        },
+      };
+      const result = await copyState(
+        {
+          ...datasource,
+          getPluginManifest: async (pluginName, pluginVersion) => {
+            // could be either
+            return schemaMapCopyFrom[pluginName];
+          },
+        },
+        schemaMapCopyFrom,
+        stateCopyFromMap,
+        schemaMapCopyInto,
+        stateCopyIntoMap,
+        copyInstructions
+      );
+      expect(result).toEqual({
+        A: {
+          aGroups: [
+            {
+              groupKey: "one",
+              aObjects: [
+                {
+                  mainKey: "abc",
+                  someValue: "version 1 a",
+                },
+              ],
+            },
+            {
+              groupKey: "two",
+              aObjects: [
+                {
+                  mainKey: "abc",
+                  someValue: "version 2 a",
+                },
+              ],
             },
           ],
         },
