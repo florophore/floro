@@ -46,7 +46,6 @@ import {
 } from "./sequenceoperations";
 import { SourceCommitNode } from "./sourcegraph";
 import { DiffElement } from "./sequenceoperations";
-import { dedupApplicationKV, getApplicationState } from "./repoapi";
 import LRCache from "./lrcache";
 const lrcache = new LRCache();
 
@@ -1379,7 +1378,7 @@ export const getCommitState = async (
     checkedHot,
     hotCheckpoint
   )
-  return dedupApplicationKV(datasource, result);
+  return result;
 }
 
 export const getCommitStateRaw = async (
@@ -1511,7 +1510,7 @@ export const getUnstagedCommitState = async (
   const hotCheckpoint = await datasource.readHotCheckpoint(repoId);
   if (hotCheckpoint && currentRepoState.commit) {
     if (hotCheckpoint[0] == currentRepoState.commit) {
-      return dedupApplicationKV(datasource, hotCheckpoint[1]);
+      return hotCheckpoint[1];
     }
   }
   const commitState = await getCommitState(
@@ -1526,7 +1525,7 @@ export const getUnstagedCommitState = async (
       commitState
     );
   }
-  return dedupApplicationKV(datasource, commitState);
+  return commitState;
 };
 
 export const updateCurrentWithNewBranch = async (
@@ -1675,7 +1674,7 @@ export const convertStateStoreToKV = async (
   ]);
   const cached = lrcache.get<RawStore>(key);
   if (cached) {
-    return cached.unwrapCopy(true);
+    return cached.unwrapCopy();
   }
 
   for (const pluginManifest of manifests) {

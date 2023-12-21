@@ -681,7 +681,7 @@ const getLCSOffsetMergeSeqments = (
   const key = LRCache.getCacheKey(["getLCSOffsetMergeSeqments", sequence, offsets]);
   const cached = lrcache.get<Array<Array<string>>>(key);
   if (cached) {
-    return cached.unwrap();
+    return cached.unwrapCopy();
   }
   if (offsets.length == 0) return [];
   let out:Array<Array<string>> = new Array(offsets.length + 1);
@@ -695,6 +695,7 @@ const getLCSOffsetMergeSeqments = (
       out[idx++] = sequence.slice(offsets[i] + 1, offsets[i + 1]);
     }
   }
+
   lrcache.set(key, out);
   return out;
 };

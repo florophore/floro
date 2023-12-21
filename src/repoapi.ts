@@ -4122,7 +4122,7 @@ export const changeCommandMode = async (
       commandMode,
       comparison:
         commandMode == "compare"
-          ? await getDefaultComparison(datasource, repoId, currentRepoState)
+          ? getDefaultComparison(currentRepoState)
           : null,
     };
     await datasource.saveCurrentRepoState(repoId, nextRepoState);
@@ -4382,7 +4382,6 @@ export const convertRenderedCommitStateToKv = async (
   return out;
 };
 
-// DO NOT CACHE!
 export const convertRenderedStateStoreToKV = async (
   datasource: DataSource,
   renderedAppState: RenderedApplicationState
@@ -4392,6 +4391,11 @@ export const convertRenderedStateStoreToKV = async (
     datasource,
     renderedAppState.plugins
   );
+  const key = LRCache.getCacheKey(["convertRenderedStateStoreToKV", renderedAppState, manifests]);
+  const cached = lrcache.get<RawStore>(key)
+  if (cached) {
+    return cached.unwrapCopy();
+  }
   for (const pluginManifest of manifests) {
     const schemaMap = await getSchemaMapForManifest(datasource, pluginManifest);
     const kv = await getKVStateForPlugin(
@@ -4402,10 +4406,10 @@ export const convertRenderedStateStoreToKV = async (
     );
     out[pluginManifest.name] = kv;
   }
+  lrcache.set(key, out);
   return out;
 };
 
-// DO NOT CACHE!
 export const convertRenderedStateStoreToArrayDuplicateIndexedKV = async (
   datasource: DataSource,
   renderedAppState: RenderedApplicationState
@@ -4415,6 +4419,11 @@ export const convertRenderedStateStoreToArrayDuplicateIndexedKV = async (
     datasource,
     renderedAppState.plugins
   );
+  const key = LRCache.getCacheKey(["convertRenderedStateStoreToArrayDuplicateIndexedKV", renderedAppState, manifests]);
+  const cached = lrcache.get<{[pluginName: string]: Array<DiffElement>}>(key)
+  if (cached) {
+    return cached.unwrapCopy();
+  }
   for (const pluginManifest of manifests) {
     const schemaMap = await getSchemaMapForManifest(datasource, pluginManifest);
     const kvs = await getKVStateForPlugin(
@@ -4428,6 +4437,7 @@ export const convertRenderedStateStoreToArrayDuplicateIndexedKV = async (
     const kvArray = indexArrayDuplicates(kvCopy);
     out[pluginManifest.name] = kvArray;
   }
+  lrcache.set(key, out);
   return out;
 };
 
@@ -4454,32 +4464,9 @@ export const sanitizeApplicationKV = async (
   return rendered;
 };
 
-export const dedupApplicationKV = async (
-  datasource: DataSource,
-  applicationKV: ApplicationKVState
-): Promise<ApplicationKVState> => {
-  const rendered = await convertCommitStateToRenderedState(
-    datasource,
-    applicationKV
-  );
-  const out = await convertRenderedCommitStateToKv(
-    datasource,
-    rendered
-  );
-  return out;
-};
-
-export const getDefaultComparison = async (
-  datasource: DataSource,
-  repoId: string,
+export const getDefaultComparison = (
   repoState: RepoState
-): Promise<Comparison> => {
-  //const renderedState = await getApplicationState(datasource, repoId);
-  //const applicationKVState = await convertRenderedCommitStateToKv(
-  //  datasource,
-  //  renderedState
-  //);
-  //const unstagedState = await getUnstagedCommitState(datasource, repoId);
+): Comparison => {
   if (repoState.isInMergeConflict) {
     return {
       against: "merge",

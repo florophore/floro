@@ -1672,6 +1672,9 @@ export const makeMemoizedDataSource = (dataSourceOverride: DataSource = {}) => {
       return stateMemo[repoId];
     }
     const result = await dataSource.readRenderedState(repoId);
+    if (result) {
+      stateMemo[repoId] = result;
+    }
     return result;
   };
 

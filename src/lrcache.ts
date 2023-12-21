@@ -1,6 +1,8 @@
+import structuredClone from "@ungap/structured-clone";
+import process from "process";
+
 class CacheValue<T> {
     public value: T;
-    public copy: T;
     public key: string;
     public fnName: string;
     constructor(key: string, fnName: string, value: T) {
@@ -17,19 +19,12 @@ class CacheValue<T> {
      return this.value;
     }
 
-    unwrapCopy(forceNew: boolean): T|null {
-        if (!forceNew && this.copy) {
-            return this.copy;
-        }
+    unwrapCopy(): T|null {
         if (this.value === undefined || this.value == null) {
             return null;
         }
-        const copy = JSON.parse(JSON.stringify(this.value));
-        if (forceNew) {
-            return copy;
-        }
-        this.copy = copy;
-        return this.copy;
+        const clone = structuredClone(this.value);
+        return clone;
     }
 }
 
@@ -52,10 +47,11 @@ export default class LRCache {
                     return null;
                 }
             }
-            // no need to hash
+            // no need to hash, stringify is fastest way to do this
             const key = JSON.stringify(args);;
             this.names[key] = args[0] as string;
-            return JSON.stringify(args);
+            const stringify = JSON.stringify(args);
+            return stringify;
         } catch(e) {
             return null;
         }
@@ -71,12 +67,12 @@ export default class LRCache {
         if (this.timeouts[key]) {
             clearTimeout(this.timeouts[key]);
         }
-        this.cache[key] = value;
+        this.cache[key] = structuredClone(value);
         this.timeouts[key] = setTimeout(() => {
             delete this.cache[key];
             delete this.timeouts[key];
             delete LRCache.names[key];
-        }, ttl ?? this.defaultTTL);
+        }, process.env.NODE_ENV == "test" ? 0 : ttl ?? this.defaultTTL);
     }
 
     public get<T>(key: string, ttl?: number): CacheValue<T>|null {
@@ -92,7 +88,7 @@ export default class LRCache {
                 delete this.cache[key];
                 delete this.timeouts[key];
                 delete LRCache.names[key];
-            }, ttl ?? this.defaultTTL);
+            }, process.env.NODE_ENV == "test" ? 0 : ttl ?? this.defaultTTL);
             return value;
         }
         return null;
