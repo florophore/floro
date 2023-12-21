@@ -643,10 +643,13 @@ const saveCommit = async (
       await fs.promises.mkdir(commitDir, 0o755);
     }
     const commitPath = path.join(commitDir, `${sha.substring(2)}.json`);
-    await fs.promises.writeFile(
-      commitPath,
-      Buffer.from(JSON.stringify(commitData, null, 2))
-    );
+    const commitExists = await existsAsync(commitPath);
+    if (!commitExists) {
+      await fs.promises.writeFile(
+        commitPath,
+        Buffer.from(JSON.stringify(commitData, null, 2))
+      );
+    }
     return commitData;
   } catch (e) {
     return null;
