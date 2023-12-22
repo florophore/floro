@@ -1,6 +1,6 @@
 {
   "name": "floro",
-  "version": "0.0.37",
+  "version": "0.0.38",
   "description": "",
   "main": "dist/src/index.js",
   "bin": {

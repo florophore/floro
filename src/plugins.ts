@@ -2113,7 +2113,7 @@ const drawSchemaTypesFromImports = (
   pluginName: string,
   importedTypes = {}
 ): TypeStruct => {
-  const types = Object.keys(schema[pluginName].types).reduce((types, key) => {
+  const types = Object.keys(schema[pluginName]?.types ?? {}).reduce((types, key) => {
     if (key.startsWith(`${pluginName}.`)) {
       return {
         ...types,
@@ -2134,7 +2134,7 @@ const drawSchemaTypesFromImports = (
     };
   }, {});
 
-  return Object.keys(schema[pluginName].imports).reduce(
+  return Object.keys(schema[pluginName]?.imports ?? {}).reduce(
     (acc, importPluginName) => {
       const importTypes = drawSchemaTypesFromImports(
         schema,

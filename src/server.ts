@@ -2231,12 +2231,59 @@ app.get(
       true
     );
     const currentSchemaMap = manifestListToSchemaMap(currentManifests);
+    const conflictingVersions: Manifest[][] = await Promise.all(currentManifests.map(async (manifest): Promise<Array<Manifest>> => {
+      if (manifest.name == pluginName) {
+        return [];
+      }
+      const depFetch = await getDependenciesForManifest(
+        datasource,
+        manifest,
+        true
+      );
+      const deps = depFetch.deps.filter(m => {
+        return m.name == pluginName && m.version != pluginVersion;
+      })
+      return deps;
+    }));
+    const seen = new Set<string>();
+    const potentialConflictingVersions = conflictingVersions?.flatMap(v => v).filter(m => {
+      if (seen.has(m.version)) {
+        return false;
+      }
+      seen.add(m.version);
+      return true;
+    })
+    let hasConflictWithDep = false;
+    for (let potentialConflictingManifest of potentialConflictingVersions) {
+      const isCompatible = await pluginManifestIsSubsetOfManifest(
+        datasource,
+        {
+          [pluginName]: potentialConflictingManifest,
+        },
+        {
+          [pluginName]: manifest,
+        },
+        true
+      );
+      if (!isCompatible) {
+        hasConflictWithDep = true;
+      }
+    }
     const isCompatible = await pluginManifestIsSubsetOfManifest(
       datasource,
-      currentSchemaMap,
+      {
+        ...currentSchemaMap,
+        ...(hasConflictWithDep ? {
+        } : {
+          [pluginName]: manifest
+        })
+      },
       {
         ...currentSchemaMap,
         ...proposedSchemaMap,
+        ...(hasConflictWithDep ? {} : {
+          [pluginName]: manifest
+        })
       },
       true
     );
