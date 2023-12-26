@@ -145,6 +145,7 @@ export interface RepoState {
     direction: "yours" | "theirs";
     conflictList: ConflictList;
     mergeState: ApplicationKVState;
+    returnCommandMode: "view"|"compare";
   };
   commandMode: "view" | "edit" | "compare";
   comparison: null | Comparison;

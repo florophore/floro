@@ -2031,6 +2031,7 @@ export const mergeCommit = async (
           direction,
           mergeState,
           conflictList,
+          returnCommandMode: "compare"
         },
         commandMode: "compare",
         comparison: {
@@ -2146,20 +2147,31 @@ export const abortMerge = async (datasource: DataSource, repoId: string) => {
     if (!currentRepoState.isInMergeConflict) {
       return null;
     }
-    const updated: RepoState = {
-      ...currentRepoState,
-      commandMode: "compare",
-      comparison: {
-        against: "wip",
-        comparisonDirection: "forward",
-        branch: null,
-        commit: null,
-        same: true,
-      },
-      isInMergeConflict: false,
-      merge: null,
-    };
-    await datasource.saveCurrentRepoState(repoId, updated);
+    if (currentRepoState.merge.returnCommandMode != "view") {
+      const updated: RepoState = {
+        ...currentRepoState,
+        isInMergeConflict: false,
+        merge: null,
+        commandMode: "compare",
+        comparison: {
+          against: "wip",
+          comparisonDirection: "forward",
+          branch: null,
+          commit: null,
+          same: true,
+        },
+      };
+      await datasource.saveCurrentRepoState(repoId, updated);
+    } else {
+      const updated: RepoState = {
+        ...currentRepoState,
+        isInMergeConflict: false,
+        merge: null,
+        commandMode: "view",
+        comparison: null,
+      };
+      await datasource.saveCurrentRepoState(repoId, updated);
+    }
     const appState = await getCommitState(
       datasource,
       repoId,
@@ -2300,20 +2312,31 @@ export const resolveMerge = async (datasource: DataSource, repoId: string) => {
       mergeCommit.sha,
       true
     );
-    const updated: RepoState = {
-      ...repoState,
-      isInMergeConflict: false,
-      merge: null,
-      commandMode: "compare",
-      comparison: {
-        against: "wip",
-        comparisonDirection: "forward",
-        branch: null,
-        commit: null,
-        same: true,
-      },
-    };
-    await datasource.saveCurrentRepoState(repoId, updated);
+    if (currentRepoState.merge.returnCommandMode != "view") {
+      const updated: RepoState = {
+        ...repoState,
+        isInMergeConflict: false,
+        merge: null,
+        commandMode: "compare",
+        comparison: {
+          against: "wip",
+          comparisonDirection: "forward",
+          branch: null,
+          commit: null,
+          same: true,
+        },
+      };
+      await datasource.saveCurrentRepoState(repoId, updated);
+    } else {
+      const updated: RepoState = {
+        ...repoState,
+        isInMergeConflict: false,
+        merge: null,
+        commandMode: "view",
+        comparison: null,
+      };
+      await datasource.saveCurrentRepoState(repoId, updated);
+    }
     return currentAppState;
   } catch (e) {
     return null;
@@ -4639,7 +4662,7 @@ const getRemoteBranchDivergenceOrigin = async (
       [c.sha]: c,
     };
   }, {});
-  let currentSha = remoteBranch.lastCommit;
+  let currentSha = remoteBranch?.lastCommit;
   const remoteHistory: Array<CommitExchange|CommitHistory> = [];
   while(currentSha) {
     const commit: CommitExchange|CommitHistory = remoteCommitMap[currentSha] ?? localCommitMap[currentSha];
@@ -4903,9 +4926,9 @@ export const getFetchInfo = async (
       localBranch
     );
 
-    const branchHeadLink = fetchInfo.branchHeadLinks.find(b => b.id == remoteBranch.id);
-    const pullKv = await getKVStateFromBranchHeadLink(datasource, repoId, remoteBranch.lastCommit, branchHeadLink);
-    if (!pullKv) {
+    const branchHeadLink = !remoteBranch ? null : fetchInfo?.branchHeadLinks?.find(b => b?.id == remoteBranch?.id);
+    const pullKv = !branchHeadLink ? null : await getKVStateFromBranchHeadLink(datasource, repoId, remoteBranch.lastCommit, branchHeadLink);
+    if (!pullKv && branchHeadLink) {
       return null;
     }
     const divergenceOrigin = await getRemoteBranchDivergenceOrigin(
@@ -4920,7 +4943,7 @@ export const getFetchInfo = async (
     }
     const originSha = getMergeOriginSha(divergenceOrigin);
     const remoteAhead = remoteIdx > localIdx;
-    const nothingToPull = !remoteAhead && divergenceOrigin.rebaseShas.length == 0 && localIdx >= remoteIdx;
+    const nothingToPull = !remoteBranch || !remoteAhead && divergenceOrigin.rebaseShas.length == 0 && localIdx >= remoteIdx;
     const nothingToPush = (!branchHeadsDiverge && localIdx <= remoteIdx) && branchesAreEquivalent(localBranch, remoteBranch);
 
     const unstagedState = await getUnstagedCommitState(datasource, repoId);
@@ -5156,6 +5179,7 @@ export const getFetchInfo = async (
       hasOpenMergeRequestConflict
     };
   } catch (e) {
+    console.log("Error", e);
     return null;
   }
 };
@@ -5410,6 +5434,7 @@ export const pull = async (
                 direction,
                 mergeState,
                 conflictList,
+                returnCommandMode: "view"
               },
               commandMode: "compare",
               comparison: {
