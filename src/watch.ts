@@ -1,6 +1,6 @@
 import fs, { FSWatcher } from "fs";
 import path from "path";
-import { vReposPath } from "./filestructure";
+import { existsAsync, vReposPath } from "./filestructure";
 import { DataSource } from "./datasource";
 import { broadcastToClient } from "./multiplexer";
 import binarySession from "./binary_session";
@@ -19,6 +19,10 @@ export const watchStateFiles = async (datasource: DataSource) => {
 
   for (const repoId of repoIds) {
     const filePath = path.join(vReposPath(), repoId, "state.json");
+    const doesExist = await existsAsync(filePath);
+    if (!doesExist) {
+      continue;
+    }
     let debounce: NodeJS.Timeout;
     const watcher = fs.watch(filePath, () => {
       clearTimeout(debounce);
