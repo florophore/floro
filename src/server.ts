@@ -3035,6 +3035,7 @@ app.post(
     }
     const cloneFile = await datasource.readCloneFile(repoId);
     cloneFile.state = "paused";
+    datasource.saveCloneFile(repoId, cloneFile);
     broadcastAllDevices("clone-progress:" + repoId, cloneFile);
     res.send({ status: "ok" });
   }
