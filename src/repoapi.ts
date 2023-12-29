@@ -4905,6 +4905,13 @@ export const getFetchInfo = async (
       };
     }, {});
 
+    for (const commit of fetchInfo?.commits ?? []) {
+      const didPullCommmit = await saveRemoteSha(datasource, repoId, commit.sha);
+      if (!didPullCommmit) {
+        return null;
+      }
+    }
+
     const localBranch = await datasource?.readBranch(repoId, repoState?.branch);
     const remoteBaseBranch = localBranch.baseBranchId
       ? fetchInfo.branches.find((v) => v.id == localBranch.baseBranchId)
