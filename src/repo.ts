@@ -536,7 +536,7 @@ export const saveRemoteSha = async (
       binaryLinksRequest.data;
     for (const binaryLink of binaryLinks) {
       binDownwloads.push(
-        new Promise(async () => {
+        (async () => {
           try {
             const existsAlready = await datasource.checkBinary(
               binaryLink.fileName
@@ -551,12 +551,11 @@ export const saveRemoteSha = async (
             if (!content?.data) {
               return false;
             }
-            await datasource.writeBinary(binaryLink.fileName, content as any);
-            return true;
+            return await datasource.writeBinary(binaryLink.fileName, content?.data as any);
           } catch (e) {
             return false;
           }
-        })
+        })()
       );
     }
     const binResults = await Promise.all(binDownwloads);
@@ -2717,7 +2716,7 @@ export const getKVStateFromBranchHeadLink = async (
         binaryLinksRequest.data;
       for (const binaryLink of binaryLinks) {
         binDownwloads.push(
-          new Promise(async () => {
+          (async () => {
             try {
               const existsAlready = await datasource.checkBinary(
                 binaryLink.fileName
@@ -2732,12 +2731,11 @@ export const getKVStateFromBranchHeadLink = async (
               if (!content?.data) {
                 return false;
               }
-              await datasource.writeBinary(binaryLink.fileName, content as any);
-              return true;
+              return await datasource.writeBinary(binaryLink.fileName, content?.data as any);
             } catch (e) {
               return false;
             }
-          })
+          })()
         );
       }
       const allBinsDownloaded = await Promise.all(binDownwloads);

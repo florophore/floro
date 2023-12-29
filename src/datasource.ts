@@ -942,7 +942,10 @@ const writeBinary = async (fileName: string, content: string | NodeJS.ArrayBuffe
     const binPath = path.join(binDir, fileName);
     const existsBinSubDir = await existsAsync(binDir)
     if (!existsBinSubDir) {
-      fs.promises.mkdir(binDir, {recursive: true});
+      await fs.promises.mkdir(binDir, {recursive: true});
+      if (process.env.NODE_ENV != "test" && os.platform() != "win32") {
+        await fs.promises.chmod(binDir, 0o755);
+      }
     }
     await fs.promises.writeFile(
       binPath,
