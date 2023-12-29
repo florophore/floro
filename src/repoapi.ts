@@ -1591,6 +1591,7 @@ export const getMergeRebaseCommitList = async (
       commitToRebase.authorUsername =
         commitToRebase.authorUsername ?? commitToRebase.username;
       commitToRebase.userId = user.id;
+      commitToRebase.username = user.username;
       commitToRebase.historicalParent = commitToRebase.parent;
       commitToRebase.parent = lastCommit.sha;
       commitToRebase.idx = idx;
@@ -1722,6 +1723,7 @@ export const getMergeRebaseCommitListInto = async (
       commitToRebase.authorUsername =
         commitToRebase.authorUsername ?? commitToRebase.username;
       commitToRebase.userId = user.id;
+      commitToRebase.username = user.username;
       commitToRebase.historicalParent = commitToRebase.parent;
       commitToRebase.parent = lastCommit.sha;
       commitToRebase.idx = idx;
