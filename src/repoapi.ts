@@ -5361,12 +5361,6 @@ export const pull = async (
                   : currentRepoState.commit
               ));
 
-            const finalCommitState = await getCommitState(
-              datasource,
-              repoId,
-              finalCommit.sha
-            );
-
             for (let commitData of rebaseList) {
               const result = await datasource.saveCommit(
                 repoId,
@@ -5377,6 +5371,13 @@ export const pull = async (
                 return null;
               }
             }
+
+            const finalCommitState = await getCommitState(
+              datasource,
+              repoId,
+              finalCommit.sha
+            );
+
             branch.lastCommit = finalCommit.sha;
             branchesToUpdate.push(branch);
             branchMetaData.lastLocalCommit = finalCommit.sha;
