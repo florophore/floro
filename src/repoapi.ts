@@ -4854,6 +4854,115 @@ export const getFetchInfo = async (
       };
     }
 
+    for (const commit of fetchInfo?.commits ?? []) {
+      const didPullCommmit = await saveRemoteSha(datasource, repoId, commit.sha);
+      if (!didPullCommmit) {
+        return null;
+      }
+    }
+
+    // START BRANCH SYNC
+    // now iterate over branches
+    const branchesMetaState = await datasource.readBranchesMetaState(repoId);
+    const userLocalBranchIds = new Set(
+      branchesMetaState?.userBranches.map((b) => b.branchId)
+    );
+
+    const remoteBranchIds = new Set(fetchInfo?.branches.map((b) => b.id));
+
+    const remoteSettings = await datasource?.readRemoteSettings(repoId);
+    const protectedBranchIds = new Set(
+      remoteSettings?.branchRules?.map((b) => b.branchId)
+    );
+    protectedBranchIds.add(remoteSettings?.defaultBranchId);
+
+    const localAllBranchIds = new Set(
+      branchesMetaState?.allBranches.map((b) => b.branchId)
+    );
+
+    // 1) remove no longer needed branches
+    // 2) add new branches/updates
+    let branchIdsToEvict = [];
+    branchesMetaState.allBranches = branchesMetaState.allBranches.filter((b) => {
+      if (
+        userLocalBranchIds.has(b.branchId) ||
+        remoteBranchIds.has(b.branchId) ||
+        protectedBranchIds.has(b.branchId)
+      ) {
+        return true;
+      }
+      branchIdsToEvict.push(b.branchId);
+      return false;
+    });
+    const branchesToAdd = [];
+    const branchesToUpdate = [];
+    for (const branch of fetchInfo?.branches) {
+      if (!localAllBranchIds.has(branch.id)) {
+        const currentBranches = await datasource.readBranches(repoId);
+        const isCyclic = branchIdIsCyclic(branch.id, [
+          ...currentBranches.filter((b) => b.id != branch.id),
+          branch,
+        ]);
+        if (isCyclic) {
+          continue;
+        }
+        branchesToAdd.push(branch);
+        branchesMetaState.allBranches.push({
+          branchId: branch.id,
+          lastLocalCommit: branch.lastCommit,
+          lastRemoteCommit: branch.lastCommit,
+        });
+      } else if (!userLocalBranchIds.has(branch.id)) {
+        const currentBranches = await datasource.readBranches(repoId);
+        const isCyclic = branchIdIsCyclic(branch.id, [
+          ...currentBranches.filter((b) => b.id != branch.id),
+          branch,
+        ]);
+        if (isCyclic) {
+          continue;
+        }
+        const branchMetaData = branchesMetaState.allBranches.find(
+          (b) => b.branchId == branch.id
+        );
+        branchesToUpdate.push(branch);
+        branchMetaData.lastLocalCommit = branch.lastCommit;
+        branchMetaData.lastRemoteCommit = branch.lastCommit;
+      }
+    }
+
+    branchesMetaState.userBranches = branchesMetaState.userBranches.map((v) => {
+      return branchesMetaState.allBranches.find((b) => b.branchId == v.branchId);
+    });
+    for (const branchIdToEvict of branchIdsToEvict) {
+      await datasource.deleteBranch(repoId, branchIdToEvict);
+    }
+
+    const currentBranches = await datasource.readBranches(repoId);
+    const nextCombinedBranches = combineBranches(currentBranches, [
+      ...branchesToAdd,
+      ...branchesToUpdate,
+    ]);
+    for (const branch of branchesToAdd) {
+      const isCyclic = branchIdIsCyclic(branch.id, nextCombinedBranches);
+      if (isCyclic) {
+        continue;
+      }
+      const nextBranch = await datasource.saveBranch(repoId, branch.id, branch);
+      webhookQueue.addBranchUpdate(datasource, repoId, nextBranch);
+    }
+
+    for (const branch of branchesToUpdate) {
+      const isCyclic = branchIdIsCyclic(branch.id, nextCombinedBranches);
+      if (isCyclic) {
+        continue;
+      }
+      const nextBranch = await datasource.saveBranch(repoId, branch.id, branch);
+      webhookQueue.addBranchUpdate(datasource, repoId, nextBranch);
+    }
+
+    await datasource.saveBranchesMetaState(repoId, branchesMetaState);
+    // END BRANCH SYNC
+
     const localBranches = await datasource.readBranches(repoId);
     const combinedBranches = combineBranches(localBranches, fetchInfo.branches);
     const hasLocalBranchCycle = branchIdIsCyclic(
@@ -4904,13 +5013,6 @@ export const getFetchInfo = async (
         [commit.sha]: commit,
       };
     }, {});
-
-    for (const commit of fetchInfo?.commits ?? []) {
-      const didPullCommmit = await saveRemoteSha(datasource, repoId, commit.sha);
-      if (!didPullCommmit) {
-        return null;
-      }
-    }
 
     const localBranch = await datasource?.readBranch(repoId, repoState?.branch);
     const remoteBaseBranch = localBranch.baseBranchId
