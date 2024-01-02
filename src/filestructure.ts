@@ -106,7 +106,7 @@ const writeDefaultFiles = (isReset = false) => {
 
     # Default allow any application on localhost or 127.0.0.1
     ${defaultCorsRegex}
-    `.split(os.EOL).map(s => s.trimStart()).slice(1).join(os.EOL));
+    `.split('\n').map(s => s.trimStart()).slice(1).join('\n'));
   }
 
   // FILES
@@ -116,7 +116,7 @@ const writeDefaultFiles = (isReset = false) => {
     fs.writeFileSync(vConfigRemotePath(), `
     # Add the remote origin against which to run floro.
     ${defaultHost}
-    `.split(os.EOL).map(s => s.trimStart()).slice(1).join(os.EOL));
+    `.split('\n').map(s => s.trimStart()).slice(1).join('\n'));
   }
 
   // FILES
@@ -176,9 +176,9 @@ export const buildFloroFilestructure = (): void => {
     }
   }
 
-  if (!fs.existsSync(vReposPath()) && os.platform() != "win32") {
+  if (!fs.existsSync(vReposPath())) {
     fs.mkdirSync(vReposPath());
-    if (NODE_ENV != "test") {
+    if (NODE_ENV != "test" && os.platform() != "win32") {
       fs.chmodSync(vReposPath(), 0o755);
     }
   }
@@ -332,7 +332,7 @@ export const writePluginsJsonAsync = async (plugins: {[key: string]: { proxy?: b
 export const getRemoteHostSync = (): string => {
   try {
     const remoteHostTxt = fs.readFileSync(vConfigRemotePath(), { encoding: 'utf-8'});
-    return remoteHostTxt.toString().split(os.EOL).find(s => {
+    return remoteHostTxt.toString().split('\n').find(s => {
       if (s.trimStart()[0] == '#') {
         return false
       }
@@ -350,7 +350,7 @@ export const getRemoteHostSync = (): string => {
 export const getRemoteHostAsync = async (): Promise<string> => {
   try {
     const remoteHostTxt = await fs.promises.readFile(vConfigRemotePath(), { encoding: 'utf-8'});
-    return remoteHostTxt.toString().split(os.EOL).find(s => {
+    return remoteHostTxt.toString().split('\n').find(s => {
       if (s.trimStart()[0] == '#') {
         return false
       }
