@@ -3920,162 +3920,188 @@ export const renderApiReponse = async (
   renderedApplicationState: RenderedApplicationState,
   applicationKVState: ApplicationKVState,
   repoState: RepoState
-): Promise<ApiResponse> => {
-  const [
-    apiStoreInvalidity,
-    manifests,
-    branch,
-    lastCommit,
-    mergeCommit,
-    checkedOutBranchIds,
-  ] = await Promise.all([
-    getInvalidStates(datasource, applicationKVState),
-    getPluginManifests(datasource, renderedApplicationState?.plugins),
-    getBranchFromRepoState(repoId, datasource, repoState),
-    getLastCommitFromRepoState(repoId, datasource, repoState),
-    repoState?.isInMergeConflict
-      ? await datasource.readCommit(repoId, repoState?.merge.fromSha)
-      : null,
-    getCheckoutBranchIds(datasource, repoId),
-  ]);
-  const baseBranch = await getBaseBranchFromBranch(repoId, datasource, branch);
-  const schemaMap = manifestListToSchemaMap(manifests);
-
-  const binaryToken = binarySession.token;
-
-  if (repoState?.commandMode == "edit") {
-    const storageMap = await getPluginClientStorage(
-      datasource,
-      repoId,
-      renderedApplicationState.plugins.map((kv) => kv.key)
-    );
-    const unstagedState = await getUnstagedCommitState(datasource, repoId);
-    const isWIP =
-      unstagedState &&
-      (await getIsWip(
-        datasource,
-        repoId,
-        repoState,
-        unstagedState,
-        applicationKVState
-      ));
-
-    const [canPopStashedChanges, stashSize] = await Promise.all([
-      getCanPopStashedChanges(datasource, repoId),
-      getStashSize(datasource, repoId),
+): Promise<ApiResponse|null> => {
+  try {
+    const [
+      apiStoreInvalidity,
+      manifests,
+      branch,
+      lastCommit,
+      mergeCommit,
+      checkedOutBranchIds,
+    ] = await Promise.all([
+      getInvalidStates(datasource, applicationKVState),
+      getPluginManifests(datasource, renderedApplicationState?.plugins),
+      getBranchFromRepoState(repoId, datasource, repoState),
+      getLastCommitFromRepoState(repoId, datasource, repoState),
+      repoState?.isInMergeConflict
+        ? await datasource.readCommit(repoId, repoState?.merge.fromSha)
+        : null,
+      getCheckoutBranchIds(datasource, repoId),
     ]);
-    return {
-      apiStoreInvalidity,
-      repoState,
-      applicationState: renderedApplicationState,
-      kvState: applicationKVState,
-      schemaMap,
-      branch,
-      baseBranch,
-      lastCommit,
-      isWIP,
-      canPopStashedChanges,
-      stashSize,
-      mergeCommit,
-      checkedOutBranchIds,
-      binaryToken,
-      storageMap
-    };
-  }
+    const baseBranch = await getBaseBranchFromBranch(repoId, datasource, branch);
+    const schemaMap = manifestListToSchemaMap(manifests);
 
-  if (repoState?.commandMode == "view") {
-    const storageMap = await getPluginClientStorage(
-      datasource,
-      repoId,
-      renderedApplicationState.plugins.map((kv) => kv.key)
-    );
-    const unstagedState = await getUnstagedCommitState(datasource, repoId);
-    const isWIP =
-      unstagedState &&
-      (await getIsWip(
+    const binaryToken = binarySession.token;
+
+    if (repoState?.commandMode == "edit") {
+      const storageMap = await getPluginClientStorage(
         datasource,
         repoId,
-        repoState,
-        unstagedState,
-        applicationKVState
-      ));
-    return {
-      apiStoreInvalidity,
-      repoState,
-      applicationState: renderedApplicationState,
-      kvState: applicationKVState,
-      schemaMap,
-      branch,
-      baseBranch,
-      lastCommit,
-      isWIP,
-      mergeCommit,
-      checkedOutBranchIds,
-      binaryToken,
-      storageMap
-    };
-  }
-  if (repoState?.commandMode == "compare") {
-    const unstagedState = await getUnstagedCommitState(datasource, repoId);
+        renderedApplicationState.plugins.map((kv) => kv.key)
+      );
+      const unstagedState = await getUnstagedCommitState(datasource, repoId);
+      const isWIP =
+        unstagedState &&
+        (await getIsWip(
+          datasource,
+          repoId,
+          repoState,
+          unstagedState,
+          applicationKVState
+        ));
 
-    const isWIP =
-      unstagedState &&
-      (await getIsWip(
-        datasource,
-        repoId,
-        repoState,
-        unstagedState,
-        applicationKVState
-      ));
-    const {
-      apiDiff,
-      diff,
-      beforeState,
-      beforeKvState,
-      beforeApiStoreInvalidity,
-      beforeManifests,
-      beforeSchemaMap,
-      divergenceOrigin,
-      divergenceSha,
-    } = await getApiDiffFromComparisonState(
-      repoId,
-      datasource,
-      repoState,
-      applicationKVState
-    );
-    const storageMap = await getPluginClientStorage(
-      datasource,
-      repoId,
-      Array.from(
-        new Set([
-          ...renderedApplicationState.plugins.map((kv) => kv.key),
-          ...beforeState.plugins.map((kv) => kv.key),
-        ])
-      )
-    );
-
-    const conflictResolution = repoState?.isInMergeConflict
-      ? getConflictResolution(diff, repoState?.merge?.conflictList)
-      : null;
-
-    if (repoState.comparison.comparisonDirection == "backward") {
+      const [canPopStashedChanges, stashSize] = await Promise.all([
+        getCanPopStashedChanges(datasource, repoId),
+        getStashSize(datasource, repoId),
+      ]);
       return {
-        apiStoreInvalidity: beforeApiStoreInvalidity,
+        apiStoreInvalidity,
         repoState,
-        applicationState: beforeState,
-        kvState: beforeKvState,
-        beforeKvState: applicationKVState,
-        schemaMap: beforeSchemaMap,
+        applicationState: renderedApplicationState,
+        kvState: applicationKVState,
+        schemaMap,
+        branch,
+        baseBranch,
+        lastCommit,
+        isWIP,
+        canPopStashedChanges,
+        stashSize,
+        mergeCommit,
+        checkedOutBranchIds,
+        binaryToken,
+        storageMap
+      };
+    }
+
+    if (repoState?.commandMode == "view") {
+      const storageMap = await getPluginClientStorage(
+        datasource,
+        repoId,
+        renderedApplicationState.plugins.map((kv) => kv.key)
+      );
+      const unstagedState = await getUnstagedCommitState(datasource, repoId);
+      const isWIP =
+        unstagedState &&
+        (await getIsWip(
+          datasource,
+          repoId,
+          repoState,
+          unstagedState,
+          applicationKVState
+        ));
+      return {
+        apiStoreInvalidity,
+        repoState,
+        applicationState: renderedApplicationState,
+        kvState: applicationKVState,
+        schemaMap,
+        branch,
+        baseBranch,
+        lastCommit,
+        isWIP,
+        mergeCommit,
+        checkedOutBranchIds,
+        binaryToken,
+        storageMap
+      };
+    }
+    if (repoState?.commandMode == "compare") {
+      const unstagedState = await getUnstagedCommitState(datasource, repoId);
+
+      const isWIP =
+        unstagedState &&
+        (await getIsWip(
+          datasource,
+          repoId,
+          repoState,
+          unstagedState,
+          applicationKVState
+        ));
+      const {
+        apiDiff,
+        diff,
+        beforeState,
+        beforeKvState,
+        beforeApiStoreInvalidity,
+        beforeManifests,
+        beforeSchemaMap,
+        divergenceOrigin,
+        divergenceSha,
+      } = await getApiDiffFromComparisonState(
+        repoId,
+        datasource,
+        repoState,
+        applicationKVState
+      );
+      const storageMap = await getPluginClientStorage(
+        datasource,
+        repoId,
+        Array.from(
+          new Set([
+            ...renderedApplicationState.plugins.map((kv) => kv.key),
+            ...beforeState.plugins.map((kv) => kv.key),
+          ])
+        )
+      );
+
+      const conflictResolution = repoState?.isInMergeConflict
+        ? getConflictResolution(diff, repoState?.merge?.conflictList)
+        : null;
+
+      if (repoState.comparison.comparisonDirection == "backward") {
+        return {
+          apiStoreInvalidity: beforeApiStoreInvalidity,
+          repoState,
+          applicationState: beforeState,
+          kvState: beforeKvState,
+          beforeKvState: applicationKVState,
+          schemaMap: beforeSchemaMap,
+          branch,
+          baseBranch,
+          lastCommit,
+          isWIP,
+          apiDiff,
+          beforeState: renderedApplicationState,
+          beforeApiStoreInvalidity: apiStoreInvalidity,
+          beforeManifests: manifests,
+          beforeSchemaMap: schemaMap,
+          mergeCommit,
+          checkedOutBranchIds,
+          binaryToken,
+          divergenceOrigin,
+          divergenceSha,
+          storageMap
+        };
+      }
+      return {
+        apiStoreInvalidity,
+        repoState,
+        applicationState: renderedApplicationState,
+        kvState: applicationKVState,
+        schemaMap,
         branch,
         baseBranch,
         lastCommit,
         isWIP,
         apiDiff,
-        beforeState: renderedApplicationState,
-        beforeApiStoreInvalidity: apiStoreInvalidity,
-        beforeManifests: manifests,
-        beforeSchemaMap: schemaMap,
+        beforeState,
+        beforeKvState,
+        beforeApiStoreInvalidity,
+        beforeManifests,
+        beforeSchemaMap,
         mergeCommit,
+        conflictResolution,
         checkedOutBranchIds,
         binaryToken,
         divergenceOrigin,
@@ -4083,32 +4109,11 @@ export const renderApiReponse = async (
         storageMap
       };
     }
-    return {
-      apiStoreInvalidity,
-      repoState,
-      applicationState: renderedApplicationState,
-      kvState: applicationKVState,
-      schemaMap,
-      branch,
-      baseBranch,
-      lastCommit,
-      isWIP,
-      apiDiff,
-      beforeState,
-      beforeKvState,
-      beforeApiStoreInvalidity,
-      beforeManifests,
-      beforeSchemaMap,
-      mergeCommit,
-      conflictResolution,
-      checkedOutBranchIds,
-      binaryToken,
-      divergenceOrigin,
-      divergenceSha,
-      storageMap
-    };
+    return null;
+  } catch(e) {
+    console.log("renderApiRespone Error", e);
+    return null
   }
-  return null;
 };
 
 export const renderSourceGraphInputs = async (
