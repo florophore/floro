@@ -12,6 +12,7 @@
     "removeComments": false,
     "noImplicitAny": false,
     "resolveJsonModule": true,
+    "strict": false,
     "rootDirs": [
       "src",
       "floro"
