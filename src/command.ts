@@ -135,7 +135,7 @@ yargs
           },
           handler: async (options) => {
             const cwd = process.cwd();
-            const syncResult = await syncModule(cwd, options.module, options.local ?? false);
+            const syncResult = await syncModule(cwd, options.module, options.local ?? false, options?.['remote-key']);
             if (syncResult.status == "ok") {
               console.log(
                 clc.cyanBright.bgBlack.underline(
@@ -177,7 +177,7 @@ yargs
           describe: "builds application state from floro repository",
           handler: async (options) => {
             const cwd = process.cwd();
-            const result = await buildModule(cwd, options.module, options.local ?? false);
+            const result = await buildModule(cwd, options.module, options.local ?? false, options?.['remote-key']);
             if (result.status == "ok") {
               console.log(
                 clc.cyanBright.bgBlack.underline(
