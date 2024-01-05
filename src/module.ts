@@ -958,6 +958,7 @@ const fetchRepoSyncState = async (
     }
     return null;
   } catch (e) {
+    console.log("Fetch Sync State Failed with ", e)
     return null;
   }
 };
