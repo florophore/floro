@@ -930,7 +930,7 @@ const fetchRepoSyncState = async (
       });
       const state = stateRequest?.data ?? null;
       if (!state) {
-        console.log("Failed State Request", stateRequest)
+        console.log("Failed State Request", JSON.stringify(stateRequest, null, 2))
         return null;
       }
 
@@ -943,7 +943,7 @@ const fetchRepoSyncState = async (
         },
       });
       if (!repoSyncCommitInfoRequest?.data) {
-        console.log("Failed Repo Sync Commit Request", repoSyncCommitInfoRequest)
+        console.log("Failed Repo Sync Commit Request", JSON.stringify(repoSyncCommitInfoRequest, null, 2))
         return null;
       }
       const commitInfo = {
@@ -959,6 +959,7 @@ const fetchRepoSyncState = async (
         commitInfo,
       };
     }
+    console.log("Fetch State Link Failed", JSON.stringify(repoSyncStateLinkRequest, null, 2))
     return null;
   } catch (e) {
     console.log("Fetch Sync State Failed with ", e)
