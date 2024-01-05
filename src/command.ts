@@ -159,6 +159,7 @@ yargs
                     buildResult.message
                   )
                 );
+                return;
               } else {
                 console.log(
                   clc.redBright.bgBlack.underline(
@@ -183,6 +184,7 @@ yargs
                   result.message
                 )
               );
+              return;
             } else {
               clc.redBright.bgBlack.underline(
                 result.message

@@ -432,7 +432,7 @@ export const buildModuleFromState = async (cwd: string, moduleFile: string) => {
     const metaFile = JSON.parse(metaFileString) as MetaFile;
 
     const floroModulesDirName = module.moduleDir ?? "floro_modules";
-    const floroModulesPath = path.join(cwd, floroModulesDirName);
+    const floroModulesPath = path.join(moduleDir, floroModulesDirName);
     const floroModulesExists = await existsAsync(floroModulesPath);
     if (!floroModulesExists) {
       await fs.promises.mkdir(floroModulesPath);
@@ -657,7 +657,7 @@ export const buildModule = async (
     const metaFile = JSON.parse(metaFileString) as MetaFile;
 
     const floroModulesDirName = module.moduleDir ?? "floro_modules";
-    const floroModulesPath = path.join(cwd, floroModulesDirName);
+    const floroModulesPath = path.join(moduleDir, floroModulesDirName);
     const floroModulesExists = await existsAsync(floroModulesPath);
     if (!floroModulesExists) {
       await fs.promises.mkdir(floroModulesPath);
