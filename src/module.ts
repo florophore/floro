@@ -1094,13 +1094,13 @@ const fetchRepoSyncBinaries = async (
     const session = await getUserSessionAsync();
     const repoSyncManifestsRequest = await axios({
       method: "get",
-      url: `${remote}/sync/api/v0/repository/${repoId}/commit/${sha}/manifests`,
+      url: `${remote}/sync/api/v0/repository/${repoId}/commit/${sha}/binaries`,
       headers: {
         ["session_key"]: session?.clientKey,
         ["floro-api-key"]: apiKey,
       },
     });
-    const binaries = repoSyncManifestsRequest?.data ?? null;
+    const binaries = repoSyncManifestsRequest?.data?.binaries ?? null;
     return {
       datasource: "fetch",
       binaries,
