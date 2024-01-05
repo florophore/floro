@@ -917,7 +917,7 @@ const fetchRepoSyncState = async (
     const session = await getUserSessionAsync();
     const repoSyncStateLinkRequest = await axios({
       method: "get",
-      url: `${remote}/sync/api/v0/repo/${repoId}/commit/${sha}/stateLink`,
+      url: `${remote}/sync/api/v0/repository/${repoId}/commit/${sha}/stateLink`,
       headers: {
         ["session_key"]: session?.clientKey,
         ["floro-api-key"]: apiKey,
@@ -936,7 +936,7 @@ const fetchRepoSyncState = async (
 
       const repoSyncCommitInfoRequest = await axios({
         method: "get",
-        url: `${remote}/sync/api/v0/repo/${repoId}/commit/${sha}`,
+        url: `${remote}/sync/api/v0/repository/${repoId}/commit/${sha}`,
         headers: {
           ["session_key"]: session?.clientKey,
           ["floro-api-key"]: apiKey,
@@ -999,7 +999,7 @@ const fetchRepoSyncManifests = async (
     const session = await getUserSessionAsync();
     const repoSyncManifestsRequest = await axios({
       method: "get",
-      url: `${remote}/sync/api/v0/repo/${repoId}/commit/${sha}/manifest`,
+      url: `${remote}/sync/api/v0/repository/${repoId}/commit/${sha}/manifests`,
       headers: {
         ["session_key"]: session?.clientKey,
         ["floro-api-key"]: apiKey,
@@ -1094,7 +1094,7 @@ const fetchRepoSyncBinaries = async (
     const session = await getUserSessionAsync();
     const repoSyncManifestsRequest = await axios({
       method: "get",
-      url: `${remote}/sync/api/v0/repo/${repoId}/commit/${sha}/manifest`,
+      url: `${remote}/sync/api/v0/repository/${repoId}/commit/${sha}/manifests`,
       headers: {
         ["session_key"]: session?.clientKey,
         ["floro-api-key"]: apiKey,
