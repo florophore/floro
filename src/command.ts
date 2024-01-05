@@ -177,9 +177,7 @@ yargs
           describe: "builds application state from floro repository",
           handler: async (options) => {
             const cwd = process.cwd();
-            console.log("CWD IS", cwd);
             const result = await buildModule(cwd, options.module, options.local ?? false);
-            console.log("RES IS", result);
             if (result.status == "ok") {
               console.log(
                 clc.cyanBright.bgBlack.underline(
@@ -188,8 +186,10 @@ yargs
               );
               return;
             } else {
-              clc.redBright.bgBlack.underline(
-                result.message
+              console.log(
+                clc.redBright.bgBlack.underline(
+                  result.message
+                )
               )
               process.exitCode = 1;
               return;

@@ -910,6 +910,7 @@ const fetchRepoSyncState = async (
       }
     }
     if (buildLocal) {
+      console.log("Failed Build Local")
       return null;
     }
     const remote = await getRemoteHostAsync();
@@ -929,6 +930,7 @@ const fetchRepoSyncState = async (
       });
       const state = stateRequest?.data ?? null;
       if (!state) {
+        console.log("Failed State Request", stateRequest)
         return null;
       }
 
@@ -941,6 +943,7 @@ const fetchRepoSyncState = async (
         },
       });
       if (!repoSyncCommitInfoRequest?.data) {
+        console.log("Failed Repo Sync Commit Request", repoSyncCommitInfoRequest)
         return null;
       }
       const commitInfo = {
