@@ -6036,6 +6036,9 @@ const sendMessagetoParent = (
   data: object,
   saveCounter?: React.MutableRefObject<number>
 ) => {
+  if (saveCounter && id > saveCounter.current) {
+    saveCounter.current = id;
+  }
   const dataString = JSON.stringify({ command, data });
   const totalPackets = Math.floor(dataString.length / MAX_DATA_SIZE);
   for (let i = 0; i < dataString.length; i += MAX_DATA_SIZE) {
@@ -6066,7 +6069,7 @@ const sendMessagetoParent = (
         },
         "*"
       );
-    }, 16);
+    }, 0);
   }
 };
 
@@ -6917,14 +6920,13 @@ export const drawUseFloroStateFunction = (
   let code = "";
   for (let diffable of diffables) {
     const wildcard = renderDiffableToWildcard(diffable);
-    code += `export function useFloroState(query: PointerTypes['${wildcard}'], defaultData?: SchemaTypes['${wildcard}']): [SchemaTypes['${wildcard}']|null, (t: SchemaTypes['${wildcard}'], doSave?: boolean) => void, () => void];\n`;
+    code += `export function useFloroState(query: PointerTypes['${wildcard}'], defaultData?: SchemaTypes['${wildcard}']): [SchemaTypes['${wildcard}']|null, (t: SchemaTypes['${wildcard}'], doSave?: boolean) => void|(() => void), () => void];\n`;
   }
   code += USE_FLORO_STATE_FUNCTION + "\n";
   return code;
 }
 
 export const USE_FLORO_STATE_FUNCTION = `
-export function useFloroState<T>(query: string, defaultData?: T): [T|null, (t: T, doSave?: true) => void, () => void];
 export function useFloroState<T>(query: string, defaultData?: T): [T|null, (t: T, doSave?: boolean) => void|(() => void), () => void] {
   const ctx = useFloroContext();
   const pluginName = useMemo(() => getPluginNameFromQuery(query), [query]);
