@@ -78,7 +78,8 @@ import {
   getCanRevert,
   getIsMerged,
   sanitizeApplicationKV,
-  readCurrentState
+  readCurrentState,
+  getPluginClientStorage
 } from "./repoapi";
 import {
   makeMemoizedDataSource,
@@ -2995,6 +2996,79 @@ app.post(
   }
 );
 
+app.get(
+  "/repo/:repoId/storage/v2",
+  cors(corsNoNullOriginDelegate),
+  async (req, res): Promise<void> => {
+    try {
+      const repoId = req.params["repoId"];
+      const renderedState = await readCurrentState(
+        datasource,
+        repoId,
+      );
+      const storageMap = await getPluginClientStorage(
+        datasource,
+        repoId,
+        renderedState.plugins.map((kv) => kv.key)
+      );
+      res.send(storageMap ?? {});
+    } catch(e) {
+      res.sendStatus(400);
+    }
+  }
+);
+
+
+app.post(
+  "/repo/:repoId/plugin/:pluginName/storage/v2",
+  cors(corsNoNullOriginDelegate),
+  async (req, res): Promise<void> => {
+    try {
+      const repoId = req.params["repoId"];
+      const pluginName = req.params["pluginName"];
+      const storage = req.body["storage"];
+      await datasource.savePluginClientStorage(repoId, pluginName, storage)
+      const renderedState = await readCurrentState(
+        datasource,
+        repoId,
+      );
+
+      const storageMap = await getPluginClientStorage(
+        datasource,
+        repoId,
+        renderedState.plugins.map((kv) => kv.key)
+      );
+      res.send(storageMap ?? {});
+    } catch(e) {
+      res.sendStatus(400);
+    }
+  }
+);
+
+app.post(
+  "/repo/:repoId/plugin/:pluginName/storage/clear/v2",
+  cors(corsNoNullOriginDelegate),
+  async (req, res): Promise<void> => {
+    try {
+      const repoId = req.params["repoId"];
+      const pluginName = req.params["pluginName"];
+      await datasource.clearPluginClientStorage(repoId, pluginName);
+      const renderedState = await readCurrentState(
+        datasource,
+        repoId,
+      );
+
+      const storageMap = await getPluginClientStorage(
+        datasource,
+        repoId,
+        renderedState.plugins.map((kv) => kv.key)
+      );
+      res.send(storageMap ?? {});
+    } catch(e) {
+      res.sendStatus(400);
+    }
+  }
+);
 
 app.get(
   "/repo/:repoId/clone/state",
