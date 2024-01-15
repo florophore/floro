@@ -46,8 +46,6 @@ import {
 } from "./sequenceoperations";
 import { SourceCommitNode } from "./sourcegraph";
 import { DiffElement } from "./sequenceoperations";
-import LRCache from "./lrcache";
-const lrcache = new LRCache();
 
 export interface FetchInfo {
   canPushBranch: boolean;
@@ -1121,16 +1119,6 @@ export const getDivergenceOriginFromHistoryOrCommitExchange = async (
   if (!fromHistory) {
     throw "missing history";
   }
-
-  const key = LRCache.getCacheKey([
-    "getDivergenceOriginFromHistoryOrCommitExchange",
-    fromHistory,
-    intoHistory,
-  ]);
-  const cached = lrcache.get<DivergenceOrigin>(key, 10_000);
-  if (cached) {
-    return cached.unwrap();
-  }
   const longerHistory =
     fromHistory.length >= intoHistory.length ? fromHistory : intoHistory;
   const shorterHistory =
@@ -1205,7 +1193,6 @@ export const getDivergenceOriginFromHistoryOrCommitExchange = async (
           basedOn: "into",
           rebaseShas
         }
-        lrcache.set(key, out, 10_000);
         return out;
       }
     }
@@ -1235,7 +1222,6 @@ export const getDivergenceOriginFromHistoryOrCommitExchange = async (
           basedOn: "from",
           rebaseShas
         }
-        lrcache.set(key, out, 10_000);
         return out;
       }
     }
@@ -1252,7 +1238,6 @@ export const getDivergenceOriginFromHistoryOrCommitExchange = async (
       basedOn: "from",
       rebaseShas
     }
-    lrcache.set(key, out, 10_000);
     return out;
   }
 
@@ -1283,7 +1268,6 @@ export const getDivergenceOriginFromHistoryOrCommitExchange = async (
           basedOn: "into",
           rebaseShas
         }
-        lrcache.set(key, out, 10_000);
         return out;
       }
     }
@@ -1313,7 +1297,6 @@ export const getDivergenceOriginFromHistoryOrCommitExchange = async (
           basedOn: "from",
           rebaseShas
         }
-        lrcache.set(key, out, 10_000);
         return out;
       }
     }
@@ -1334,7 +1317,6 @@ export const getDivergenceOriginFromHistoryOrCommitExchange = async (
       basedOn: "into",
       rebaseShas
     }
-    lrcache.set(key, out, 10_000);
     return out;
   }
   const out: DivergenceOrigin = {
@@ -1346,7 +1328,6 @@ export const getDivergenceOriginFromHistoryOrCommitExchange = async (
     basedOn: "into",
     rebaseShas: []
   }
-  lrcache.set(key, out, 10_000);
   return out;
 };
 
@@ -1666,16 +1647,6 @@ export const convertStateStoreToKV = async (
 ): Promise<RawStore> => {
   let out = {};
   const manifests = await getPluginManifests(datasource, appKVState.plugins);
-  const key = LRCache.getCacheKey([
-    "indexArrayDuplicates",
-    appKVState,
-    stateStore,
-    manifests
-  ]);
-  const cached = lrcache.get<RawStore>(key);
-  if (cached) {
-    return cached.unwrapCopy();
-  }
 
   for (const pluginManifest of manifests) {
     const schemaMap = await getSchemaMapForManifest(datasource, pluginManifest);
@@ -1687,7 +1658,6 @@ export const convertStateStoreToKV = async (
     );
     out[pluginManifest.name] = kv;
   }
-  lrcache.set(key, out);
   return out;
 };
 
@@ -1709,14 +1679,6 @@ export const convertCommitStateToRenderedState = async (
 export const tokenizeCommitState = (
   appKVState: ApplicationKVState
 ): [TokenizedState, { [key: string]: unknown }] => {
-  const key = LRCache.getCacheKey([
-    "tokenizeCommitState",
-    appKVState,
-  ]);
-  const cached = lrcache.get<[TokenizedState, { [key: string]: unknown }]>(key);
-  if (cached) {
-    return cached.unwrap();
-  }
   const tokenStore: { [key: string]: unknown } = {};
   const description = appKVState.description.reduce((acc, value) => {
     const hash = hashString(value);
@@ -1763,7 +1725,6 @@ export const tokenizeCommitState = (
     },
     tokenStore,
   ];
-  lrcache.set(key, out);
   return out;
 };
 
@@ -1771,15 +1732,6 @@ export const detokenizeStore = (
   tokenizedState: TokenizedState,
   tokenStore: { [key: string]: unknown }
 ): ApplicationKVState => {
-  const key = LRCache.getCacheKey([
-    "detokenizeStore",
-    tokenizedState,
-    tokenStore,
-  ]);
-  const cached = lrcache.get<ApplicationKVState>(key);
-  if (cached) {
-    return cached.unwrap();
-  }
   const description = tokenizedState.description.map((token) => {
     return tokenStore[token];
   }) as Array<string>;
@@ -1811,7 +1763,6 @@ export const detokenizeStore = (
     store,
     binaries,
   };
-  lrcache.set(key, out);
   return out;
 };
 
@@ -1884,15 +1835,6 @@ export const getStateDiffFromCommitStates = (
   beforeKVState: ApplicationKVState,
   afterKVState: ApplicationKVState
 ): StateDiff => {
-  const key = LRCache.getCacheKey([
-    "getStateDiffFromCommitStates",
-    beforeKVState,
-    afterKVState
-  ]);
-  const cached = lrcache.get<StateDiff>(key);
-  if (cached) {
-    return cached.unwrap();
-  }
 
   const stateDiff: StateDiff = {
     plugins: {
@@ -1943,7 +1885,6 @@ export const getStateDiffFromCommitStates = (
     );
     stateDiff[prop] = diff;
   }
-  lrcache.set(key, stateDiff);
   return stateDiff;
 };
 
@@ -1954,20 +1895,6 @@ export const getMergeCommitStates = async (
   intoSha: string
 ) => {
   try {
-    const key = LRCache.getCacheKey([
-      "getMergeCommitStates",
-      repoId,
-      fromSha,
-      intoSha,
-    ]);
-    const cached = lrcache.get<{
-      fromCommitState: ApplicationKVState;
-      intoCommitState: ApplicationKVState;
-      originCommit: ApplicationKVState;
-    }>(key);
-    if (cached) {
-      return cached.unwrap();
-    }
     const divergeOrigin = await getDivergenceOrigin(
       datasource,
       repoId,
@@ -1985,7 +1912,6 @@ export const getMergeCommitStates = async (
       intoCommitState,
       originCommit,
     };
-    lrcache.set(key, out)
     return out;
   } catch (e) {
     return null;
@@ -1999,12 +1925,6 @@ export const canAutoMergeCommitStates = async (
   originCommitState: ApplicationKVState
 ): Promise<boolean> => {
   try {
-    const key = LRCache.getCacheKey(["canAutoMergeCommitStates", fromCommitState, intoCommitState, originCommitState]);
-    const cached = lrcache.get<boolean>(key);
-    if (cached != null) {
-      return cached.unwrap();
-    }
-
     const yourMerge = await getMergedCommitState(
       datasource,
       fromCommitState,
@@ -2020,7 +1940,6 @@ export const canAutoMergeCommitStates = async (
       "theirs"
     );
     const result = JSON.stringify(yourMerge) == JSON.stringify(theirMerge);
-    lrcache.set(key, result);
     return result;
   } catch (e) {
     return null;
@@ -2035,18 +1954,6 @@ export const getMergedCommitState = async (
   direction: "yours" | "theirs" = "yours"
 ): Promise<ApplicationKVState> => {
   try {
-    const key = LRCache.getCacheKey([
-      "getMergedCommitState",
-      fromState,
-      intoState,
-      originCommit,
-      direction,
-    ]);
-    const cached = lrcache.get<ApplicationKVState>(key);
-    if (cached) {
-      return cached.unwrap();
-    }
-
     const [tokenizedCommitFrom, tokenizedStoreFrom] =
       tokenizeCommitState(fromState);
     const [tokenizedCommitInto, tokenizedStoreInto] =
@@ -2139,7 +2046,6 @@ export const getMergedCommitState = async (
       stateStore
     );
     mergeState.binaries = uniqueStrings(binaries);
-    lrcache.set(key, mergeState);
     return mergeState;
   } catch (e) {
     return null;
@@ -2150,15 +2056,6 @@ export const getConflictResolution = (
   resolveDiff: StateDiff,
   conflictList: ConflictList
 ): ConflictList => {
-  const key = LRCache.getCacheKey([
-    "getConflictResolution",
-    resolveDiff,
-    conflictList,
-  ]);
-  const cached = lrcache.get<ConflictList>(key);
-  if (cached) {
-    return cached.unwrap();
-  }
   const description: Array<number> = [];
   for (let i = 0; i < conflictList.description.length; ++i) {
     if (!resolveDiff?.description?.remove?.[conflictList.description[i]]) {
@@ -2197,7 +2094,6 @@ export const getConflictResolution = (
     plugins,
     store,
   };
-  lrcache.set(key, out);
   return out;
 };
 
@@ -2209,18 +2105,6 @@ export const getConflictList = async (
   originSha: string,
   direction: "theirs" | "yours"
 ): Promise<ConflictList> => {
-  const key = LRCache.getCacheKey([
-    "getConflictList",
-    repoId,
-    fromSha,
-    intoSha,
-    originSha,
-    direction
-  ]);
-  const cached = lrcache.get<ConflictList>(key);
-  if (cached) {
-    return cached.unwrap();
-  }
   const fromCommitState = await getCommitState(datasource, repoId, fromSha);
   const intoCommitState = await getCommitState(datasource, repoId, intoSha);
   const originCommitState = await getCommitState(datasource, repoId, originSha);
@@ -2290,7 +2174,6 @@ export const getConflictList = async (
     plugins,
     store,
   };
-  lrcache.set(key, out);
   return out;
 };
 
@@ -2299,16 +2182,6 @@ export const getApiDiff = (
   afterState: ApplicationKVState,
   stateDiff: StateDiff
 ): ApiDiff => {
-  const key = LRCache.getCacheKey([
-    "getApiDiff",
-    beforeState,
-    afterState,
-    stateDiff,
-  ]);
-  const cached = lrcache.get<ApiDiff>(key);
-  if (cached) {
-    return cached.unwrap();
-  }
   const description = {
     added: Object.keys(stateDiff.description.add).map((v) => parseInt(v)),
     removed: Object.keys(stateDiff.description.remove).map((v) => parseInt(v)),
@@ -2381,7 +2254,6 @@ export const getApiDiff = (
     plugins,
     store,
   };
-  lrcache.set(key, out);
   return out;
 };
 

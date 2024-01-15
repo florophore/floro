@@ -2903,11 +2903,11 @@ app.post(
       return;
     }
     const renderedState = await updatePluginState(
-      datasource,
-      repoId,
-      pluginNameToUpdate,
-      state
-    );
+          datasource,
+          repoId,
+          pluginNameToUpdate,
+          state
+        );
     const [repoState, applicationState] = await Promise.all([
       datasource.readCurrentRepoState(repoId),
       convertRenderedCommitStateToKv(datasource, renderedState),

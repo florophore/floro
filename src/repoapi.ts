@@ -90,8 +90,6 @@ import {
   SourceGraph,
   getPotentialBaseBranchesForSha,
 } from "./sourcegraph";
-import LRCache from "./lrcache";
-const lrcache = new LRCache();
 
 export const ILLEGAL_BRANCH_NAMES = new Set(["none"]);
 
@@ -3960,7 +3958,6 @@ export const renderApiReponse = async (
           unstagedState,
           applicationKVState
         ));
-
       const [canPopStashedChanges, stashSize] = await Promise.all([
         getCanPopStashedChanges(datasource, repoId),
         getStashSize(datasource, repoId),
@@ -4421,11 +4418,6 @@ export const convertRenderedStateStoreToKV = async (
     datasource,
     renderedAppState.plugins
   );
-  const key = LRCache.getCacheKey(["convertRenderedStateStoreToKV", renderedAppState, manifests]);
-  const cached = lrcache.get<RawStore>(key)
-  if (cached) {
-    return cached.unwrapCopy();
-  }
   for (const pluginManifest of manifests) {
     const schemaMap = await getSchemaMapForManifest(datasource, pluginManifest);
     const kv = await getKVStateForPlugin(
@@ -4436,7 +4428,6 @@ export const convertRenderedStateStoreToKV = async (
     );
     out[pluginManifest.name] = kv;
   }
-  lrcache.set(key, out);
   return out;
 };
 
@@ -4449,11 +4440,6 @@ export const convertRenderedStateStoreToArrayDuplicateIndexedKV = async (
     datasource,
     renderedAppState.plugins
   );
-  const key = LRCache.getCacheKey(["convertRenderedStateStoreToArrayDuplicateIndexedKV", renderedAppState, manifests]);
-  const cached = lrcache.get<{[pluginName: string]: Array<DiffElement>}>(key)
-  if (cached) {
-    return cached.unwrapCopy();
-  }
   for (const pluginManifest of manifests) {
     const schemaMap = await getSchemaMapForManifest(datasource, pluginManifest);
     const kvs = await getKVStateForPlugin(
@@ -4467,7 +4453,6 @@ export const convertRenderedStateStoreToArrayDuplicateIndexedKV = async (
     const kvArray = indexArrayDuplicates(kvCopy);
     out[pluginManifest.name] = kvArray;
   }
-  lrcache.set(key, out);
   return out;
 };
 
@@ -4786,8 +4771,9 @@ export const getIsWip = async (
     const diff = await getMergeConflictDiff(datasource, repoId);
     return !diffIsEmpty(diff);
   }
-  const diff = getStateDiffFromCommitStates(unstagedState, applicationKVState);
-  return !diffIsEmpty(diff);
+  return JSON.stringify(unstagedState) != JSON.stringify(applicationKVState);
+  //const diff = getStateDiffFromCommitStates(unstagedState, applicationKVState);
+  //return !diffIsEmpty(diff);
 };
 
 const combineBranches = (start: Branch[], end: Branch[]): Array<Branch> => {

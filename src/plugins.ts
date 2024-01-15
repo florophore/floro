@@ -5,10 +5,8 @@ import { DataSource } from "./datasource";
 import { GeneratorManifest } from "./generatorcreator";
 import fs from 'fs';
 import path from 'path';
-import LRCache from "./lrcache";
 import { reset } from "./filestructure";
 import { RenderedApplicationState } from "./repo";
-const lrcache = new LRCache();
 
 axios.defaults.validateStatus = function () {
   return true;
@@ -493,14 +491,6 @@ export const verifyPluginDependencyCompatability = async (
   datasource: DataSource,
   deps: Array<Manifest>
 ): Promise<VerifyDepsResult> => {
-  const key = LRCache.getCacheKey([
-    "verifyPluginDependencyCompatability",
-    deps,
-  ]);
-  const cached = lrcache.get<VerifyDepsResult>(key);
-  if (cached) {
-    return cached.unwrap();
-  }
   const depsMap = coalesceDependencyVersions(deps);
   if (!depsMap) {
     return {
@@ -591,10 +581,6 @@ export const verifyPluginDependencyCompatability = async (
       }
     }
   }
-  lrcache.set(key, {
-    isValid: true,
-    status: "ok",
-  })
   return {
     isValid: true,
     status: "ok",
@@ -984,16 +970,6 @@ const constructRootSchema = (
   struct: TypeStruct,
   pluginName: string
 ): TypeStruct => {
-  const key = LRCache.getCacheKey([
-    "constructRootSchema",
-    schema,
-    struct,
-    pluginName
-  ]);
-  const cache = lrcache.get<TypeStruct>(key);
-  if (cache) {
-    return cache.unwrap();
-  }
   const out = {};
   const sortedStructedProps = Object.keys(struct).sort();
   for (const prop of sortedStructedProps) {
@@ -1180,7 +1156,6 @@ const constructRootSchema = (
     }
   }
 
-  lrcache.set(key, out);
   return out;
 };
 
@@ -1279,15 +1254,6 @@ const enforcePrimitiveSet = (
 };
 
 const sanitizePrimitivesWithSchema = (struct: TypeStruct, state: object) => {
-  const key = LRCache.getCacheKey([
-    "sanitizePrimitivesWithSchema",
-    struct,
-    state,
-  ]);
-  const cached = lrcache.get<object>(key);
-  if (cached) {
-    return cached.unwrap();
-  }
   const out = {};
   for (const prop in struct) {
     if (
@@ -1428,7 +1394,6 @@ const sanitizePrimitivesWithSchema = (struct: TypeStruct, state: object) => {
     }
     out[prop] = state?.[prop] ?? null;
   }
-  lrcache.set(key, out);
   return out;
 };
 
@@ -1713,14 +1678,6 @@ export const flattenStateToSchemaPathKV = (
 export const indexArrayDuplicates = (
   kvs: Array<DiffElement>
 ): Array<DiffElement> => {
-  const key = LRCache.getCacheKey([
-    "indexArrayDuplicates",
-    kvs,
-  ]);
-  const cached = lrcache.get<Array<DiffElement>>(key);
-  if (cached) {
-    return cached.unwrap();
-  }
   const visitedIds: { [key: string]: { count: number } } = {};
   const out: Array<DiffElement> = [];
   for (const { key, value } of kvs) {
@@ -1755,7 +1712,6 @@ export const indexArrayDuplicates = (
     }
     out.push({ key: updatedKey, value });
   }
-  lrcache.set(key, out);
   return out;
 };
 
@@ -1964,16 +1920,6 @@ const generateKVFromStateWithRootSchema = (
   pluginName: string,
   state: object
 ): Array<DiffElement> => {
-  const key = LRCache.getCacheKey([
-    "generateKVFromStateWithRootSchema",
-    rootSchema,
-    pluginName,
-    state,
-  ]);
-  const cached = lrcache.get<Array<DiffElement>>(key);
-  if (cached) {
-    return cached.unwrap();
-  }
   const flattenedState = flattenStateToSchemaPathKV(
     rootSchema as unknown as Manifest,
     state,
@@ -1987,7 +1933,6 @@ const generateKVFromStateWithRootSchema = (
       };
     }) ?? []
   );
-  lrcache.set(key, out);
   return out;
 };
 
@@ -2155,16 +2100,6 @@ export const getStateFromKVForPlugin = (
   kvs: Array<DiffElement>,
   pluginName: string
 ): object => {
-  const key = LRCache.getCacheKey([
-    "getStateFromKVForPlugin",
-    schemaMap,
-    kvs,
-    pluginName
-  ]);
-  const cache = lrcache.get<object>(key);
-  if (cache) {
-    return cache.unwrap();
-  }
   const rootSchema = getRootSchemaForPlugin(schemaMap, pluginName);
   const kvCopy = kvs.map(kv => ({key: kv.key, value: Object.assign({}, kv.value)}));
   const kvArray = indexArrayDuplicates(kvCopy);
@@ -2182,7 +2117,6 @@ export const getStateFromKVForPlugin = (
     );
   }
   const result = cleanArrayIDsFromState(out);
-  lrcache.set(key, result);
   return result;
 };
 
@@ -2234,16 +2168,6 @@ export const getRootSchemaForPlugin = (
   schemaMap: { [key: string]: Manifest },
   pluginName: string
 ): TypeStruct => {
-
-  const key = LRCache.getCacheKey([
-    "getRootSchemaForPlugin",
-    schemaMap,
-    pluginName
-  ]);
-  const cache = lrcache.get<TypeStruct>(key);
-  if (cache) {
-    return cache.unwrap();
-  }
   const schemaWithTypes = getExpandedTypesForPlugin(schemaMap, pluginName);
   const schemaWithStores = iterateSchemaTypes(
     schemaMap[pluginName].store,
@@ -2258,7 +2182,6 @@ export const getRootSchemaForPlugin = (
     schemaWithStores as TypeStruct,
     pluginName
   );
-  lrcache.set(key, result);
   return result;
 };
 
@@ -2362,16 +2285,6 @@ export const getKVStateForPlugin = async (
   pluginName: string,
   stateMap: { [key: string]: object }
 ): Promise<Array<DiffElement>> => {
-  const key = LRCache.getCacheKey([
-    "getKVStateForPlugin",
-    schema,
-    pluginName,
-    stateMap,
-  ]);
-  const cached = lrcache.get<Array<DiffElement>>(key);
-  if (cached) {
-    return cached.unwrap();
-  }
   const rootUpsteamSchema = getRootSchemaForPlugin(schema, pluginName);
   const state = await defaultVoidedState(datasource, schema, stateMap);
   const out =  generateKVFromStateWithRootSchema(
@@ -2379,7 +2292,6 @@ export const getKVStateForPlugin = async (
     pluginName,
     state?.[pluginName]
   );
-  lrcache.set(key, out);
   return out;
 };
 
@@ -2883,16 +2795,6 @@ export const cascadePluginState = async (
   stateMap: { [key: string]: object }
 ): Promise<{ [key: string]: object }> => {
   try {
-    const key = LRCache.getCacheKey([
-      "tokenizeCommitState",
-      schemaMap,
-      stateMap
-    ]);
-    const cached = lrcache.get<{ [key: string]: object }>(key);
-    if (cached) {
-      return cached.unwrap();
-    }
-
     const rootSchemaMap = (await getRootSchemaMap(datasource, schemaMap)) ?? {};
     const staticPointers = traverseSchemaMapForStaticPointerPaths(
       rootSchemaMap,
@@ -2952,10 +2854,8 @@ export const cascadePluginState = async (
     if (deletions > 0) {
       // bad but highly infrequent
       const out = cascadePluginState(datasource, schemaMap, stateMap);
-      lrcache.set(key, out)
       return out;
     }
-    lrcache.set(key, stateMap)
     return stateMap;
   } catch (e) {
     return stateMap;

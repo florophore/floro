@@ -2,9 +2,6 @@ import sha256 from "crypto-js/sha256";
 import HexEncode from "crypto-js/enc-hex";
 import { StateDiff } from "./repo";
 import mdiff from "mdiff";
-import LRCache from "./lrcache";
-
-const lrcache = new LRCache();
 
 const hash = (str: string|BinaryData): string => {
   const hash = sha256(str?.toString());
@@ -190,14 +187,8 @@ export const getLCS = (
   left: Array<string>,
   right: Array<string>
 ): Array<string> => {
-  const key = LRCache.getCacheKey(["getLCS", left, right]);
-  const cached = lrcache.get<Array<string>>(key);
-  if (cached) {
-    return cached.unwrap();
-  }
   const diff = mdiff(left, right);
   const lcs = diff.getLcs();
-  lrcache.set(key, lcs);
   return lcs;
 };
 
@@ -205,11 +196,6 @@ export const getDiff = (
   before: Array<DiffElement>,
   after: Array<DiffElement>
 ): Diff => {
-  const key = LRCache.getCacheKey(["getDiff", before, after]);
-  const cached = lrcache.get<Diff>(key);
-  if (cached) {
-    return cached.unwrap();
-  }
   const past = before.map(getRowHash);
   const present = after.map(getRowHash);
   const longestSequence = getLCS(past, present);
@@ -234,7 +220,6 @@ export const getDiff = (
       diff.add[i] = after[i];
     }
   }
-  lrcache.set(key, diff);
   return diff;
 };
 
@@ -253,11 +238,6 @@ export const getArrayStringDiff = (
   past: Array<string>,
   present: Array<string>
 ): StringDiff => {
-  const key = LRCache.getCacheKey(["getArrayStringDiff", past, present]);
-  const cached = lrcache.get<StringDiff>(key);
-  if (cached) {
-    return cached.unwrap();
-  }
   const longestSequence = getLCS(past, present);
 
   let diff = {
@@ -280,7 +260,6 @@ export const getArrayStringDiff = (
       diff.add[i] = present[i];
     }
   }
-  lrcache.set(key, diff);
   return diff;
 };
 
@@ -320,11 +299,6 @@ export const getMergeSequence = (
 ): Array<string> => {
   if (from.length == 0 && into.length == 0) {
     return [];
-  }
-  const key = LRCache.getCacheKey(["getMergeSequence", origin, into, from, direction]);
-  const cached = lrcache.get<Array<string>>(key);
-  if (cached) {
-    return cached.unwrap();
   }
   const fromIsEqualToOrigin = sequencesAreEqual(origin, from);
   const intoIsEqualToOrigin = sequencesAreEqual(origin, into);
@@ -384,7 +358,6 @@ export const getMergeSequence = (
     mergeIndex++;
   }
   const reconciledMerge = mergeSequences.slice(0, idx).flatMap((v) => v);
-  lrcache.set(key, reconciledMerge);
   return reconciledMerge;
 };
 
@@ -399,11 +372,6 @@ const getMergeSubSequence = (
     return [];
   }
 
-  const key = LRCache.getCacheKey(["getMergeSubSequence", into, from, direction]);
-  const cached = lrcache.get<Array<string>>(key);
-  if (cached) {
-    return cached.unwrap();
-  }
   const lcs = getLCS(from, into);
   if (lcs.length == 0) {
     if (direction == "theirs") {
@@ -441,7 +409,6 @@ const getMergeSubSequence = (
     }
     return v;
   });
-  lrcache.set(key, result);
   return result;
 };
 
@@ -450,16 +417,9 @@ const getGreatestCommonLCS = (
   into: Array<string>,
   from: Array<string>
 ): Array<string> => {
-  const key = LRCache.getCacheKey(["getGreatestCommonLCS", into, from]);
-  const cached = lrcache.get<Array<string>>(key);
-  if (cached) {
-    return cached.unwrap();
-  }
-
   const fromLCS = getLCS(origin, from);
   const intoLCS = getLCS(origin, into);
   const result = getLCS(fromLCS, intoLCS);
-  lrcache.set(key, result);
   return result;
 };
 
@@ -532,11 +492,6 @@ const getReconciledSequence = (
   originSequences: Array<Array<string>>,
   sequences: Array<Array<string>>
 ): Array<Array<string>> => {
-  const key = LRCache.getCacheKey(["getReconciledSequence", sequences, originSequences]);
-  const cached = lrcache.get<Array<Array<string>>>(key);
-  if (cached) {
-    return cached.unwrap();
-  }
   let out: Array<Array<string>> = new Array(sequences.length);
   for (let i = 0; i < sequences.length; ++i) {
     if (sequencesAreEqual(originSequences[i], sequences[i])) {
@@ -557,7 +512,6 @@ const getReconciledSequence = (
       out[i] = next.slice(0, idx);
     }
   }
-  lrcache.set(key, out);
   return out;
 };
 
@@ -613,11 +567,6 @@ const getLCSBoundaryOffsets = (
   sequence: Array<string>,
   lcs: Array<string>
 ): Uint32Array => {
-  const key = LRCache.getCacheKey(["getLCSBoundaryOffsets", sequence, lcs]);
-  const cached = lrcache.get<Uint32Array>(key);
-  if (cached) {
-    return cached.unwrap();
-  }
   let reconciliationGraph32: Array<Uint32Array> = new Array(lcs.length);
   let maxArray: Uint32Array = new Uint32Array(lcs.length);
   let maxIndex: Uint32Array = new Uint32Array(lcs.length);
@@ -646,7 +595,6 @@ const getLCSBoundaryOffsets = (
       }
     }
   }
-  lrcache.set(key, maxIndex);;
   return maxIndex;
 };
 
@@ -678,11 +626,6 @@ const getLCSOffsetMergeSeqments = (
   sequence: Array<string>,
   offsets: Uint32Array
 ): Array<Array<string>> => {
-  const key = LRCache.getCacheKey(["getLCSOffsetMergeSeqments", sequence, offsets]);
-  const cached = lrcache.get<Array<Array<string>>>(key);
-  if (cached) {
-    return cached.unwrapCopy();
-  }
   if (offsets.length == 0) return [];
   let out:Array<Array<string>> = new Array(offsets.length + 1);
   out[0] = sequence.slice(0, offsets[0]);
@@ -696,7 +639,6 @@ const getLCSOffsetMergeSeqments = (
     }
   }
 
-  lrcache.set(key, out);
   return out;
 };
 
