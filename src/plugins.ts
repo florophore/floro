@@ -6343,17 +6343,11 @@ export const useClientStorageApi = <T,>(
     return (clientStorage?.[clientStorageKey] as T) ?? (null as T);
   }, [clientStorageKey, clientStorage?.[clientStorageKey], commandMode]);
   const [getter, setter] = useState<T | null>(value);
-  const timeout = useRef<NodeJS.Timeout>();
+
   useEffect(() => {
-    clearTimeout(timeout?.current);
-    timeout.current = setTimeout(() => {
-      if (value != getter) {
-        setter(value);
-      }
-    }, 300);
-    return () => {
-      clearTimeout(timeout.current);
-    };
+    if (value != getter) {
+      setter(value);
+    }
   }, [value]);
 
   const set = useCallback(
