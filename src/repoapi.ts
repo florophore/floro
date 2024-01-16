@@ -394,7 +394,6 @@ export const updateLocalBranch = async (
           branchId: branchData.id,
           lastLocalCommit: branchHeadSha,
           lastRemoteCommit:
-            branchHeadSha != originalBranch.lastCommit ||
             originalBranch.id != branch.id
               ? null
               : v.lastRemoteCommit,
@@ -409,7 +408,6 @@ export const updateLocalBranch = async (
           branchId: branchData.id,
           lastLocalCommit: branchHeadSha,
           lastRemoteCommit:
-            branchHeadSha != originalBranch.lastCommit ||
             originalBranch.id != branch.id
               ? null
               : v.lastRemoteCommit,
