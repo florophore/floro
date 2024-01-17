@@ -63,7 +63,7 @@ export interface MetaFile {
   sha: string;
   message: string;
   idx: number;
-  genratorDependencies: {
+  generatorDependencies: {
     [generatorName: string]: {
       [pluginName: string]: string;
     };
@@ -291,7 +291,7 @@ export const syncModule = async (
       }
     }
 
-    const genratorDependencies = module.generators.reduce((acc, generator) => {
+    const generatorDependencies = module.generators.reduce((acc, generator) => {
       const generatorManifest = generator.generator.getFloroGenerator();
       return {
         ...acc,
@@ -305,7 +305,7 @@ export const syncModule = async (
         sha: moduleBranch.lastCommit,
         message: syncState.commitInfo.message,
         idx: syncState.commitInfo.idx,
-        genratorDependencies,
+        generatorDependencies,
       } as MetaFile,
       null,
       2
