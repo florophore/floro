@@ -1126,9 +1126,23 @@ export const writeRepoCommit = async (
       return null;
     }
     const appliedKVState = applyStateDiffToCommitState(unstagedState, commitData.diff);
-    const appliedKVStateString = JSON.stringify(appliedKVState);
-    const currentKVStateString = JSON.stringify(currentKVState);
-    if (appliedKVStateString != currentKVStateString) {
+    if (JSON.stringify(appliedKVState.description) != JSON.stringify(currentKVState.description)) {
+      return null;
+    }
+    if (JSON.stringify(appliedKVState.plugins) != JSON.stringify(currentKVState.plugins)) {
+      return null;
+    }
+    if (JSON.stringify(appliedKVState.binaries) != JSON.stringify(currentKVState.binaries)) {
+      return null;
+    }
+    const keys = new Set([...Object.keys(appliedKVState.store), ...Object.keys(currentKVState.store)]);
+    for (const key of keys) {
+
+      if (JSON.stringify(appliedKVState.store[key]) != JSON.stringify(currentKVState.store[key])) {
+        return null;
+      }
+    }
+    if (JSON.stringify(appliedKVState.binaries) != JSON.stringify(currentKVState.binaries)) {
       return null;
     }
     if (currentState.branch) {
@@ -1175,7 +1189,8 @@ export const writeRepoCommit = async (
 export const updatePlugins = async (
   datasource: DataSource,
   repoId: string,
-  plugins: Array<PluginElement>
+  plugins: Array<PluginElement>,
+  seedOverrides: {[key: string]: object} = {}
 ) => {
   if (!repoId) {
     return null;
@@ -1330,7 +1345,7 @@ export const updatePlugins = async (
     for (let { key } of lexicallyOrderedPlugins) {
       if (!store[key]) {
         const manifest = updatedManifests.find((m) => m.name == key);
-        store[key] = (manifest?.seed as object) ?? {};
+        store[key] = seedOverrides?.[manifest.name] ?? (manifest?.seed as object) ?? {};
       }
     }
     const schemaMap = manifestListToSchemaMap(updatedManifests);

@@ -2743,14 +2743,23 @@ app.post("/repo/:repoId/paste", cors(corsNoNullOriginDelegate),async (req, res):
       res.sendStatus(400);
       return;
     }
+    const existingPlugins = new Set(currentRenderedState?.plugins.map((p) => p.key));
     const nextPlugins = [
       ...currentRenderedState?.plugins.filter((p) => !pluginKeys.has(p.key)),
       ...fromPluginsToAdd,
     ];
+    const pluginsToCopyCompletely = fromPluginsToAdd.filter(
+      (p) => !existingPlugins.has(p.key) && !copyInstructions?.[p.key]?.isManualCopy
+    );
+    const seedOverrides = {};
+    for (const plugin of pluginsToCopyCompletely) {
+      seedOverrides[plugin.key] = fromStateMap[plugin.key];
+    }
     const intoState = await updatePlugins(
       datasource,
       repoId,
-      nextPlugins
+      nextPlugins,
+      seedOverrides
     );
     for (const pluginToAdd of fromPluginsToAdd) {
       if (!copyInstructions?.[pluginToAdd.key].isManualCopy) {
@@ -2800,7 +2809,7 @@ app.post("/repo/:repoId/paste", cors(corsNoNullOriginDelegate),async (req, res):
       binaryLinksRequest.data;
     for (const binaryLink of binaryLinks) {
       binDownwloads.push(
-        new Promise(async () => {
+        (async () => {
           try {
             const existsAlready = await datasource.checkBinary(
               binaryLink.fileName
@@ -2820,7 +2829,7 @@ app.post("/repo/:repoId/paste", cors(corsNoNullOriginDelegate),async (req, res):
           } catch (e) {
             return false;
           }
-        })
+        })()
       );
     }
     const binResults = await Promise.all(binDownwloads);
@@ -2830,7 +2839,6 @@ app.post("/repo/:repoId/paste", cors(corsNoNullOriginDelegate),async (req, res):
         return;
       }
     }
-
     await enforceBoundedSets(datasource, intoSchemaMap, copiedOverRenderedStore);
     let store = await cascadePluginState(datasource, intoSchemaMap, copiedOverRenderedStore);
     store = await nullifyMissingFileRefs(datasource, intoSchemaMap, store);
