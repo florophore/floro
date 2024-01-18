@@ -410,7 +410,7 @@ export const buildModuleFromState = async (cwd: string, moduleFile: string) => {
     const modulePath = path.join(cwd, moduleFile);
     const moduleDir = path.dirname(modulePath);
     const exists = await existsAsync(modulePath);
-    const postProcessPath = path.join(cwd, 'postprocess.floro.js');
+    const postProcessPath = path.join(moduleDir, 'postprocess.floro.js');
     const postProcessExists = await existsAsync(postProcessPath);
 
     if (!exists) {
@@ -641,7 +641,7 @@ export const buildModule = async (
     apiKey = apiKey ?? process.env?.["FLORO_REMOTE_API_KEY"];
     const modulePath = path.join(cwd, moduleFile);
     const moduleDir = path.dirname(modulePath);
-    const postProcessPath = path.join(cwd, 'postprocess.floro.js');
+    const postProcessPath = path.join(moduleDir, 'postprocess.floro.js');
     const postProcessExists = await existsAsync(postProcessPath);
     const exists = await existsAsync(modulePath);
 
