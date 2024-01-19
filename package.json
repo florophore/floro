@@ -10,7 +10,7 @@
     "tsc": "tsc --build",
     "clean": "rimraf build tsconfig.tsbuildinfo",
     "build": "npm run clean && npm run tsc",
-    "test": "FLORO_VCDN_HOST=localhost FLORO_VCDN_PORT=63405 jest",
+    "test": "FLORO_VCDN_HOST=localhost FLORO_VCDN_PORT=64403 jest",
     "test:debug": "FLORO_VCDN_HOST=localhost FLORO_VCDN_PORT=64403 node --inspect-brk node_modules/.bin/jest --runInBand",
     "dev": "NODE_ENV=development nodemon -e ts --watch ./src --ignore ./dist --experimental-specifier-resolution=node src/server.ts",
     "dev:command": "NODE_ENV=development nodemon -e ts --watch ./src --ignore ./dist --experimental-specifier-resolution=node --exec yarn build && ts-node",
