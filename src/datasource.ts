@@ -10,6 +10,7 @@ import {
   getUserSessionAsync,
   vBinariesPath,
   vDEVPath,
+  vKeysPath,
   vPluginsPath,
   vReposPath,
   vTMPPath,
@@ -39,6 +40,7 @@ import tar from "tar";
 import { SourceCommitNode } from "./sourcegraph";
 import { Stream } from "stream";
 import { ApiKey, RepoEnabledApiKey, RepoEnabledWebhookKey, WebhookKey } from "./apikeys";
+import { TLSCert } from "./cert";
 
 axios.defaults.validateStatus = function () {
   return true;
@@ -172,6 +174,9 @@ export interface DataSource {
 
   readRepoEnabledWebhookKeys?: (repoId: string) => Promise<Array<RepoEnabledWebhookKey>>;
   writeRepoEnabledWebhookKeys?: (repoId: string, keys: Array<RepoEnabledWebhookKey>) => Promise<Array<RepoEnabledWebhookKey>>;
+
+  readTLSCert?: (ipAddr: string) => Promise<TLSCert>;
+  writeTLSCert?: (ipAddr: string, tlsCert: TLSCert) => Promise<boolean>;
 
   cleanMemos?: (repoId: string) => void
 
@@ -1356,6 +1361,42 @@ const writeRepoEnabledWebhookKeys = async (repoId: string, keys: Array<RepoEnabl
   }
 }
 
+const readTLSCert = async (ipAddr: string): Promise<TLSCert> => {
+  try {
+
+    const filePath = path.join(vKeysPath(), "tls_cert_" + ipAddr.replaceAll(".", "_") + ".json");
+
+    const certExists = fs.existsSync(filePath);
+    if (!certExists) {
+      return null;
+    }
+    const certfileString = await fs.promises.readFile(filePath, 'utf-8');
+    return JSON.parse(certfileString);
+  } catch(e) {
+    return null;
+  }
+}
+
+const writeTLSCert = async (ipAddr: string, tlsCert: TLSCert): Promise<boolean> => {
+  try {
+    const filePath = path.join(vKeysPath(), "tls_cert_" + ipAddr.replaceAll(".", "_") + ".json");
+    await fs.promises.writeFile(
+      filePath,
+      JSON.stringify(tlsCert, null, 2),
+      "utf-8"
+    );
+    return true;
+  } catch(e) {
+    return false;
+  }
+}
+/***
+ *
+  readTLSCert?: () => Promise<TLSCert>;
+  writeTLSCert?: (certfile: TLSCert) => Promise<TLSCert>;
+ *
+ */
+
 export const makeDataSource = (datasource: DataSource = {}) => {
   const defaultDataSource: DataSource = {
     readRepos,
@@ -1409,7 +1450,9 @@ export const makeDataSource = (datasource: DataSource = {}) => {
     writeRepoEnabledApiKeys,
     readRepoEnabledWebhookKeys,
     writeRepoEnabledWebhookKeys,
-    deleteRepo
+    deleteRepo,
+    readTLSCert,
+    writeTLSCert
   };
   return {
     ...defaultDataSource,

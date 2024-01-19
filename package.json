@@ -1,6 +1,6 @@
 {
   "name": "floro",
-  "version": "0.0.67",
+  "version": "0.0.68",
   "description": "",
   "main": "dist/src/index.js",
   "bin": {
@@ -11,7 +11,7 @@
     "clean": "rimraf build tsconfig.tsbuildinfo",
     "build": "npm run clean && npm run tsc",
     "test": "FLORO_VCDN_HOST=localhost FLORO_VCDN_PORT=63405 jest",
-    "test:debug": "FLORO_VCDN_HOST=localhost FLORO_VCDN_PORT=63405 node --inspect-brk node_modules/.bin/jest --runInBand",
+    "test:debug": "FLORO_VCDN_HOST=localhost FLORO_VCDN_PORT=64403 node --inspect-brk node_modules/.bin/jest --runInBand",
     "dev": "NODE_ENV=development nodemon -e ts --watch ./src --ignore ./dist --experimental-specifier-resolution=node src/server.ts",
     "dev:command": "NODE_ENV=development nodemon -e ts --watch ./src --ignore ./dist --experimental-specifier-resolution=node --exec yarn build && ts-node",
     "dev:debug": "nodemon --exec \"node --inspect-brk=0.0.0.0:9229 --require ts-node/register src/server.ts\""
@@ -22,8 +22,10 @@
     "@jest/types": "^29.1.2",
     "@types/command-line-args": "^5.2.0",
     "@types/inquirer": "^9.0.2",
+    "@types/ip": "^1.1.3",
     "@types/jest": "^29.4.0",
     "@types/node": "^18.11.17",
+    "@types/node-forge": "^1.3.11",
     "@types/prompts": "^2.4.1",
     "@types/tar": "^6.1.3",
     "concurrently": "^7.6.0",
@@ -56,6 +58,7 @@
     "macaddress": "^0.5.3",
     "mdiff": "^1.4.2",
     "mime-types": "^2.1.35",
+    "node-forge": "^1.3.1",
     "object-sizeof": "^2.6.1",
     "pm2": "^5.2.0",
     "pretty-json": "^0.1.1",

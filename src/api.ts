@@ -291,7 +291,8 @@ export const usePublicApi = (app: Express, datasource: DataSource) => {
 
   /**
    *
-   * Do not use in production
+   * Do not use in production. In (remote) production stateLink returns a signed url
+   * to the state from the CDN.
    */
 
   app.get(

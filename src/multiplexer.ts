@@ -14,7 +14,7 @@ export const broadcastAllDevices = (event, payload) => {
   });
 }
 
-export const broadcastToClient = (client: 'cli'|'desktop'|'web'|'extension', event, payload) => {
+export const broadcastToClient = (client: 'cli'|'desktop'|'web'|'extension'|'external', event, payload) => {
   const clients = multiplexer[client];
   clients.forEach((socket: Socket) => {
     socket.emit(event, payload);

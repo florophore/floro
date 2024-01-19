@@ -2,6 +2,7 @@ import express from "express";
 import path from "path";
 import fs from "fs";
 import http from "http";
+import https from "https";
 import cors from "cors";
 import mime from "mime-types";
 import { isBinaryFile } from "arraybuffer-isbinary";
@@ -82,6 +83,7 @@ import {
   getPluginClientStorage
 } from "./repoapi";
 import {
+  DataSource,
   makeMemoizedDataSource,
   readDevPluginManifest,
   readDevPlugins,
@@ -130,8 +132,12 @@ import {
 import { usePublicApi } from "./api";
 import webhookQueue from "./webhookqueue";
 import { triggerExtensionStateUpdate, watchRepos } from "./watch";
+import ip from 'ip';
+import { LocalCertHandler } from "./cert";
+
 
 const app = express();
+const certApp = express();
 const server = http.createServer(app);
 const datasource = makeMemoizedDataSource();
 
@@ -174,92 +180,111 @@ const corsNoNullOriginDelegate = async (req, callback) => {
   }
 };
 
-const io = new Server(server, {
-  cors: {
-    origin: chromeExtSafeOriginRegex,
-    credentials: true
-  },
-});
 
 const DEFAULT_PORT = 63403;
+const DEFAULT_CERT_PORT = 63404;
+const DEFAULT_TLS_PORT = 63405;
 const DEFAULT_HOST = "127.0.0.1";
+const DEFAULT_TLS_HOST = "0.0.0.0";
 const port = !!process.env.FLORO_VCDN_PORT
   ? parseInt(process.env.FLORO_VCDN_PORT)
   : DEFAULT_PORT;
+
+const tlsPort = !!process.env.FLORO_VCDN_TLS_PORT
+  ? parseInt(process.env.FLORO_VCDN_TLS_PORT)
+  : DEFAULT_TLS_PORT;
+
+const certPort = !!process.env.FLORO_VCDN_CERT_PORT
+  ? parseInt(process.env.FLORO_VCDN_CERT_PORT)
+  : DEFAULT_CERT_PORT;
+
 const host = !!process.env.FLORO_VCDN_HOST
   ? process.env.FLORO_VCDN_HOST
   : DEFAULT_HOST;
 
-io.on("connection", async (socket) => {
+const tlsHost = !!process.env.FLORO_VCDN_TLS_HOST
+  ? process.env.FLORO_VCDN_TLS_HOST
+  : DEFAULT_TLS_HOST;
 
-  const origin = socket.handshake?.headers.origin;
-  const remoteAddress = socket?.handshake?.address;
-  let allowConnection = false;
-  if (
-    origin != 'null' && (
-      (origin && safeOriginRegex.test(origin)) ||
-      (remoteAddress == "127.0.0.1" && !origin)
-    )
-  ) {
-    allowConnection = true;
-  } else {
-    if (remoteAddress == "127.0.0.1" && origin && origin != "null") {
-        const apiKeySecret = socket?.handshake?.query?.['authorization'];
-        if (apiKeySecret) {
-          const globalApiKeys = await datasource.readApiKeys();
-          const apiKey = globalApiKeys.find((k) => k.secret == apiKeySecret);
-          if (apiKey) {
-            allowConnection = true;
+const attachSocketIo = (server: http.Server|https.Server) => {
+  const io = new Server(server, {
+    cors: {
+      origin: chromeExtSafeOriginRegex,
+      credentials: true
+    },
+  });
+
+  io.on("connection", async (socket) => {
+
+    const origin = socket.handshake?.headers.origin;
+    const remoteAddress = socket?.handshake?.address;
+    let allowConnection = false;
+    if (
+      origin != 'null' && (
+        (origin && safeOriginRegex.test(origin)) ||
+        (remoteAddress == "127.0.0.1" && !origin)
+      )
+    ) {
+      allowConnection = true;
+    } else {
+      if (remoteAddress == "127.0.0.1" && origin && origin != "null") {
+          const apiKeySecret = socket?.handshake?.query?.['authorization'];
+          if (apiKeySecret) {
+            const globalApiKeys = await datasource.readApiKeys();
+            const apiKey = globalApiKeys.find((k) => k.secret == apiKeySecret);
+            if (apiKey) {
+              allowConnection = true;
+            }
           }
-        }
+      }
     }
-  }
-  const normalizedEnv = socket?.handshake?.query?.["env"];
-  if (normalizedEnv && getNoramlizedEnv() != normalizedEnv) {
-    socket.disconnect();
-    return;
-  }
-  if (!allowConnection) {
-    socket.disconnect();
-    return;
-  }
-
-  const client = socket?.handshake?.query?.["client"] as
-    | undefined
-    | ("web" | "desktop" | "cli" | "extension");
-
-  const onLogoutDidLoad = (args) => {
-    if (client != "desktop") {
+    const normalizedEnv = socket?.handshake?.query?.["env"];
+    if (normalizedEnv && getNoramlizedEnv() != normalizedEnv) {
+      socket.disconnect();
       return;
     }
-    broadcastToClient("web", "logout-did-load", args);
-  }
-
-  const onOpenEvent = (args) => {
-    if (client != "web") {
+    if (!allowConnection) {
+      socket.disconnect();
       return;
     }
-    broadcastToClient("desktop", "open-link", args);
-  }
 
-  // universal socket messages
-  if (["web", "desktop", "cli", "extension"].includes(client)) {
-    multiplexer[client].push(socket);
-    socket.conn.on("close", () => {
-      multiplexer[client] = multiplexer[client].filter((s) => s !== socket);
-      socket.off("open-event", onOpenEvent);
-    });
-  }
-  socket.on("open-event", onOpenEvent);
+    const client = socket?.handshake?.query?.["client"] as
+      | undefined
+      | ("web" | "desktop" | "cli" | "extension" | "external");
 
-  // desktop-only subscriptions
-  if (client == 'desktop') {
-    socket.conn.on("close", () => {
-      socket.off("logout-did-load", onLogoutDidLoad);
-    });
-    socket.on("logout-did-load", onLogoutDidLoad);
-  }
-});
+    const onLogoutDidLoad = (args) => {
+      if (client != "desktop") {
+        return;
+      }
+      broadcastToClient("web", "logout-did-load", args);
+    }
+
+    const onOpenEvent = (args) => {
+      if (client != "web") {
+        return;
+      }
+      broadcastToClient("desktop", "open-link", args);
+    }
+
+    // universal socket messages
+    if (["web", "desktop", "cli", "extension", "external"].includes(client)) {
+      multiplexer[client].push(socket);
+      socket.conn.on("close", () => {
+        multiplexer[client] = multiplexer[client].filter((s) => s !== socket);
+        socket.off("open-event", onOpenEvent);
+      });
+    }
+    socket.on("open-event", onOpenEvent);
+
+    // desktop-only subscriptions
+    if (client == 'desktop') {
+      socket.conn.on("close", () => {
+        socket.off("logout-did-load", onLogoutDidLoad);
+      });
+      socket.on("logout-did-load", onLogoutDidLoad);
+    }
+  });
+}
 
 watchRepos(datasource);
 
@@ -3459,9 +3484,88 @@ app.get(
   }
 );
 
+
+app.get("/connectioninfo", cors(corsNoNullOriginDelegate), async (req, res) => {
+  const ipAddr = ip.address();
+  res.send({ ipAddr, tlsPort, certPort });
+});
+
+
+attachSocketIo(server);
 server.listen(port, host, () =>
   console.log("floro server started on " + host + ":" + port)
 );
+
 startSessionJob();
+
+const startTLSServers = async (datasource: DataSource) => {
+  const ipAddr = ip.address();
+
+  const didStart = await LocalCertHandler.onStartTLSCert(datasource, ipAddr);
+
+  if (!didStart) {
+    console.log("tls server failed to start...");
+    return null;
+  }
+  const cert = await LocalCertHandler.getCert();
+
+  certApp.get("/cert", async (_req, res) => {
+    const cert = await LocalCertHandler.getCert();
+    res.setHeader("content-type", "application/x-x509-ca-cert");
+    res.send(cert.ca.cert);
+  });
+
+  const certServer = http.createServer(certApp);
+  certServer.listen(certPort, tlsHost, () =>
+    console.log("floro cert server started on " + tlsHost + ":" + certPort)
+  );
+
+  const secureServer = https.createServer(
+    {
+      cert: cert.ca.cert,
+      key: cert.ca.key,
+    },
+    app
+  );
+  attachSocketIo(secureServer);
+  secureServer.listen(tlsPort, tlsHost, () => {
+    console.log("floro tls server started on " + tlsHost + ":" + tlsPort);
+  });
+
+  return async () => {
+    console.log("shutting down tls servers on " + ipAddr);
+    try {
+      await Promise.all([
+        new Promise((res) => {
+          secureServer.close(() => {
+            res(true);
+          });
+        }),
+        new Promise((res) => {
+          certServer.close(() => {
+            res(true);
+          });
+        }),
+      ]);
+
+      return true;
+    } catch (e) {
+      return false;
+    }
+  };
+};
+
+(async (datasource: DataSource) => {
+  let shutdownCertServers = await startTLSServers(datasource);
+
+  LocalCertHandler.watchIp(async (ipAddr: string) => {
+    console.log("ip updated to " + ipAddr);
+    if (shutdownCertServers) {
+      await shutdownCertServers();
+    }
+    shutdownCertServers = await startTLSServers(datasource);
+    broadcastToClient("desktop", "ip-changed", null);
+  });
+})(datasource);
 
 export default server;
