@@ -289,10 +289,15 @@ export const usePublicApi = (app: Express, datasource: DataSource) => {
     }
   );
 
+  /**
+   *
+   * Do not use in production
+   */
+
   app.get(
     PREFIX + "/repository/:repositoryId/commit/:sha/state",
     async (req, res) => {
-      const apiKeySecret = req?.headers?.["floro-api-key"];
+      const apiKeySecret = req?.headers?.["floro-api-key"] ?? req?.query?.["floro_api_key"];
       if (!apiKeySecret) {
         res.status(403).json({
           message: "forbidden",
@@ -352,7 +357,7 @@ export const usePublicApi = (app: Express, datasource: DataSource) => {
         datasource,
         kvState
       );
-      res.send({ state });
+      res.send(state);
     }
   );
   app.get(
@@ -413,7 +418,7 @@ export const usePublicApi = (app: Express, datasource: DataSource) => {
         });
         return;
       }
-      res.send({ stateLink: `https://127.0.0.1:63403${PREFIX}/repository/${repositoryId}/commit/${sha}/stateLink` });
+      res.send({ stateLink: `http://127.0.0.1:63403${PREFIX}/repository/${repositoryId}/commit/${sha}/state?floro_api_key=${encodeURIComponent(apiKeySecret as string)}` });
     }
   );
 

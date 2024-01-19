@@ -2430,7 +2430,7 @@ export const stashChanges = async (datasource: DataSource, repoId: string) => {
       currentKVState
     );
     if (diffIsEmpty(currentDiff)) {
-      return null;
+      return unstagedState;
     }
     const stashList =
       (await datasource.readStash(repoId, currentRepoState)) ?? [];
@@ -4784,9 +4784,26 @@ export const getIsWip = async (
     const diff = await getMergeConflictDiff(datasource, repoId);
     return !diffIsEmpty(diff);
   }
-  return JSON.stringify(unstagedState) != JSON.stringify(applicationKVState);
-  //const diff = getStateDiffFromCommitStates(unstagedState, applicationKVState);
-  //return !diffIsEmpty(diff);
+
+  if (JSON.stringify(unstagedState.description) != JSON.stringify(applicationKVState.description)) {
+    return true;
+  }
+  if (JSON.stringify(unstagedState.plugins) != JSON.stringify(applicationKVState.plugins)) {
+    return true;
+  }
+  if (JSON.stringify(unstagedState.binaries) != JSON.stringify(applicationKVState.binaries)) {
+    return true;
+  }
+  const keys = new Set([...Object.keys(unstagedState.store ?? {}), ...Object.keys(applicationKVState.store ?? {})]);
+  for (const key of keys) {
+    if (JSON.stringify(unstagedState.store[key]) != JSON.stringify(applicationKVState.store[key])) {
+      return true;
+    }
+  }
+  if (JSON.stringify(unstagedState.binaries) != JSON.stringify(applicationKVState.binaries)) {
+    return true;
+  }
+  return false;
 };
 
 const combineBranches = (start: Branch[], end: Branch[]): Array<Branch> => {
