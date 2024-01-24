@@ -5,6 +5,7 @@ const multiplexer = {
   desktop: [],
   web: [],
   extension: [],
+  external: [],
 };
 
 export const broadcastAllDevices = (event, payload) => {

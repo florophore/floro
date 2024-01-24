@@ -6197,6 +6197,13 @@ export const FloroProvider = (props: Props) => {
           commandModeRef.current = state.commandMode;
           setHasLoaded(true);
         }
+        if (response.event == "external:message") {
+          const messageData = response.data as {eventName: string, message: unknown};
+          if (messageData.eventName) {
+            const channel = new BroadcastChannel(messageData.eventName);
+            channel.postMessage(messageData.message);
+          }
+        }
         if (response.event == "ack" || response.event == "update") {
           clearTimeout(updateTimeout.current);
           const isStale = updateCounter?.current > data.id;

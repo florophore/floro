@@ -48,6 +48,11 @@ export const watchStateFiles = async (datasource: DataSource) => {
             store: renderedState?.store ?? {},
             binaries,
           });
+          broadcastToClient("external", "state:changed", {
+            repoId,
+            store: renderedState?.store ?? {},
+            binaries,
+          });
         } catch(e) {
           console.log("Error", e);
         }
@@ -88,6 +93,11 @@ export const triggerExtensionStateUpdate = async (datasource: DataSource, repoId
       }) ?? []
     ) ?? [];
     broadcastToClient("extension", "state:changed", {
+      repoId,
+      store: renderedState?.store ?? {},
+      binaries,
+    });
+    broadcastToClient("external", "state:changed", {
       repoId,
       store: renderedState?.store ?? {},
       binaries,

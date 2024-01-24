@@ -134,6 +134,7 @@ import webhookQueue from "./webhookqueue";
 import { triggerExtensionStateUpdate, watchRepos } from "./watch";
 import ip from 'ip';
 import { LocalCertHandler } from "./cert";
+import { ipInSameSubnet } from "./networkhelpers";
 
 
 const app = express();
@@ -161,21 +162,38 @@ const corsNoNullOriginDelegate = async (req, callback) => {
       origin: true,
     });
   } else {
-    if (req.connection.remoteAddress == "127.0.0.1" && origin && origin != "null") {
-        const apiKeySecret = req.headers?.authorization;
-        if (apiKeySecret) {
-          const globalApiKeys = await datasource.readApiKeys();
-          const apiKey = globalApiKeys.find((k) => k.secret == apiKeySecret);
-          if (apiKey) {
-            callback(null, {
-              origin: true,
-            });
-            return;
-          }
+    const isInSubnet = ipInSameSubnet(req.connection.remoteAddress);
+    if (isInSubnet) {
+      const apiKeySecret = req.headers?.authorization;
+      if (apiKeySecret) {
+        const globalApiKeys = await datasource.readApiKeys();
+        const apiKey = globalApiKeys.find((k) => k.secret == apiKeySecret);
+        if (apiKey) {
+          callback(null, {
+            origin: true,
+          });
+          return;
         }
+      }
+    } else if (
+      req.connection.remoteAddress == "127.0.0.1" &&
+      origin &&
+      origin != "null"
+    ) {
+      const apiKeySecret = req.headers?.authorization;
+      if (apiKeySecret) {
+        const globalApiKeys = await datasource.readApiKeys();
+        const apiKey = globalApiKeys.find((k) => k.secret == apiKeySecret);
+        if (apiKey) {
+          callback(null, {
+            origin: true,
+          });
+          return;
+        }
+      }
     }
     callback("Invalid origin", {
-      origin: false
+      origin: false,
     });
   }
 };
@@ -219,6 +237,7 @@ const attachSocketIo = (server: http.Server|https.Server) => {
     const origin = socket.handshake?.headers.origin;
     const remoteAddress = socket?.handshake?.address;
     let allowConnection = false;
+    let isExternal = socket?.handshake?.query?.['client'] == "external";
     if (
       origin != 'null' && (
         (origin && safeOriginRegex.test(origin)) ||
@@ -227,7 +246,17 @@ const attachSocketIo = (server: http.Server|https.Server) => {
     ) {
       allowConnection = true;
     } else {
-      if (remoteAddress == "127.0.0.1" && origin && origin != "null") {
+      const isInSubnet = ipInSameSubnet(remoteAddress);
+      if (isExternal && isInSubnet) {
+        const apiKeySecret = socket?.handshake?.query?.['authorization'];
+        if (apiKeySecret) {
+          const globalApiKeys = await datasource.readApiKeys();
+          const apiKey = globalApiKeys.find((k) => k.secret == apiKeySecret);
+          if (apiKey) {
+            allowConnection = true;
+          }
+        }
+      } else if (remoteAddress == "127.0.0.1" && origin && origin != "null") {
           const apiKeySecret = socket?.handshake?.query?.['authorization'];
           if (apiKeySecret) {
             const globalApiKeys = await datasource.readApiKeys();
@@ -269,18 +298,88 @@ const attachSocketIo = (server: http.Server|https.Server) => {
     // universal socket messages
     if (["web", "desktop", "cli", "extension", "external"].includes(client)) {
       multiplexer[client].push(socket);
-      socket.conn.on("close", () => {
+      const onClose = () => {
         multiplexer[client] = multiplexer[client].filter((s) => s !== socket);
         socket.off("open-event", onOpenEvent);
-      });
+        socket.conn.off("close", onClose);
+      }
+      socket.conn.on("close", onClose);
+    }
+    if (["extension", "external"].includes(client)) {
+      const triggerStateChange = async (args) => {
+        const repositoryId = args.repositoryId;
+        const exists = await datasource.repoExists(repositoryId);
+        if (!exists) {
+          return;
+        }
+        const renderedState = await datasource.readRenderedState(repositoryId);
+        const binaries = await Promise?.all?.(
+          renderedState?.binaries?.map?.(async (binaryRef) => {
+            const hash = binaryRef?.split?.(".")?.[0];
+            const url = `http://localhost:63403/binary/${binaryRef}?token=${binarySession.token}`;
+            return {
+              hash,
+              url,
+              fileName: binaryRef,
+            };
+          }) ?? []
+        ) ?? [];
+        socket.emit("state:changed", {
+          repoId: repositoryId,
+          store: renderedState?.store ?? {},
+          binaries,
+        });
+      }
+
+      const onMessagePlugin = async (args: {repositoryId: string, plugin: string, eventName: string, message: object|"string"}) => {
+        const repositoryId = args.repositoryId;
+        if (!repositoryId) {
+          return;
+        }
+        const plugin = args.plugin;
+        if (!plugin) {
+          return;
+        }
+        const eventName = args.eventName;
+        const message = args.message;
+        const exists = await datasource.repoExists(repositoryId);
+        if (!exists) {
+          return;
+        }
+        const renderedState = await datasource.readRenderedState(repositoryId);
+        const pluginExists = !!renderedState.plugins.find(p => p.key == plugin);
+        if (!pluginExists) {
+          return;
+        }
+        const repoInfo = await datasource.readInfo(repositoryId);
+        broadcastToClient("desktop", "plugin:message", {
+          repositoryId,
+          plugin,
+          repoInfo,
+          eventName,
+          message
+        });
+
+      }
+      const onClose = () => {
+        multiplexer[client] = multiplexer[client].filter((s) => s !== socket);
+        socket.off("trigger-change", triggerStateChange);
+        socket.off("plugin:message", onMessagePlugin);
+        socket.conn.off("close", onClose)
+      }
+      socket.on("trigger-change", triggerStateChange);
+      socket.on("plugin:message", onMessagePlugin);
+      socket.conn.on("close", onClose);
     }
     socket.on("open-event", onOpenEvent);
 
     // desktop-only subscriptions
     if (client == 'desktop') {
-      socket.conn.on("close", () => {
+      const onClose = () => {
         socket.off("logout-did-load", onLogoutDidLoad);
-      });
+        socket.conn.off("close", onClose)
+      }
+      socket.conn.on("close", onClose);
       socket.on("logout-did-load", onLogoutDidLoad);
     }
   });
@@ -3567,5 +3666,7 @@ const startTLSServers = async (datasource: DataSource) => {
     broadcastToClient("desktop", "ip-changed", null);
   });
 })(datasource);
+
+
 
 export default server;

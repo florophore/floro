@@ -47,6 +47,7 @@ axios.defaults.validateStatus = function () {
 };
 
 export interface DataSource {
+  // only used server side
   getRepoInfo?(repoId: any): unknown;
   /* PLUGINS */
   getPluginManifest?: (
