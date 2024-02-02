@@ -23,7 +23,7 @@ import {
 import clc from "cli-color";
 import yargs from "yargs";
 import { render } from 'prettyjson';
-import { buildFloroGeneratorTemplate, checkDirectoryIsGeneratorWorkingDirectory, generateLocalTypescriptGeneratorAPI, inspectLocalGeneratorManifest, installGeneratorDependency, pullGeneratorDeps, validateLocalGenerator } from "./generatorcreator";
+import { buildFloroGeneratorTemplate, checkDirectoryIsGeneratorWorkingDirectory, generateLocalTypescriptGeneratorAPI, getLocalGeneratorManifestReadFunction, inspectLocalGeneratorManifest, installGeneratorDependency, pullGeneratorDeps, validateLocalGenerator } from "./generatorcreator";
 import { buildCurrent, buildModule, syncModule, watchModule } from "./module";
 
 buildFloroFilestructure();
@@ -243,10 +243,11 @@ yargs
           command: "pull-deps",
           describe: "Installs dependies from floro.generator.json",
           handler: async () => {
-            const readFunction = await getLocalManifestReadFunction(process.cwd());
-            if (!readFunction) {
+            const isValid = await checkDirectoryIsGeneratorWorkingDirectory(process.cwd());
+            if (!isValid) {
               return;
             }
+            const readFunction = await getLocalGeneratorManifestReadFunction(process.cwd());
             const didSucceed = await pullGeneratorDeps(process.cwd(), readFunction);
             if (didSucceed) {
               console.log(

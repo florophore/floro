@@ -4875,6 +4875,9 @@ export const getFetchInfo = async (
       };
     }
 
+    const currentBranch = await getCurrentBranch(datasource, repoId);
+    const hasCurrentSha = !!currentBranch?.lastCommit;
+
     for (const commit of fetchInfo?.commits ?? []) {
       const didPullCommmit = await saveRemoteSha(datasource, repoId, commit.sha);
       if (!didPullCommmit) {
@@ -5075,7 +5078,7 @@ export const getFetchInfo = async (
     }
     const originSha = getMergeOriginSha(divergenceOrigin);
     const remoteAhead = remoteIdx > localIdx;
-    const nothingToPull = !remoteBranch || !remoteAhead && divergenceOrigin.rebaseShas.length == 0 && localIdx >= remoteIdx;
+    const nothingToPull = !remoteBranch?.lastCommit || !remoteAhead && divergenceOrigin.rebaseShas.length == 0 && localIdx >= remoteIdx;
     const nothingToPush = (!branchHeadsDiverge && localIdx <= remoteIdx) && branchesAreEquivalent(localBranch, remoteBranch);
 
     const unstagedState = await getUnstagedCommitState(datasource, repoId);
@@ -5143,6 +5146,7 @@ export const getFetchInfo = async (
             (pullCanMergeWip || !isWIP) &&
             !hasLocalBranchCycle,
           canPushBranch:
+            hasCurrentSha &&
             !branchRule?.directPushingDisabled &&
             userCanPush &&
             !containsDevPlugins &&
@@ -5246,6 +5250,7 @@ export const getFetchInfo = async (
           (pullCanMergeWip || !isWIP) &&
           !hasLocalBranchCycle,
         canPushBranch:
+          hasCurrentSha &&
           !branchRule?.directPushingDisabled &&
           userCanPush &&
           !containsDevPlugins &&
@@ -5280,6 +5285,7 @@ export const getFetchInfo = async (
     return {
       canPull: !nothingToPull && !hasLocalBranchCycle,
       canPushBranch:
+        hasCurrentSha &&
         !branchRule?.directPushingDisabled &&
         userCanPush &&
         !containsDevPlugins &&
@@ -5744,14 +5750,14 @@ export const push = async (
   if (!pushInfo) {
     return null;
   }
-  const canPush = pushInfo.canPushBranch && pushInfo.accountInGoodStanding;
+  const localBranch = await datasource?.readBranch(repoId, repoState?.branch);
+  const pushList: Array<CommitData> = [];
+  let currentSha = localBranch.lastCommit;
+  const canPush = pushInfo.canPushBranch && pushInfo.accountInGoodStanding && !!currentSha;
   if (!canPush) {
     return null;
   }
 
-  const localBranch = await datasource?.readBranch(repoId, repoState?.branch);
-  const pushList: Array<CommitData> = [];
-  let currentSha = localBranch.lastCommit;
   while (
     currentSha &&
     (await checkRemoteShaExistence(repoId, currentSha)) === false

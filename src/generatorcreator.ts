@@ -56,6 +56,31 @@ export const checkDirectoryIsGeneratorWorkingDirectory = async (
   return await existsAsync(floroGeneratorManifestPath);
 };
 
+export const getLocalGeneratorManifestReadFunction = async (cwd: string) => {
+  const isGenDir = await checkDirectoryIsGeneratorWorkingDirectory(cwd);
+  if (!isGenDir) {
+    console.log(
+      clc.redBright.bgBlack.underline("Invalid floro generator directory")
+    );
+    return null;
+  }
+  try {
+    const floroManifestPath = path.join(cwd, "floro", "floro.generator.json");
+    const floroManifestString = await fs.promises.readFile(floroManifestPath);
+    const manifest = JSON.parse(floroManifestString.toString());
+    const datasource = makeMemoizedDataSource();
+    return async (pluginName, pluginVersion) => {
+      if (pluginName == manifest.name && pluginVersion == manifest.version) {
+        return manifest;
+      }
+      return await datasource.getPluginManifest(pluginName, pluginVersion);
+    };
+  } catch (e) {
+    console.log("E", e)
+    return null;
+  }
+};
+
 
 export const buildFloroGeneratorTemplate = async (
   cwd: string,
@@ -183,6 +208,7 @@ export const pullGeneratorDeps = async (
     }
     return true;
   } catch (e) {
+    console.log("E", e)
     return false;
   }
 };

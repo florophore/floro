@@ -7400,7 +7400,7 @@ const getIndexPathInStateMap = (
   return indexPath;
 };
 
-const updateObjectInStateMap = (
+export const updateObjectInStateMap = (
   stateMap: { [pluginName: string]: object },
   path: string,
   objectToUpdate: object

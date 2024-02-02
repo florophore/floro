@@ -14,6 +14,7 @@ import {
   isTopologicalSubsetValid,
   manifestListToSchemaMap,
 } from "./plugins";
+import { address } from 'ip';
 
 export interface ApiRepository {
   id: string;
@@ -298,7 +299,7 @@ export const usePublicApi = (app: Express, datasource: DataSource) => {
   app.get(
     PREFIX + "/repository/:repositoryId/commit/:sha/state",
     async (req, res) => {
-      const apiKeySecret = req?.headers?.["floro-api-key"] ?? req?.query?.["floro_api_key"];
+      const apiKeySecret = req?.headers?.["floro-api-key"] ?? decodeURIComponent(req?.query?.["floro_api_key"] as string ?? '');
       if (!apiKeySecret) {
         res.status(403).json({
           message: "forbidden",
@@ -419,7 +420,12 @@ export const usePublicApi = (app: Express, datasource: DataSource) => {
         });
         return;
       }
-      res.send({ stateLink: `http://127.0.0.1:63403${PREFIX}/repository/${repositoryId}/commit/${sha}/state?floro_api_key=${encodeURIComponent(apiKeySecret as string)}` });
+      const ip = address();
+
+      const tlsPort = !!process.env.FLORO_VCDN_TLS_PORT
+        ? parseInt(process.env.FLORO_VCDN_TLS_PORT)
+        : 63405;
+      res.send({ stateLink: `https://${ip}:${tlsPort}${PREFIX}/repository/${repositoryId}/commit/${sha}/state?floro_api_key=${encodeURIComponent(apiKeySecret as string)}` });
     }
   );
 
