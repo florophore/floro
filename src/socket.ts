@@ -1,6 +1,6 @@
 import { Manager, Socket } from "socket.io-client";
 export const createSocket = (client: 'web'|'desktop'|'cli') => {
-    const manager = new Manager('ws://localhost:63403', {
+    const manager = new Manager('ws://127.0.0.1:63403', {
       reconnectionDelayMax: 10000,
       query: {
         client

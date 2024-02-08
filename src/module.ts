@@ -300,7 +300,7 @@ export const syncModule = async (
     }, {});
     const metaFile = JSON.stringify(
       {
-        moduleFile,
+        moduleFile: path.basename(moduleFile),
         repositoryId: syncInfo.id,
         sha: moduleBranch.lastCommit,
         message: syncState.commitInfo.message,

@@ -137,93 +137,6 @@ import { LocalCertHandler } from "./cert";
 import { ipInSameSubnet } from "./networkhelpers";
 
 
-const app = express();
-const certApp = express();
-const server = http.createServer(app);
-const datasource = makeMemoizedDataSource();
-
-const pluginsJSON = getPluginsJson();
-
-const remoteHost = getRemoteHostSync();
-const safeOriginRegex = new RegExp(`^(https?://(localhost|127.0.0.1):\\d{1,5})|(${remoteHost})`);
-const chromeExtSafeOriginRegex = new RegExp(
-  `^(chrome-extension://*|(https?://(localhost|127.0.0.1):\\d{1,5})|(${remoteHost}))`
-);
-
-const corsNoNullOriginDelegate = async (req, callback) => {
-  const origin = req.headers?.origin;
-  if (
-    origin != 'null' && (
-      (origin && safeOriginRegex.test(origin)) ||
-      (req.connection.remoteAddress == "127.0.0.1" && !origin)
-    )
-  ) {
-    callback(null, {
-      origin: true,
-    });
-  } else {
-    const isInSubnet = ipInSameSubnet(req.connection.remoteAddress);
-    if (isInSubnet) {
-      const apiKeySecret = req.headers?.authorization;
-      if (apiKeySecret) {
-        const globalApiKeys = await datasource.readApiKeys();
-        const apiKey = globalApiKeys.find((k) => k.secret == apiKeySecret);
-        if (apiKey) {
-          callback(null, {
-            origin: true,
-          });
-          return;
-        }
-      }
-    } else if (
-      req.connection.remoteAddress == "127.0.0.1" &&
-      origin &&
-      origin != "null"
-    ) {
-      const apiKeySecret = req.headers?.authorization;
-      if (apiKeySecret) {
-        const globalApiKeys = await datasource.readApiKeys();
-        const apiKey = globalApiKeys.find((k) => k.secret == apiKeySecret);
-        if (apiKey) {
-          callback(null, {
-            origin: true,
-          });
-          return;
-        }
-      }
-    }
-    callback("Invalid origin", {
-      origin: false,
-    });
-  }
-};
-
-
-const DEFAULT_PORT = 63403;
-const DEFAULT_CERT_PORT = 63404;
-const DEFAULT_TLS_PORT = 63405;
-const DEFAULT_HOST = "127.0.0.1";
-const DEFAULT_TLS_HOST = "0.0.0.0";
-const port = !!process.env.FLORO_VCDN_PORT
-  ? parseInt(process.env.FLORO_VCDN_PORT)
-  : DEFAULT_PORT;
-
-const tlsPort = !!process.env.FLORO_VCDN_TLS_PORT
-  ? parseInt(process.env.FLORO_VCDN_TLS_PORT)
-  : DEFAULT_TLS_PORT;
-
-const certPort = !!process.env.FLORO_VCDN_CERT_PORT
-  ? parseInt(process.env.FLORO_VCDN_CERT_PORT)
-  : DEFAULT_CERT_PORT;
-
-const host = !!process.env.FLORO_VCDN_HOST
-  ? process.env.FLORO_VCDN_HOST
-  : DEFAULT_HOST;
-
-const tlsHost = !!process.env.FLORO_VCDN_TLS_HOST
-  ? process.env.FLORO_VCDN_TLS_HOST
-  : DEFAULT_TLS_HOST;
-
 const attachSocketIo = (server: http.Server|https.Server) => {
   const io = new Server(server, {
     cors: {
@@ -385,12 +298,102 @@ const attachSocketIo = (server: http.Server|https.Server) => {
   });
 }
 
+
+const app = express();
+const certApp = express();
+const server = http.createServer(app);
+const datasource = makeMemoizedDataSource();
+
+const pluginsJSON = getPluginsJson();
+
+const remoteHost = getRemoteHostSync();
+const safeOriginRegex = new RegExp(`^(https?://(localhost|127.0.0.1):\\d{1,5})|(${remoteHost})`);
+const chromeExtSafeOriginRegex = new RegExp(
+  `^(chrome-extension://*|(https?://(localhost|127.0.0.1):\\d{1,5})|(${remoteHost}))`
+);
+
+attachSocketIo(server);
+
+const corsNoNullOriginDelegate = async (req, callback) => {
+  const origin = req.headers?.origin;
+  if (
+    origin != 'null' && (
+      (origin && safeOriginRegex.test(origin)) ||
+      (req.connection.remoteAddress == "127.0.0.1" && !origin)
+    )
+  ) {
+    callback(null, {
+      origin: true,
+    });
+  } else {
+    const isInSubnet = ipInSameSubnet(req.connection.remoteAddress);
+    if (isInSubnet) {
+      const apiKeySecret = req.headers?.authorization;
+      if (apiKeySecret) {
+        const globalApiKeys = await datasource.readApiKeys();
+        const apiKey = globalApiKeys.find((k) => k.secret == apiKeySecret);
+        if (apiKey) {
+          callback(null, {
+            origin: true,
+          });
+          return;
+        }
+      }
+    } else if (
+      req.connection.remoteAddress == "127.0.0.1" &&
+      origin &&
+      origin != "null"
+    ) {
+      const apiKeySecret = req.headers?.authorization;
+      if (apiKeySecret) {
+        const globalApiKeys = await datasource.readApiKeys();
+        const apiKey = globalApiKeys.find((k) => k.secret == apiKeySecret);
+        if (apiKey) {
+          callback(null, {
+            origin: true,
+          });
+          return;
+        }
+      }
+    }
+    callback("Invalid origin", {
+      origin: false,
+    });
+  }
+};
+
+
+const DEFAULT_PORT = 63403;
+const DEFAULT_CERT_PORT = 63404;
+const DEFAULT_TLS_PORT = 63405;
+const DEFAULT_HOST = "127.0.0.1";
+const DEFAULT_TLS_HOST = "0.0.0.0";
+const port = !!process.env.FLORO_VCDN_PORT
+  ? parseInt(process.env.FLORO_VCDN_PORT)
+  : DEFAULT_PORT;
+
+const tlsPort = !!process.env.FLORO_VCDN_TLS_PORT
+  ? parseInt(process.env.FLORO_VCDN_TLS_PORT)
+  : DEFAULT_TLS_PORT;
+
+const certPort = !!process.env.FLORO_VCDN_CERT_PORT
+  ? parseInt(process.env.FLORO_VCDN_CERT_PORT)
+  : DEFAULT_CERT_PORT;
+
+const host = !!process.env.FLORO_VCDN_HOST
+  ? process.env.FLORO_VCDN_HOST
+  : DEFAULT_HOST;
+
+const tlsHost = !!process.env.FLORO_VCDN_TLS_HOST
+  ? process.env.FLORO_VCDN_TLS_HOST
+  : DEFAULT_TLS_HOST;
+
+
 watchRepos(datasource);
 
 app.use(busboy());
 
 app.use(express.json({ limit: "20mb" }));
-
 
 app.use(function (_req, res, next) {
   res.header("Access-Control-Allow-Origin", "*");
@@ -3590,7 +3593,6 @@ app.get("/connectioninfo", cors(corsNoNullOriginDelegate), async (req, res) => {
 });
 
 
-attachSocketIo(server);
 server.listen(port, host, () =>
   console.log("floro server started on " + host + ":" + port)
 );
