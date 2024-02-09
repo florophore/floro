@@ -2914,58 +2914,61 @@ app.post("/repo/:repoId/paste", cors(corsNoNullOriginDelegate),async (req, res):
         }
     }
 
-    const remote = await getRemoteHostAsync();
-    const session = await getUserSessionAsync();
-    const binaryLinksRequest = await axios({
-      method: "post",
-      url: `${remote}/api/repo/${fromRepoId}/binary/links`,
-      headers: {
-        ["session_key"]: session?.clientKey,
-      },
-      data: {
-        links: binaryRefs,
-      },
-    });
-    if (!binaryLinksRequest.data) {
-      res.sendStatus(400);
-      return;
-    }
-
-    const binDownwloads: Promise<boolean>[] = [];
-    const binaryLinks: Array<{ fileName: string; link: string }> =
-      binaryLinksRequest.data;
-    for (const binaryLink of binaryLinks) {
-      binDownwloads.push(
-        (async () => {
-          try {
-            const existsAlready = await datasource.checkBinary(
-              binaryLink.fileName
-            );
-            if (existsAlready) {
-              return true;
-            }
-            const content = await axios({
-              method: "get",
-              url: binaryLink.link,
-            });
-            if (!content?.data) {
-              return false;
-            }
-            await datasource.writeBinary(binaryLink.fileName, content as any);
-            return true;
-          } catch (e) {
-            return false;
-          }
-        })()
-      );
-    }
-    const binResults = await Promise.all(binDownwloads);
-    for (let didDownload of binResults) {
-      if (!didDownload) {
+    if (binariesToAdd.length > 0) {
+      const remote = await getRemoteHostAsync();
+      const session = await getUserSessionAsync();
+      const binaryLinksRequest = await axios({
+        method: "post",
+        url: `${remote}/api/repo/${fromRepoId}/binary/links`,
+        headers: {
+          ["session_key"]: session?.clientKey,
+        },
+        data: {
+          links: binariesToAdd,
+        },
+      });
+      if (!binaryLinksRequest.data) {
         res.sendStatus(400);
         return;
       }
+
+      const binDownwloads: Promise<boolean>[] = [];
+      const binaryLinks: Array<{ fileName: string; link: string }> =
+        binaryLinksRequest.data;
+      for (const binaryLink of binaryLinks) {
+        binDownwloads.push(
+          (async () => {
+            try {
+              const existsAlready = await datasource.checkBinary(
+                binaryLink.fileName
+              );
+              if (existsAlready) {
+                return true;
+              }
+              const content = await axios({
+                method: "get",
+                url: binaryLink.link,
+              });
+              if (!content?.data) {
+                return false;
+              }
+              await datasource.writeBinary(binaryLink.fileName, content as any);
+              return true;
+            } catch (e) {
+              return false;
+            }
+          })()
+        );
+      }
+      const binResults = await Promise.all(binDownwloads);
+      for (let didDownload of binResults) {
+        if (!didDownload) {
+          res.sendStatus(400);
+          return;
+        }
+      }
     }
+
     await enforceBoundedSets(datasource, intoSchemaMap, copiedOverRenderedStore);
     let store = await cascadePluginState(datasource, intoSchemaMap, copiedOverRenderedStore);
     store = await nullifyMissingFileRefs(datasource, intoSchemaMap, store);
@@ -2997,6 +3000,7 @@ app.post("/repo/:repoId/paste", cors(corsNoNullOriginDelegate),async (req, res):
     }
     res.send(apiResponse);
   } catch(e) {
+      console.log("E", e);
       res.sendStatus(400);
   }
 })
