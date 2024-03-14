@@ -241,7 +241,7 @@ yargs
       return yargs
         .command({
           command: "pull-deps",
-          describe: "Installs dependies from floro.generator.json",
+          describe: "Installs dependencies from floro.generator.json",
           handler: async () => {
             const isValid = await checkDirectoryIsGeneratorWorkingDirectory(process.cwd());
             if (!isValid) {
@@ -485,7 +485,7 @@ yargs
         })
         .command({
           command: "pull-deps",
-          describe: "Installs dependies from floro.manifest.json",
+          describe: "Installs dependencies from floro.manifest.json",
           handler: async () => {
             const readFunction = await getLocalManifestReadFunction(process.cwd());
             if (!readFunction) {
