@@ -108,23 +108,23 @@ yargs
       return yargs
         .option("m", {
           alias: "module",
-          describe: `specify the floro module script`,
+          describe: `Specify the floro module script`,
           default: 'floro.module.js',
           type: 'string'
         })
         .option("k", {
           alias: "remote-key",
-          describe: `specify a remote api key to pull with (only needed if logged out)`,
+          describe: `Specify a remote api key to pull with (only needed if logged out)`,
           type: 'string'
         })
         .option("l", {
           alias: "local",
-          describe: `syncs meta state from local repository branch`,
+          describe: `Syncs meta file with state from local repository`,
           type: 'boolean'
         })
         .command({
           command: "sync",
-          describe: "syncs meta.",
+          describe: "Syncs meta file with state",
           builder: (yargs) => {
             return yargs
             .option("b", {
@@ -174,7 +174,7 @@ yargs
         })
         .command({
           command: "build",
-          describe: "builds application state from floro repository",
+          describe: "Builds application state from floro repository",
           handler: async (options) => {
             const cwd = process.cwd();
             const result = await buildModule(cwd, options.module, options.local ?? false, options?.['remote-key']);
@@ -198,7 +198,7 @@ yargs
         })
         .command({
           command: "watch",
-          describe: "watch floro state and rebuild",
+          describe: "Watch floro state and rebuild",
           handler: async (options) => {
             const cwd = process.cwd();
             console.log("watching module");
@@ -215,7 +215,7 @@ yargs
         })
         .command({
           command: "current",
-          describe: "use current state and rebuild",
+          describe: "Use current (WIP) state and rebuild",
           handler: async (options) => {
             const cwd = process.cwd();
             console.log("building current");
